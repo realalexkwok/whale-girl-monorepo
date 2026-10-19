@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Whale Girl</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent; /* required for OBS transparent overlay */
+    }
+    #whale-canvas { display: block; }
+    #whale-status {
+      position: fixed;
+      left: 8px;
+      bottom: 8px;
+      z-index: 10;
+      font: 12px/1.4 -apple-system, "Helvetica Neue", Arial, sans-serif;
+      color: #9adcf8;
+      background: rgba(0, 0, 0, 0.55);
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: none;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <div id="whale-status"></div>
+
+  <!-- Load order matters: Cubism Core -> PixiJS -> pixi-live2d-display (cubism4). -->
+  <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js" defer></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.3/dist/pixi.min.js"
+    onerror="this.remove();var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.3/pixi.min.js';s.defer=true;document.head.appendChild(s);"
+    defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js" defer></script>
+
+  <script>
+  'use strict';
+
+  (function () {
+    var query = new URLSearchParams(window.location.search);
+    var DEBUG = query.get('debug') === '1';
+    // Override the proxy endpoint with ?ws=ws://host:port (used later for the Ubuntu split).
+    var WS_BASE = query.get('ws') || 'ws://localhost:3001';
+    var MODEL_URL = 'model/whale.model3.json';
+
+    var statusEl = document.getElementById('whale-status');
+
+    function setStatus(text) {
+      if (!DEBUG) return;
+      statusEl.style.display = 'block';
+      statusEl.textContent = text;
+    }
+
+    var loggedFatal = false;
+    function fatal(message) {
+      if (loggedFatal) return; // report once: keeps the console clean in OBS
+      loggedFatal = true;
+      console.error('[whale-girl] ' + message);
+      setStatus(message);
+    }
+
+    // Boot runs on DOMContentLoaded, after all deferred CDN scripts executed.
+    function boot() {
+      if (!window.PIXI) return fatal('PixiJS failed to load (check network / CDN access).');
+      if (!window.Live2DCubismCore) return fatal('Live2D Cubism Core failed to load.');
+      if (!window.PIXI.live2d || !window.PIXI.live2d.Live2DModel) {
+        return fatal('pixi-live2d-display failed to load.');
+      }
+
+      var app;
+      try {
+        app = new PIXI.Application({
+          backgroundAlpha: 0, // fully transparent canvas for OBS
+          resizeTo: window,
+          antialias: true,
+          autoDensity: true,
+          resolution: Math.min(window.devicePixelRatio || 1, 2), // cap GPU memory on retina
+          powerPreference: 'high-performance'
+        });
+      } catch (err) {
+        return fatal('WebGL unavailable: ' + err.message);
+      }
+      app.view.id = 'whale-canvas';
+      document.body.appendChild(app.view);
+
+      var Live2DModel = PIXI.live2d.Live2DModel;
+      // Explicit ticker registration; the UMD bundle would fall back to
+      // window.PIXI.Ticker on its own, but being explicit is safer.
+      if (Live2DModel.registerTicker && PIXI.Ticker) {
+        try { Live2DModel.registerTicker(PIXI.Ticker); } catch (err) { /* ignore */ }
+      }
+
+      var model = null;
+      var lastParams = new Map(); // latest value per parameter, applied when the model is ready
+
+      // --- placeholder whale (shown until/unless the real model loads) ---
+      function buildPlaceholder() {
+        var g = new PIXI.Container();
+        var shape = new PIXI.Graphics();
+        shape.beginFill(0x5f9ea0, 0.9);
+        shape.drawEllipse(0, 0, 150, 90);
+        shape.endFill();
+        shape.beginFill(0x5f9ea0, 0.9);
+        shape.moveTo(-140, 0);
+        shape.lineTo(-195, -65);
+        shape.lineTo(-195, 65);
+        shape.closePath();
+        shape.endFill();
+        shape.beginFill(0x1c2b33);
+        shape.drawCircle(95, -25, 10);
+        shape.endFill();
+        var mouth = new PIXI.Graphics();
+        mouth.beginFill(0x1c2b33);
+        mouth.drawEllipse(55, 45, 40, 14);
+        mouth.endFill();
+        var label = new PIXI.Text('Whale Girl — model placeholder', {
+          fontFamily: 'Arial',
+          fontSize: 22,
+          fill: 0xbde7f5,
+          align: 'center'
+        });
+        label.anchor.set(0.5, 0);
+        label.y = 110;
+        g.addChild(shape, mouth, label);
+        return g;
+      }
+
+      var placeholder = buildPlaceholder();
+      app.stage.addChild(placeholder);
+      fitModel();
+
+      // --- model loading ---
+      Live2DModel.from(MODEL_URL, { autoInteract: false, motionPreload: 'NONE' })
+        .then(function (m) {
+          model = m;
+          app.stage.removeChild(placeholder);
+          app.stage.addChild(m);
+          fitModel();
+          flushParams();
+          setStatus('model loaded');
+        })
+        .catch(function (err) {
+          fatal('model not loaded (' + (err && err.message ? err.message : err) +
+            ') — showing placeholder. Drop your Cubism 4 assets into model/ and refresh.');
+        });
+
+      // --- fit pipeline: bottom-center, ~90% of viewport height ---
+      function fitModel() {
+        var target = model || placeholder;
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+        if (!w || !h) return;
+        var bounds = target.getLocalBounds();
+        var bw = bounds.width || 300;
+        var bh = bounds.height || 200;
+        var scale = Math.min((h * 0.9) / bh, (w * 0.6) / bw);
+        target.scale.set(scale);
+        target.anchor.set(0.5, 1);
+        target.x = w / 2;
+        target.y = h;
+      }
+      window.addEventListener('resize', fitModel);
+
+      function flushParams() {
+        if (!model || !model.internalModel || !model.internalModel.coreModel) return;
+        var core = model.internalModel.coreModel;
+        lastParams.forEach(function (value, id) {
+          core.setParameterValueById(id, value);
+        });
+      }
+
+      // --- websocket (auto-reconnect with capped backoff + jitter) ---
+      var ws = null;
+      var wsRetry = 0;
+      var wsTimer = null;
+
+      function connectWS() {
+        ws = new WebSocket(WS_BASE + '?role=web');
+        ws.onopen = function () {
+          wsRetry = 0;
+          ws.send('{"type":"hello"}');
+          setStatus('ws connected');
+        };
+        ws.onmessage = function (evt) {
+          var msg;
+          try {
+            msg = JSON.parse(evt.data);
+          } catch (err) {
+            return; // ignore malformed frames, never crash the page
+          }
+          if (!msg || msg.type !== 'motion' || !msg.p) return;
+
+          if (model && model.internalModel && model.internalModel.coreModel) {
+            var core = model.internalModel.coreModel;
+            for (var id in msg.p) {
+              var value = msg.p[id];
+              lastParams.set(id, value);
+              core.setParameterValueById(id, value);
+            }
+          } else {
+            for (var id in msg.p) lastParams.set(id, msg.p[id]);
+          }
+          if (DEBUG) setStatus('ws connected, frame ' + msg.f);
+        };
+        ws.onclose = function () {
+          setStatus('ws disconnected, retrying...');
+          scheduleReconnect();
+        };
+        ws.onerror = function () {
+          try { ws.close(); } catch (err) { /* ignore */ }
+        };
+      }
+
+      function scheduleReconnect() {
+        if (wsTimer) return;
+        var delay = Math.min(1000 * Math.pow(2, wsRetry++), 10000) + Math.random() * 250;
+        wsTimer = setTimeout(function () {
+          wsTimer = null;
+          connectWS();
+        }, delay);
+      }
+
+      connectWS();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot);
+    } else {
+      boot();
+    }
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Node
+whale-girl-server/node_modules/
+npm-debug.log*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Live2D model assets (large / licensed — keep out of VCS)
+whale-girl-frontend/model/*
+!whale-girl-frontend/model/README.md

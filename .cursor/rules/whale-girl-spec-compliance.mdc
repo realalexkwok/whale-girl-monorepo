@@ -1,0 +1,22 @@
+---
+description: Whale Girl spec-driven development rules for AI agents
+alwaysApply: true
+---
+
+# Whale Girl — Spec Compliance
+
+- The specs are the constitution: specs/{mission,tech-stack,roadmap}.md.
+  Behavior changes start there, never in code first.
+- Before every write to disk, an ask-user-question round grouped on requirements
+  (scope/decisions/context), plan (task groups), and validation (success criteria)
+  must be answered by the user.
+- Never add dependencies outside specs/tech-stack.md. Never skip or
+  reorder roadmap items without owner approval.
+- Feature specs live in specs/features/YYYY-MM-DD-<item>/ with
+  requirements.md, plan.md, validation.md; validation.md must end with a "Handoff to
+  dependant milestones" list when work is deferred.
+- Verification is two-sided: the agent's automatic half (probes, smoke checks,
+  node --check) AND the owner's manual half (browser ?debug=1, OBS).
+- Agents never git commit / git push; leave changes uncommitted for owner review.
+- Roadmap history: tick the roadmap item and archive full detail in
+  specs/history_roadmap.md at the close.

@@ -1,0 +1,101 @@
+# Whale Girl — Tech Stack
+
+## Language & toolchain
+- **Node ≥ 18** (local v25.2.0) for the server; plain CommonJS, no bundler, no
+  TypeScript on the server (keep it dependency-minimal).
+- **Python ≥ 3.9** (local 3.9.10) for the driver; asyncio only, no threads, no numpy/
+  scipy, no GUI libraries. Venv lives at whale-girl-server/.venv (gitignored).
+- Package managers: **npm only** for whale-girl-server (never mix npm/pnpm);
+  **pip + venv** for Python. Dependencies are pinned in package.json /
+  requirements.txt and may not be added outside this file.
+
+## Server side (whale-girl-server/)
+- express ^4.22.3 (the v4 line, NOT v5 — battle-tested static serving) on PORT
+  (default 3000), env-overridable.
+- ws ^8.22.0 for the WebSocket proxy on WS_PORT (default 3001), env-overridable.
+- Proxy design (verified 2026-10-19): the server relays Python payloads to web clients
+  as RAW TEXT — it never JSON.parses, so per-frame CPU/allocation churn is near zero.
+  8 KB soft frame cap, 64 KB ws maxPayload, 256 KB per-client backpressure skip,
+  30 s ping/pong keepalive, single-python-writer (replacement close code 4001),
+  unknown roles close 1008.
+- Measured budget (2026-10-19): ~50 MB RSS while streaming.
+
+## Frontend (whale-girl-frontend/index.html)
+- ONE static HTML file, vanilla JS, no build step, no framework.
+- **PixiJS 7.4.3** UMD (NOT v8 — pixi-live2d-display does not support v8):
+  - primary: https://cdn.jsdelivr.net/npm/pixi.js@7.4.3/dist/pixi.min.js (200 OK verified)
+  - fallback: https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.3/pixi.min.js (onerror swap)
+- **Live2D Cubism Core** (official URL, 200 OK verified):
+  https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js
+- **pixi-live2d-display 0.4.0** (latest stable; final release) cubism4 bundle:
+  https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js
+  - supports Cubism 2.1/3/4 models; the Cubism framework is bundled inside.
+  - loading: Live2DModel.from(url, { autoInteract: false, motionPreload: 'NONE' })
+  - parameter control: model.internalModel.coreModel.setParameterValueById(id, value)
+  - ticker: the UMD bundle auto-uses window.PIXI.Ticker.shared; we additionally call
+    Live2DModel.registerTicker(PIXI.Ticker) explicitly (guarded).
+- Renderer: backgroundAlpha 0 (transparent OBS overlay), resizeTo window, antialias,
+  autoDensity, resolution capped at min(devicePixelRatio, 2) to bound GPU memory on
+  retina, powerPreference high-performance.
+- Model asset: whale-girl-frontend/model/whale.model3.json — a **Cubism 4.x-format
+  export** (owner decision 2026-10-19; Cubism 5-only assets must be re-exported for
+  4.x). Missing/invalid assets render the built-in placeholder; the page never crashes.
+- No Electron, no React/Vite, no WebGL libraries beyond PixiJS.
+
+## Python driver (whale-girl-server/control_whale.py)
+- **websockets >=13,<16** (installed 15.0.1) — the upper bound exists because 16.0
+  needs Python ≥ 3.10 and 17.x needs ≥ 3.11, and the Mac runs 3.9.10 (verified against
+  PyPI requires_python 2026-10-19). Modern asyncio API:
+  from websockets.asyncio.client import connect.
+- 30 FPS drift-corrected loop (asyncio.sleep of the frame remainder; resync instead of
+  spin when behind); idles while the server reports zero web clients.
+- Zero per-frame allocations: one pre-allocated frame dict mutated in place, compact
+  json.dumps separators. Measured budget (2026-10-19): ~21 MB RSS at 30 FPS.
+- Motion synthesis (mock): cosine-eased blink state machine (ParamEyeLOpen/ROpen),
+  talk-burst envelope × multi-sine mix (ParamMouthOpenY), sine+jitter gaze
+  (ParamEyeBallX/Y), subtle sway (ParamAngleX/Y/Z). Raw Live2D values are sent
+  unclamped — some Live2D params are degrees; correctness is the sender's job.
+
+## Wire protocol (v0 — frozen until a spec change)
+- python → server → web:
+      {"type":"motion","f":12345,"p":{"ParamMouthOpenY":0.42,"ParamEyeBallX":-0.1}}
+  f = monotonic frame counter; p = raw Live2D parameter values.
+- server → python: {"type":"web_connected","count":N}
+- web → server: {"type":"hello"} (accepted, ignored).
+- Roles via query param: ?role=web (many) / ?role=python (single writer).
+
+## Dev environment
+- macOS: two terminals (npm start; .venv/bin/python control_whale.py) + browser
+  http://localhost:3000 (?debug=1 shows the status line) + OBS Browser source.
+- Env knobs: PORT, WS_PORT, WHALE_WS (python endpoint), WHALE_DEBUG=1 (per-frame
+  driver logs, off by default), ?ws=ws://host:port (frontend endpoint override — the
+  only change needed for the Ubuntu split).
+- See dev-environment.md for the full runbook and the Ubuntu split checklist.
+
+## Testing & verification (two-sided)
+- Automatic half (agent): node scripts/ws_probe.js (expect PASS, 20–40 fps, increasing
+  f), node scripts/ws_role_probe.js (expect close 1008), curl smoke of :3000,
+  node --check on the inline frontend script, ps RSS snapshot, port-release check.
+- Manual half (owner): browser check at http://localhost:3000?debug=1, then OBS
+  Browser source — with and without the real model in place.
+- Reports must name absolute artifact paths and measured numbers.
+
+## Owner decision amendments
+- 2026-10-19: frontend pins PixiJS v7 + pixi-live2d-display 0.4.0 (v8 unsupported);
+  the Live2D asset must be a Cubism 4.x export.
+- 2026-10-19: raw-text passthrough proxy (no server-side JSON parsing) as the
+  low-memory choice; protocol validation belongs to the endpoints.
+- 2026-10-19: M1 scope stops before the real model/audio/DSH work.
+- 2026-10-20: the session AI model switches to V4.1-Flash at the M1 close.
+- 2026-10-20: spec-driven development adopted (AGENTS.md + specs/) with the
+  ask-user-question-before-writes rule; the byterra-monorepo layout is the reference.
+- 2026-10-20: combined roadmap adopted (advisor comparison + grouped ask round):
+  M2 模型与口型同步, M3 DSH 互动大脑, M4 内存压榨与部署; the danmaku (blivedm)
+  milestone is explicitly rejected.
+- 2026-10-20: M2.2 audio source = system audio / DSH output via a virtual loopback
+  device; RMS analysis runs client-side with the Web Audio API (AnalyserNode) — zero
+  new dependencies. Mic/TTS-driven mouth motion is not the V1 path.
+- 2026-10-20: M4.1 hard gate = the OBS browser source's EXTRA memory < 100 MB on the
+  Mac, re-measured after every change; the per-process budgets stay in force.
+- 2026-10-20: M4.2 Ubuntu connectivity = SSH port forwarding primary (no open ports);
+  direct TCP stays documented as an optional alternative.

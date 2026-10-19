@@ -1,0 +1,68 @@
+# Whale Girl — Dev Environment (macOS runbook)
+
+> Owner-approved record (2026-10-19, M1 session). The dev loop below is live and
+> verified. The Ubuntu split (M4.2) consumes the "split checklist" at the end.
+
+## The dev loop (verified at M1.5)
+- Terminal 1 — server:
+
+      cd whale-girl-server && npm install && npm start
+
+- Terminal 2 — mock driver (venv already provisioned):
+
+      cd whale-girl-server && .venv/bin/python control_whale.py
+
+- Browser: open http://localhost:3000 (append ?debug=1 for the status line).
+- OBS: Sources → + → Browser; URL http://localhost:3000; size 1920x1080; the page is
+  transparent already (backgroundAlpha 0) — no custom CSS needed.
+- Probes (automatic half):
+
+      node scripts/ws_probe.js        # expect PASS: 20–40 fps, increasing frame counter
+      node scripts/ws_role_probe.js   # expect close code 1008
+
+- Smoke checks:
+
+      curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/   # 200
+      lsof -nP -iTCP:3000 -iTCP:3001 -sTCP:LISTEN                     # port conflicts
+      ps -axo pid,rss,command | grep -E 'node server.js|control_whale.py'   # RSS budget
+
+## Environment facts (measured 2026-10-19)
+- Node v25.2.0, npm 10.5.2 (whale-girl-server/node_modules installed, express 4.x + ws 8.x).
+- Python 3.9.10 (macOS system framework build); whale-girl-server/.venv contains
+  websockets 15.0.1 — the newest release supporting 3.9 (16.0 needs 3.10+, 17.x needs
+  3.11+). Long-term: brew install python@3.12, then recreate the venv.
+- Ports 3000 (HTTP) / 3001 (WS), env-overridable: PORT, WS_PORT, WHALE_WS.
+- CDN access is required by the frontend (PixiJS jsdelivr + cdnjs fallback, Cubism Core
+  from live2d.com, plugin from jsdelivr) — all URLs pinned in tech-stack.md and verified
+  200 on 2026-10-19. Offline vendoring is a later milestone.
+
+## Model assets
+- whale-girl-frontend/model/whale.model3.json + siblings (moc3, textures, physics,
+  motions, expressions) — Cubism 4.x export; see whale-girl-frontend/model/README.md.
+- The folder is gitignored (large, licensed); only its README is tracked.
+- No asset → the frontend renders the placeholder whale and logs ONE console error.
+
+## Ubuntu split checklist (M4.2 consumes this — config only, no code rewrite)
+1. rsync whale-girl-server/ to the Ubuntu host (exclude node_modules, .venv).
+2. Ubuntu: apt nodejs (≥18) + python3-venv (≥3.9); npm install; python3 -m venv .venv;
+   pip install -r requirements.txt.
+3. Run with explicit bindings: PORT=3000 WS_PORT=3001 npm start (systemd unit or PM2).
+4. Connectivity — PRIMARY (no open ports): ship scripts/ubuntu-tunnel.sh on the Mac:
+   ssh -N -L 3000:localhost:3000 -L 3001:localhost:3001 user@<server-ip>
+   The browser source keeps pointing at http://localhost:3000 unchanged. OPTIONAL
+   alternative (documented): firewall-allow 3000/tcp + 3001/tcp and use
+   http://<server-ip>:3000?ws=ws://<server-ip>:3001.
+5. Driver: WHALE_WS=ws://<server-ip>:3001?role=python .venv/bin/python control_whale.py
+   (or WHALE_WS=ws://localhost:3001?role=python through the tunnel; it may keep
+   running on the Mac or move to Ubuntu — both work by design).
+
+## Decision log
+- #1 (2026-10-19): two processes on two ports (express :3000, ws :3001) instead of one
+  upgraded server — simpler separation for the later split.
+- #2 (2026-10-19): raw-text proxy passthrough — the server never parses frames.
+- #3 (2026-10-19): venv inside whale-girl-server/.venv (gitignored) rather than
+  system-site pip — reproducible and split-ready.
+- #4 (2026-10-20): SSH port forwarding is the PRIMARY Ubuntu connectivity — no open
+  ports, encrypted; direct TCP is the documented fallback.
+- #5 (2026-10-20): lip-sync audio source = system audio / DSH output loopback; RMS is
+  computed in the frontend with the Web Audio API (zero new dependencies).

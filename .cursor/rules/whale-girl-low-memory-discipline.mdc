@@ -1,0 +1,20 @@
+---
+description: Whale Girl low-memory discipline for AI agents
+alwaysApply: true
+---
+
+# Whale Girl — Low-Memory Discipline
+
+- Budgets (tech-stack.md): server ≤ 60 MB RSS, Python driver ≤ 30 MB RSS at 30 FPS.
+  Re-measure with
+  ps -axo pid,rss,command | grep -E 'node server.js|control_whale.py' at every
+  feature close.
+- Hot paths must not allocate per frame: the driver's frame dict is pre-allocated and
+  mutated in place; the frontend message handler avoids closures/spreads; the server
+  never JSON.parses frames (raw-text passthrough).
+- No per-frame logging; aggregate logs only (server every 5 s, driver every 1 s).
+- No Electron, no heavy UI libraries, no heavy Python deps (no numpy/scipy/GUI).
+- CDN dependencies stay pinned to the exact verified versions in tech-stack.md
+  (PixiJS 7.4.3, pixi-live2d-display 0.4.0, Cubism Core official URL).
+- New Python dependencies must declare their Python-version ceiling (the Mac runs
+  3.9.10; websockets is capped at <16 for that reason).
