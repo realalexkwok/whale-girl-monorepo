@@ -42,19 +42,37 @@
 - The folder is gitignored (large, licensed); only its README is tracked.
 - No asset → the frontend renders the placeholder whale and logs ONE console error.
 
-## Ubuntu split checklist (M4.2 consumes this — config only, no code rewrite)
-1. rsync whale-girl-server/ to the Ubuntu host (exclude node_modules, .venv).
-2. Ubuntu: apt nodejs (≥18) + python3-venv (≥3.9); npm install; python3 -m venv .venv;
-   pip install -r requirements.txt.
-3. Run with explicit bindings: PORT=3000 WS_PORT=3001 npm start (systemd unit or PM2).
-4. Connectivity — PRIMARY (no open ports): ship scripts/ubuntu-tunnel.sh on the Mac:
-   ssh -N -L 3000:localhost:3000 -L 3001:localhost:3001 user@<server-ip>
-   The browser source keeps pointing at http://localhost:3000 unchanged. OPTIONAL
-   alternative (documented): firewall-allow 3000/tcp + 3001/tcp and use
+## Deployment patterns (M4.2 consumes this — config only, no code rewrite)
+
+### Pattern 1 — same machine (DEFAULT for normal users; zero SSH)
+The dev loop above IS the deployment: npm start + driver + browser/OBS, all on
+localhost. Nothing else to configure.
+
+### Pattern 2 — cloud server via git + install script (no SSH knowledge required)
+1. On the server (provider web console or any shell):
+
+       git clone https://github.com/realalexkwok/whale-girl-monorepo.git
+       cd whale-girl-monorepo/whale-girl-server && bash install-ubuntu.sh
+       sudo systemctl enable --now whale-girl
+
+2. install-ubuntu.sh (ships in M4.2) does: apt deps (nodejs ≥18, python3 ≥3.9),
+   npm install, the venv + pip install, a systemd unit, and an nginx TLS snippet
+   serving the frontend at https://<server>/ with the WS upgraded at /ws; the Mac
+   browser source then points at https://<server>/?ws=wss://<server>/ws.
+3. Optional for operators who already use SSH: scripts/deploy-ubuntu.sh wraps
+   scp/rsync + remote commands — a convenience, never a requirement.
+4. LAN alternative: firewall-allow 3000/tcp + 3001/tcp and use
    http://<server-ip>:3000?ws=ws://<server-ip>:3001.
-5. Driver: WHALE_WS=ws://<server-ip>:3001?role=python .venv/bin/python control_whale.py
-   (or WHALE_WS=ws://localhost:3001?role=python through the tunnel; it may keep
-   running on the Mac or move to Ubuntu — both work by design).
+
+### Pattern 3 — SSH port forwarding (OPTIONAL advanced mode)
+For operators who prefer no open ports: scripts/ubuntu-tunnel.sh (ships in M4.2)
+runs ssh -N -L 3000:localhost:3000 -L 3001:localhost:3001 user@<server-ip> on the
+Mac; the browser source keeps pointing at http://localhost:3000 unchanged.
+
+### Driver placement in patterns 2 and 3
+WHALE_WS=ws://<server-ip>:3001?role=python (direct/TLS) or
+WHALE_WS=ws://localhost:3001?role=python (through the tunnel); the driver may keep
+running on the Mac or move to Ubuntu — both work by design.
 
 ## Decision log
 - #1 (2026-10-19): two processes on two ports (express :3000, ws :3001) instead of one
@@ -62,7 +80,8 @@
 - #2 (2026-10-19): raw-text proxy passthrough — the server never parses frames.
 - #3 (2026-10-19): venv inside whale-girl-server/.venv (gitignored) rather than
   system-site pip — reproducible and split-ready.
-- #4 (2026-10-20): SSH port forwarding is the PRIMARY Ubuntu connectivity — no open
-  ports, encrypted; direct TCP is the documented fallback.
+- #4 (2026-10-20, amended same day): SSH port forwarding is an OPTIONAL advanced
+  mode, not a requirement — the general-user baselines are same-machine localhost
+  and a scripted/manual cloud deploy (no SSH knowledge).
 - #5 (2026-10-20): lip-sync audio source = system audio / DSH output loopback; RMS is
   computed in the frontend with the Web Audio API (zero new dependencies).

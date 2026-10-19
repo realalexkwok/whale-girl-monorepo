@@ -70,7 +70,7 @@
 - Env knobs: PORT, WS_PORT, WHALE_WS (python endpoint), WHALE_DEBUG=1 (per-frame
   driver logs, off by default), ?ws=ws://host:port (frontend endpoint override — the
   only change needed for the Ubuntu split).
-- See dev-environment.md for the full runbook and the Ubuntu split checklist.
+- See dev-environment.md for the full runbook and the deployment patterns (M4.2).
 
 ## Testing & verification (two-sided)
 - Automatic half (agent): node scripts/ws_probe.js (expect PASS, 20–40 fps, increasing
@@ -97,5 +97,8 @@
   new dependencies. Mic/TTS-driven mouth motion is not the V1 path.
 - 2026-10-20: M4.1 hard gate = the OBS browser source's EXTRA memory < 100 MB on the
   Mac, re-measured after every change; the per-process budgets stay in force.
-- 2026-10-20: M4.2 Ubuntu connectivity = SSH port forwarding primary (no open ports);
-  direct TCP stays documented as an optional alternative.
+- 2026-10-20 (amended same day, owner 1a/2a/3a): M4.2 connectivity — SSH port
+  forwarding is an OPTIONAL advanced mode, never a requirement. The general-user
+  baselines are: (1) same-machine localhost (default), (2) cloud server via git pull
+  + install-ubuntu.sh + systemd + nginx TLS (no SSH knowledge needed); direct TCP
+  remains a documented option.

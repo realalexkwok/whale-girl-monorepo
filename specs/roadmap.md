@@ -53,9 +53,16 @@
 - [ ] M4.1 memory/asset optimization: browser-source extra memory < 100 MB on the Mac
       (hard gate, re-measured after every change), scene sizing, reconnect hardening,
       CPU/GPU profile on target streaming hardware (absorbs the pre-replan M2.5)
-- [ ] M4.2 Ubuntu split: deploy whale-girl-server headless (systemd) with SSH port
-      forwarding as the PRIMARY connectivity (no open ports; direct TCP documented as
-      optional), frontend ?ws= override — config only, no code rewrite
+- [ ] M4.2 deployment for general users (2026-10-20 amendment, owner 1a/2a/3a):
+      pattern 1 same-machine — the dev loop as-is, zero SSH (DEFAULT for normal
+      users); pattern 2 cloud server — git pull + install-ubuntu.sh + systemd +
+      nginx TLS snippet (manual steps via the provider's web console; optional
+      deploy.sh wrapper for operators who already use SSH); pattern 3 SSH port
+      forwarding — OPTIONAL advanced mode (scripts/ubuntu-tunnel.sh). Frontend ?ws=
+      override — config only, no code rewrite
+- [ ] M4.2 validation gate: a fresh Ubuntu VM reaches the streaming state in ≤10 min
+      following only the README and the shipped scripts — no SSH or port-forwarding
+      knowledge required
 
 ## V2 — Directional vision (P1; replanned after V1 exits)
 - multi-model support (model hot-swap at runtime)

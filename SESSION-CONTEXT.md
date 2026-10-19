@@ -41,7 +41,9 @@
 7. M2.2 lip-sync audio source: system audio / DSH output loopback; RMS computed
    client-side with the Web Audio API.
 8. M4.1 hard gate: OBS browser-source extra memory < 100 MB on the Mac.
-9. M4.2 Ubuntu connectivity: SSH port forwarding primary; direct TCP optional.
+9. M4.2 deployment (amended 2026-10-20, owner 1a/2a/3a): same-machine localhost is
+   the DEFAULT for normal users; cloud deploys use git pull + install-ubuntu.sh +
+   systemd (no SSH knowledge); SSH port forwarding is an OPTIONAL advanced mode.
 
 ## 4. In-flight / next
 - NOTHING is in flight. Next: after the V4.1-Flash swap, M2.1 planning starts with the
@@ -67,6 +69,9 @@
     # Probes
     cd whale-girl-server && node scripts/ws_probe.js && node scripts/ws_role_probe.js
 
-## 7. Uncommitted state
-- All M1 files + the SDD files are UNCOMMITTED in the working tree (owner-commit rule).
-  The owner reviews and commits when ready; nothing has been pushed.
+## 7. Git state
+- Remote: origin = git@github.com:realalexkwok/whale-girl-monorepo.git (added
+  2026-10-20 on the owner's instruction); main tracks origin/main.
+- Commits: de0f61b (M1 pipeline + spec-driven development, 25 files) + a follow-up
+  commit carrying the 2026-10-20 M4.2 deployment-pattern amendment (owner 1a/2a/3a).
+  Working tree clean after both; nothing pending.

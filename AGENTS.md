@@ -21,7 +21,7 @@ must be answered by the user.
 - **Tech Boundaries:** specs/tech-stack.md — approved libraries, pinned
   versions, memory budgets, owner decision amendments.
 - **Dev runbook:** specs/dev-environment.md — the verified macOS loop and
-  the Ubuntu split checklist.
+  the deployment patterns (same-machine / cloud scripts / optional SSH tunnel).
 - **Feature specs:** specs/features/YYYY-MM-DD-<item>/ with
   requirements.md, plan.md, validation.md (see specs/features/README.md for the rules).
 

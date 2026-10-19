@@ -90,15 +90,15 @@ Until then the frontend shows a placeholder whale — by design, and OBS-safe.
 - Python 3.9 note: websockets resolves to 15.x (16+ needs Python 3.10+,
   17+ needs 3.11+). Newer Python recommended long-term: brew install python@3.12.
 
-## Splitting for production (M4.2)
+## Deployment patterns (M4.2)
 
-- Move whale-girl-server to Ubuntu (Node ≥18, Python ≥3.9); keep
-  whale-girl-frontend on the Mac for OBS.
-- Primary connectivity: SSH port forwarding — no open ports. On the Mac:
-  ssh -N -L 3000:localhost:3000 -L 3001:localhost:3001 user@<server-ip> — the
-  browser source keeps pointing at http://localhost:3000 unchanged.
-- Optional alternative (documented in specs/dev-environment.md): firewall-allow
-  3000/tcp + 3001/tcp and use http://<server-ip>:3000?ws=ws://<server-ip>:3001.
+- Same machine (DEFAULT for normal users): the quick start above IS the
+  deployment — server + driver + browser/OBS all on one computer, zero SSH.
+- Cloud server, no SSH knowledge: git pull + bash install-ubuntu.sh + systemd
+  (ships in M4.2); manual steps runnable through the provider's web console;
+  optional deploy.sh wrapper for operators who already use SSH.
+- SSH port forwarding (OPTIONAL advanced mode): scripts/ubuntu-tunnel.sh for
+  operators who prefer no open ports (ships in M4.2).
 - Remaining work is configuration only — no code path assumes localhost.
 
 ## Milestones
@@ -106,4 +106,4 @@ Until then the frontend shows a placeholder whale — by design, and OBS-safe.
 - [x] M1 骨架与静音渲染: repo skeleton, WS proxy, mock driver, Live2D frontend + placeholder
 - [ ] M2 模型与口型同步: real model drop-in + system-audio (loopback) RMS lip sync
 - [ ] M3 DSH 互动大脑: AI-driven parameters + expression presets (mock behind a flag)
-- [ ] M4 内存压榨与部署: <100MB OBS extra memory + Ubuntu via SSH port forwarding
+- [ ] M4 内存压榨与部署: <100MB OBS extra memory + deployment patterns (same-machine / cloud scripts / optional SSH tunnel)
