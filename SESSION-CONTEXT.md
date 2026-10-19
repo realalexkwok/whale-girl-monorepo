@@ -24,6 +24,9 @@
   specs/features/2026-10-19-m1-pipeline-foundation/validation.md.
 - The owner's manual half (browser ?debug=1 + OBS) and the real model drop-in remain
   the acceptance steps for M1/M2.1.
+- Agent skills installed in .agents/skills/ (2026-10-20): /spec-plan opens the
+  grouped planning round for any roadmap item (use "/spec-plan M2.1");
+  /spec-close runs the automatic half + bookkeeping at an item's close.
 
 ## 3. Owner decisions (binding)
 1. M1 stops before the real model/audio/DSH work; the owner switches the session AI
