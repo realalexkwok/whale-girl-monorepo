@@ -31,7 +31,9 @@
   source) also covers the M1 manual acceptance, which was never separately recorded.
 - Agent skills installed in .agents/skills/ (2026-10-20): /spec-plan opens the
   grouped planning round for any roadmap item (use "/spec-plan M2.1");
-  /spec-close runs the automatic half + bookkeeping at an item's close.
+  /spec-close runs the automatic half + bookkeeping at an item's close;
+  /spec-lipsync accelerates M2.2 planning (loopback capture, RMS mapping,
+  latency budget, synthetic-tone probe).
 
 ## 3. Owner decisions (binding)
 1. M1 stops before the real model/audio/DSH work; the owner switches the session AI
@@ -61,9 +63,9 @@
 ## 4. In-flight / next
 - NOTHING is in flight. Next: M2.2 (system-audio lip sync) planning via /spec-plan,
   carrying the M2.1 handoff (RMS → ParamMouthOpenY; the model's LipSync group exists).
-- M2.1's branch feature/whale-girl-m2-model-integration holds commits
-  1b0ed94..e691b22 plus the close bookkeeping (uncommitted); it awaits the owner's
-  merge decision (merge into main → push → delete the local branch).
+- M2.1 is fully closed: merged into main and pushed (2026-10-20); the local
+  feature/whale-girl-m2-model-integration branch was deleted. M2.2 starts a new
+  branch from main.
 
 ## 5. Environment facts (measured 2026-10-19; model added 2026-10-20)
 - Node v25.2.0, npm 10.5.2; whale-girl-server/node_modules installed.
@@ -88,7 +90,7 @@
 ## 7. Git state
 - Remote: origin = git@github.com:realalexkwok/whale-girl-monorepo.git; main tracks
   origin/main.
-- main is at b3c0cf4 (agent skills commit). M2.1 lives on
-  feature/whale-girl-m2-model-integration: 1b0ed94 (feature), bcaebe6, 0d9db46,
-  2c84f26, e691b22 (reviewer polish), plus this close bookkeeping (uncommitted
-  until the owner commits).
+- main is at 0df6a76 (pushed): M2.1 feature 1b0ed94 + reviewer polish bcaebe6,
+  0d9db46, 2c84f26, e691b22 + close bookkeeping 0df6a76. The local
+  feature/whale-girl-m2-model-integration branch was deleted after the merge;
+  working tree clean.
