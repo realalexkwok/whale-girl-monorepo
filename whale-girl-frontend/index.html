@@ -27,6 +27,21 @@
       display: none;
       white-space: pre;
     }
+    /* M2.2: shown only while the browser blocks audio without a gesture. */
+    #whale-pill {
+      position: fixed;
+      right: 8px;
+      bottom: 8px;
+      z-index: 11;
+      font: 12px/1.4 -apple-system, "Helvetica Neue", Arial, sans-serif;
+      color: #0b2530;
+      background: #9adcf8;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: none;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
@@ -396,6 +411,257 @@
         });
       }
 
+      // --- M2.2 speech: TTS playback + word-timeline mouth -------------------
+      // A say frame wins over the motion-frame mouth (priority rule); the mock
+      // envelope resumes the moment no say is active. Zero per-frame
+      // allocations: one envelope number + a preallocated probe ring.
+      var audioCtx = null;
+      var saySource = null;
+      var sayActive = null;
+      var pillEl = null;
+      var mouthValue = 0.0;
+      var lastMouthAt = 0;
+      var MOUTH_ATTACK = 0.020;   // seconds
+      var MOUTH_RELEASE = 0.120;  // seconds
+      var AMP_WIN = 0.05;         // amplitude-envelope window (say fallback)
+      var probeT = new Float32Array(4096);
+      var probeM = new Float32Array(4096);
+      var probeN = 0;
+      var lastSay = null;
+      var sayErrorLogged = false;
+
+      function sayAsyncError(message) {
+        if (!sayErrorLogged) {
+          sayErrorLogged = true;
+          console.error('[whale-girl] ' + message); // once, keeps OBS console clean
+        }
+        if (DEBUG) setStatus(statusLine('say: ' + message));
+      }
+
+      function showPill() {
+        if (!pillEl) {
+          pillEl = document.createElement('div');
+          pillEl.id = 'whale-pill';
+          pillEl.textContent = 'click to enable audio';
+          pillEl.addEventListener('click', function () {
+            ensureAudio(); // inside a gesture: the context is allowed to resume
+            hidePill();
+          });
+          document.body.appendChild(pillEl);
+        }
+        pillEl.style.display = 'block';
+      }
+
+      function hidePill() {
+        if (pillEl) pillEl.style.display = 'none';
+      }
+
+      // Creates/resumes the AudioContext. Returns it synchronously so the say
+      // path never depends on a resume() promise that may stay pending under
+      // an autoplay policy (OBS): playback then starts when the gesture comes.
+      function ensureAudio() {
+        if (!audioCtx) {
+          var Ctx = window.AudioContext || window.webkitAudioContext;
+          if (!Ctx) throw new Error('Web Audio unavailable');
+          audioCtx = new Ctx();
+        }
+        if (audioCtx.state !== 'running') {
+          var resumed = audioCtx.resume();
+          if (resumed && typeof resumed.then === 'function') {
+            resumed.then(function () {
+              if (audioCtx && audioCtx.state === 'running') hidePill();
+            }, function () { /* gesture still needed — pill stays visible */ });
+          }
+        }
+        return audioCtx;
+      }
+
+      window.addEventListener('pointerdown', function () {
+        if (audioCtx && audioCtx.state !== 'running') ensureAudio();
+      });
+      window.addEventListener('keydown', function () {
+        if (audioCtx && audioCtx.state !== 'running') ensureAudio();
+      });
+
+      function stopSay() {
+        if (!saySource) return;
+        try { saySource.onended = null; } catch (err) { /* ignore */ }
+        try { saySource.stop(); } catch (err) { /* ignore */ }
+        try { saySource.disconnect(); } catch (err) { /* ignore */ }
+        saySource = null;
+      }
+
+      // RMS per ~50 ms window, linearly normalized to 0..1 — the amplitude
+      // fallback for timestamp-less engines (macOS say). Allocated once per
+      // utterance at decode time, reused per frame.
+      function buildAmp(buffer) {
+        var win = Math.max(1, Math.round(buffer.sampleRate * AMP_WIN));
+        var n = Math.max(1, Math.ceil(buffer.duration / AMP_WIN));
+        var amp = new Float32Array(n);
+        var chans = [];
+        var c;
+        for (c = 0; c < buffer.numberOfChannels; c++) chans.push(buffer.getChannelData(c));
+        var peak = 0.0001;
+        var w, a, b, s, v, sum, cnt, rms;
+        for (w = 0; w < n; w++) {
+          a = w * win;
+          b = Math.min(a + win, buffer.length);
+          sum = 0;
+          cnt = b - a;
+          for (s = a; s < b; s++) {
+            v = 0;
+            for (c = 0; c < chans.length; c++) v += chans[c][s];
+            v /= chans.length;
+            sum += v * v;
+          }
+          rms = cnt > 0 ? Math.sqrt(sum / cnt) : 0;
+          amp[w] = rms;
+          if (rms > peak) peak = rms;
+        }
+        for (w = 0; w < n; w++) amp[w] = Math.min(1, amp[w] / peak);
+        return amp;
+      }
+
+      function handleSay(msg) {
+        var url = msg && msg.audio;
+        if (typeof url !== 'string') return;
+        var words = Array.isArray(msg.words) ? msg.words : [];
+        var engine = /\.m4a(\?|$)/i.test(url) ? 'say' : 'edge-tts';
+        var ctx;
+        try {
+          ctx = ensureAudio();
+        } catch (err) {
+          sayAsyncError('audio unavailable: ' + (err && err.message ? err.message : err));
+          return;
+        }
+        fetch(url).then(function (res) {
+          if (!res.ok) throw new Error('audio HTTP ' + res.status);
+          return res.arrayBuffer();
+        }).then(function (buf) {
+          return ctx.decodeAudioData(buf);
+        }).then(function (buffer) {
+          stopSay(); // latest wins: a new say replaces the current playback
+          sayActive = {
+            words: words,
+            startCtx: ctx.currentTime + 0.03,
+            duration: buffer.duration,
+            engine: engine,
+            bufferBytes: buffer.length * buffer.numberOfChannels * 4,
+            amp: words.length ? null : buildAmp(buffer),
+            wordCursor: 0,
+            label: words.length ? words[0][2] : '…',
+            audioUrl: url
+          };
+          lastSay = sayActive;
+          probeN = 0;
+          mouthValue = 0;
+          lastMouthAt = ctx.currentTime - 1 / 60;
+          var src = ctx.createBufferSource();
+          src.buffer = buffer;
+          src.connect(ctx.destination);
+          src.onended = function () {
+            if (saySource === src) saySource = null;
+          };
+          saySource = src;
+          src.start(sayActive.startCtx);
+          if (ctx.state === 'running') {
+            hidePill();
+            if (DEBUG) {
+              setStatus(statusLine('say: ' + sayActive.label + ' | mouth 0.00 | ' + engine));
+            }
+          } else {
+            // OBS/browser autoplay policy: the source is scheduled; it starts
+            // as soon as one gesture resumes the context.
+            showPill();
+            if (DEBUG) setStatus(statusLine('audio: suspended — click the pill to enable'));
+          }
+        }).catch(function (err) {
+          sayAsyncError('decode failed: ' + (err && err.message ? err.message : err));
+        });
+      }
+
+      // Called once per motion frame while a say is active: word envelope (or
+      // amplitude envelope) -> attack/release smoother -> ParamMouthOpenY.
+      function applyMouth(core) {
+        if (!sayActive) return;
+        var now = audioCtx ? audioCtx.currentTime : 0;
+        var t = now - sayActive.startCtx;
+        var target = 0;
+        if (t >= 0 && t <= sayActive.duration) {
+          if (sayActive.words.length) {
+            var list = sayActive.words;
+            var w = sayActive.wordCursor;
+            while (w < list.length && t > list[w][1]) w++;
+            sayActive.wordCursor = w;
+            if (w < list.length && t >= list[w][0]) {
+              target = 1;
+              if (DEBUG) sayActive.label = list[w][2];
+            }
+          } else if (sayActive.amp) {
+            var idx = Math.min(sayActive.amp.length - 1, Math.floor(t / AMP_WIN));
+            target = sayActive.amp[idx];
+            if (target < 0.04) target = 0; // noise floor
+          }
+        }
+        var dt = now - lastMouthAt;
+        if (dt <= 0 || dt > 0.25) dt = 1 / 60;
+        lastMouthAt = now;
+        var tau = target > mouthValue ? MOUTH_ATTACK : MOUTH_RELEASE;
+        mouthValue += (target - mouthValue) * (1 - Math.exp(-dt / tau));
+        if (mouthValue < 0) mouthValue = 0;
+        if (mouthValue > 1) mouthValue = 1;
+        if (core) core.setParameterValueById('ParamMouthOpenY', mouthValue);
+        if (probeN < probeT.length) {
+          probeT[probeN] = t;
+          probeM[probeN] = mouthValue;
+          probeN++;
+        }
+        if (t > sayActive.duration + 0.25) {
+          stopSay();
+          sayActive = null;
+          if (DEBUG) setStatus(statusLine('say: idle'));
+        }
+      }
+
+      // Console hooks (same style as window.whaleModel).
+      window.whaleSpeech = {
+        state: function () {
+          return {
+            active: !!sayActive,
+            engine: sayActive ? sayActive.engine : (lastSay ? lastSay.engine : null),
+            word: sayActive ? sayActive.label : null,
+            mouth: mouthValue,
+            bufferBytes: sayActive ? sayActive.bufferBytes : (lastSay ? lastSay.bufferBytes : 0),
+            duration: sayActive ? sayActive.duration : (lastSay ? lastSay.duration : 0),
+            words: lastSay ? lastSay.words.length : 0,
+            samples: probeN,
+            ctxState: audioCtx ? audioCtx.state : 'none',
+            wsState: ws ? ws.readyState : -1
+          };
+        },
+        // Probe hook: the per-frame sample ring + the last say's words timeline.
+        probeStats: function () {
+          var ts = new Array(probeN);
+          var ms = new Array(probeN);
+          for (var i = 0; i < probeN; i++) {
+            ts[i] = probeT[i];
+            ms[i] = probeM[i];
+          }
+          return {
+            t: ts,
+            mouth: ms,
+            say: lastSay ? {
+              audio: lastSay.audioUrl,
+              engine: lastSay.engine,
+              words: lastSay.words,
+              duration: lastSay.duration,
+              bufferBytes: lastSay.bufferBytes,
+              amp: lastSay.amp ? Array.from(lastSay.amp) : null
+            } : null
+          };
+        }
+      };
+
       // --- websocket (auto-reconnect with capped backoff + jitter) ---
       var ws = null;
       var wsRetry = 0;
@@ -415,19 +681,35 @@
           } catch (err) {
             return; // ignore malformed frames, never crash the page
           }
-          if (!msg || msg.type !== 'motion' || !msg.p) return;
+          if (!msg) return;
+          if (msg.type === 'say') {
+            handleSay(msg);
+            return;
+          }
+          if (msg.type !== 'motion' || !msg.p) return;
 
           if (model && model.internalModel && model.internalModel.coreModel) {
             var core = model.internalModel.coreModel;
             for (var id in msg.p) {
+              // Priority rule (M2.2): a live say drives the mouth; the mock
+              // motion-frame mouth applies only while no say is active.
+              if (id === 'ParamMouthOpenY' && sayActive) continue;
               var value = msg.p[id];
               lastParams.set(id, value);
               core.setParameterValueById(id, value);
             }
+            if (sayActive) applyMouth(core);
           } else {
-            for (var id in msg.p) lastParams.set(id, msg.p[id]);
+            for (var id2 in msg.p) lastParams.set(id2, msg.p[id2]);
           }
-          if (DEBUG) setStatus(statusLine('ws connected, frame ' + msg.f));
+          if (DEBUG) {
+            if (sayActive) {
+              setStatus(statusLine('say: ' + sayActive.label + ' | mouth ' +
+                mouthValue.toFixed(2) + ' | ' + sayActive.engine));
+            } else {
+              setStatus(statusLine('ws connected, frame ' + msg.f));
+            }
+          }
         };
         ws.onclose = function () {
           setStatus(statusLine('ws disconnected, retrying...'));

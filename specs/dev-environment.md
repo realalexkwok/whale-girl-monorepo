@@ -42,6 +42,38 @@
 - The folder is gitignored (large, licensed); only its README is tracked.
 - No asset → the frontend renders the placeholder whale and logs ONE console error.
 
+## TTS lip sync (M2.2)
+- The driver speaks explicitly specified words: edge-tts (free Microsoft neural
+  voices + word timestamps) is the primary engine; macOS "say" is the automatic
+  fallback when edge-tts fails (no timestamps → the frontend uses an amplitude
+  envelope of the decoded audio instead of the word timeline).
+- New pip dep: edge-tts==7.3.1 (installed in whale-girl-server/.venv; reinstall
+  with .venv/bin/pip install -r requirements.txt).
+- Speech files: whale-girl-server/audio/ (gitignored; the driver prunes files
+  older than 1 h) served by the server at /audio/<file>.
+- edge-tts runs in a short-lived helper process (scripts/tts_synth.py) so the
+  long-running driver stays under its 30 MB RSS budget.
+- Env knobs:
+
+      WHALE_VOICE        edge-tts voice              (default zh-CN-XiaoyiNeural)
+      WHALE_SAY_VOICE    macOS say voice fallback    (default Tingting)
+      WHALE_ENGINE=say   force the fallback engine   (probe / manual test)
+      WHALE_SAY_TEXT     speak this text once at startup, then keep the mock cadence
+
+- In mock mode the driver speaks a random canned Chinese phrase at each talk
+  burst; DSH supplies real text in M3.1. A say frame wins over the mock mouth
+  (priority rule); without a say the mock talk envelope animates as before.
+- Verify (each pass boots server + Chrome + driver itself — stop the running
+  server first):
+
+      cd whale-girl-server
+      node scripts/say_probe.js              # edge-tts pass
+      node scripts/say_probe.js --engine=say # macOS say / amplitude pass
+
+- OBS: the Browser source plays the page audio through OBS. If the audio starts
+  suspended (autoplay policy), a small "click to enable audio" pill appears —
+  click it once via OBS Interact; it hides when audio runs.
+
 ## Deployment patterns (M4.2 consumes this — config only, no code rewrite)
 
 ### Pattern 1 — same machine (DEFAULT for normal users; zero SSH)

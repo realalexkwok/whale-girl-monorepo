@@ -54,6 +54,17 @@ whale.model3.json sits next to its .moc3, textures, physics and motions
 (see whale-girl-frontend/model/README.md), then refresh the browser source.
 Until then the frontend shows a placeholder whale — by design, and OBS-safe.
 
+## Speech (M2.2 TTS lip sync)
+
+The driver can speak explicitly specified words: edge-tts synthesizes the
+speech (neural voice + word timestamps) with macOS "say" as the automatic
+fallback, writes the audio to whale-girl-server/audio/ (gitignored) and sends
+a say frame; the browser plays it via Web Audio (OBS captures it) and animates
+the mouth from the words, while the mock talk envelope remains the no-audio
+fallback. In mock mode a random canned Chinese phrase is spoken at each talk
+burst; DSH supplies real text in M3.1. See specs/dev-environment.md for the
+env knobs and the say probe.
+
 ## Wire protocol (v0)
 
 - Python connects to ws://localhost:3001?role=python (one writer at a time;
@@ -65,6 +76,13 @@ Until then the frontend shows a placeholder whale — by design, and OBS-safe.
 
   f = monotonic frame counter; p = raw Live2D parameter values (unclamped —
   some Live2D params are degrees, e.g. body angles).
+- Python → server → browser (M2.2):
+
+      {"type":"say","audio":"/audio/say-123.mp3","words":[[0.1,0.56,"你好"],...]}
+
+  The browser plays the audio via Web Audio and drives ParamMouthOpenY from the
+  word timeline; an empty words list (macOS say fallback) uses an amplitude
+  envelope of the decoded audio instead.
 - Server → python:
 
       {"type":"web_connected","count":N}
@@ -77,6 +95,8 @@ Until then the frontend shows a placeholder whale — by design, and OBS-safe.
 - Frontend WS endpoint: append ?ws=ws://host:port to the page URL.
 - Python endpoint: env WHALE_WS (default ws://localhost:3001?role=python).
 - WHALE_DEBUG=1 enables per-frame python logging (off by default).
+- TTS knobs: WHALE_VOICE, WHALE_SAY_VOICE, WHALE_ENGINE=say, WHALE_SAY_TEXT
+  (see specs/dev-environment.md).
 
 ## Troubleshooting
 
@@ -89,6 +109,9 @@ Until then the frontend shows a placeholder whale — by design, and OBS-safe.
   three scripts locally (future milestone).
 - Python 3.9 note: websockets resolves to 15.x (16+ needs Python 3.10+,
   17+ needs 3.11+). Newer Python recommended long-term: brew install python@3.12.
+- Whale silent but moving: check the driver log for "say:" lines; if the page
+  shows a "click to enable audio" pill, click it once (OBS Interact).
+  WHALE_ENGINE=say forces the macOS fallback engine.
 
 ## Deployment patterns (M4.2)
 

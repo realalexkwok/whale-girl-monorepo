@@ -14,6 +14,7 @@
  */
 
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const express = require('express');
 const { WebSocketServer, WebSocket } = require('ws');
@@ -21,6 +22,8 @@ const { WebSocketServer, WebSocket } = require('ws');
 const PORT = Number(process.env.PORT) || 3000;
 const WS_PORT = Number(process.env.WS_PORT) || 3001;
 const FRONTEND_DIR = path.resolve(__dirname, '..', 'whale-girl-frontend');
+// M2.2: TTS speech files written by the driver (gitignored, pruned by the driver).
+const AUDIO_DIR = path.resolve(__dirname, 'audio');
 
 const MAX_FRAME_BYTES = 8 * 1024;        // soft cap for forwarded frames
 const MAX_BUFFERED_BYTES = 256 * 1024;   // per-client backpressure threshold
@@ -31,6 +34,8 @@ const app = express();
 app.disable('x-powered-by');
 // maxAge 0: assets are revalidated every time (handy while swapping model files in dev)
 app.use(express.static(FRONTEND_DIR, { maxAge: 0, etag: true }));
+fs.mkdirSync(AUDIO_DIR, { recursive: true }); // the driver creates it too; keep the mount valid at boot
+app.use('/audio', express.static(AUDIO_DIR, { maxAge: 0, etag: true }));
 
 const httpServer = http.createServer(app);
 const wss = new WebSocketServer({ port: WS_PORT, maxPayload: 64 * 1024 });

@@ -12,10 +12,11 @@
     ├── .cursor/rules/        # editor agent rules (spec compliance, memory discipline)
     ├── .agents/skills/       # agent skills: /spec-plan, /spec-close, /spec-lipsync (M2.2)
     ├── whale-girl-server/    # Node.js proxy + Python brain (splits to Ubuntu later)
-    │   ├── server.js         # express :3000 static + ws :3001 raw-text proxy
-    │   ├── control_whale.py  # 30 FPS mock motion driver (asyncio + websockets)
-    │   ├── scripts/          # reusable smoke probes (ws_probe, ws_role_probe)
-    │   └── .venv/            # gitignored Python env (websockets pinned)
+    │   ├── server.js         # express :3000 static + ws :3001 raw-text proxy (+ /audio mount)
+    │   ├── control_whale.py  # 30 FPS mock driver + TTS speech (edge-tts / macOS say)
+    │   ├── scripts/          # probes: ws_probe, ws_role_probe, validate_model, say_probe
+    │   ├── audio/            # gitignored TTS speech files (driver writes, server serves)
+    │   └── .venv/            # gitignored Python env (websockets + edge-tts pinned)
     └── whale-girl-frontend/  # static OBS-facing page (stays on the Mac)
-        ├── index.html        # PixiJS 7 + Live2D cubism4, transparent canvas
+        ├── index.html        # PixiJS 7 + Live2D cubism4, transparent canvas (+ say playback)
         └── model/            # gitignored Live2D assets (whale.model3.json + siblings)

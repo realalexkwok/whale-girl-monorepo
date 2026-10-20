@@ -12,6 +12,8 @@ import json
 import math
 import os
 import random
+import sys
+import time
 
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
@@ -20,6 +22,32 @@ WS_URL = os.environ.get("WHALE_WS", "ws://localhost:3001?role=python")
 FPS = 30
 FRAME_TIME = 1.0 / FPS
 DEBUG = os.environ.get("WHALE_DEBUG") == "1"
+
+# --- M2.2 TTS lip sync -------------------------------------------------------
+# edge-tts synthesizes the words (neural voice + word timestamps); macOS
+# "say" is the automatic fallback engine (no timestamps -> amplitude path in
+# the frontend). WHALE_ENGINE=say forces the fallback (probe / manual test).
+WHALE_VOICE = os.environ.get("WHALE_VOICE", "zh-CN-XiaoyiNeural")
+WHALE_SAY_VOICE = os.environ.get("WHALE_SAY_VOICE", "Tingting")
+SAY_ENGINE = os.environ.get("WHALE_ENGINE", "").strip().lower()
+SAY_TEXT = os.environ.get("WHALE_SAY_TEXT", "").strip()
+AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audio")
+AUDIO_MAX_AGE = 3600.0  # prune speech files older than 1 h on each synthesis
+# edge-tts runs in this short-lived child process: importing it + aiohttp in
+# the driver would push RSS past the 30 MB budget (measured 2026-10-21).
+TTS_HELPER = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "scripts", "tts_synth.py"
+)
+
+# Canned phrases the mock brain speaks at each talk burst. DSH supplies real
+# text in M3.1; the say path itself is text-agnostic.
+CANNED_PHRASES = (
+    "你好，我是鲸鱼娘。",
+    "今天也要开心哦！",
+    "嗯嗯，我在听呢。",
+    "要不要一起去看看海？",
+    "嘿嘿，被你发现啦。",
+)
 
 # Live2D parameter IDs driven by this script (Cubism standard names).
 PARAM_MOUTH = "ParamMouthOpenY"
@@ -130,6 +158,118 @@ class TalkEnvelope:
         return 1.0 if self.talking else 0.0
 
 
+def _audio_name(ext):
+    return "say-%d-%04d.%s" % (int(time.time() * 1000), random.randint(0, 9999), ext)
+
+
+async def _edge_tts(text):
+    """Synthesize with edge-tts in a short-lived child process.
+
+    The child isolates edge-tts + aiohttp (~8-12 MB RSS) from the 30 FPS
+    driver, whose budget is <= 30 MB (tech-stack.md). The child prints one
+    JSON line with the word timeline; a missing package or a network failure
+    raises here so synthesize() can fall back to macOS say.
+    """
+    os.makedirs(AUDIO_DIR, exist_ok=True)
+    name = _audio_name("mp3")
+    path = os.path.join(AUDIO_DIR, name)
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        TTS_HELPER,
+        path,
+        WHALE_VOICE,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    out, err = await proc.communicate(text.encode("utf-8"))
+    try:
+        payload = json.loads(out.decode("utf-8", "replace").strip() or "{}")
+    except ValueError:
+        raise RuntimeError("tts helper returned invalid JSON")
+    if proc.returncode != 0 or not payload.get("ok"):
+        detail = payload.get("error") or err.decode("utf-8", "replace").strip()
+        raise RuntimeError(detail or "tts helper exited %d" % proc.returncode)
+    return name, payload.get("words") or []
+
+
+async def _say_tts(text):
+    """Fallback engine: macOS say -> AAC .m4a (no word timestamps)."""
+    os.makedirs(AUDIO_DIR, exist_ok=True)
+    name = _audio_name("m4a")
+    path = os.path.join(AUDIO_DIR, name)
+    proc = await asyncio.create_subprocess_exec(
+        "say",
+        "-v", WHALE_SAY_VOICE,
+        "-o", path,
+        "--file-format=m4af",
+        "--data-format=aac",
+        text,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, err = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "say failed: %s" % (err.decode("utf-8", "replace").strip() or proc.returncode)
+        )
+    return name, []
+
+
+async def synthesize(text):
+    """edge-tts first (unless WHALE_ENGINE=say), then the macOS say fallback."""
+    os.makedirs(AUDIO_DIR, exist_ok=True)
+    if SAY_ENGINE != "say":
+        try:
+            name, words = await _edge_tts(text)
+            return name, words, "edge-tts"
+        except Exception as exc:
+            print(
+                "[whale-girl] edge-tts failed (%s); using macOS say" % exc,
+                flush=True,
+            )
+    try:
+        name, words = await _say_tts(text)
+        return name, words, "say"
+    except Exception as exc:
+        print(
+            "[whale-girl] TTS failed entirely (%s); mock envelope continues" % exc,
+            flush=True,
+        )
+        return None
+
+
+def _prune_audio_sync(now):
+    try:
+        for entry in os.scandir(AUDIO_DIR):
+            if entry.is_file() and now - entry.stat().st_mtime > AUDIO_MAX_AGE:
+                try:
+                    os.unlink(entry.path)
+                except OSError:
+                    pass
+    except OSError:
+        pass
+
+
+async def send_say(ws, text):
+    """Synthesize + send the say frame.
+
+    Synthesis failures are swallowed (the mock envelope stays the fallback);
+    send errors propagate to the caller.
+    """
+    result = await synthesize(text)
+    if not result:
+        return
+    name, words, engine = result
+    await asyncio.to_thread(_prune_audio_sync, time.time())
+    payload = dump_json({"type": "say", "audio": "/audio/" + name, "words": words})
+    await ws.send(payload)
+    print(
+        "[whale-girl] say: %s (%d words, %s)" % (name, len(words), engine),
+        flush=True,
+    )
+
+
 def synth(now, blink, talk, frame):
     """Fill the pre-allocated frame dict in place (no per-frame allocations)."""
     p = frame["p"]
@@ -199,10 +339,37 @@ async def run_driver(ws):
     talk = TalkEnvelope(start)
     next_t = start + FRAME_TIME
 
+    say_task = None
+    say_text_pending = bool(SAY_TEXT)
+
+    async def run_say(text):
+        try:
+            await send_say(ws, text)
+        except ConnectionClosed:
+            pass
+        except Exception as exc:  # TTS must never kill the 30 FPS loop
+            print("[whale-girl] say error: %s" % exc, flush=True)
+
+    def trigger_say(text):
+        nonlocal say_task
+        if say_task is not None and not say_task.done():
+            return
+        say_task = asyncio.create_task(run_say(text))
+
     try:
         while True:
             if web_count > 0:
+                if say_text_pending and (say_task is None or say_task.done()):
+                    # WHALE_SAY_TEXT is a one-shot trigger (probe / manual test).
+                    say_text_pending = False
+                    trigger_say(SAY_TEXT)
+                talking_before = talk.talking
                 synth(loop.time(), blink, talk, MOTION)
+                if talk.talking and not talking_before and not SAY_TEXT:
+                    # One synthesis per talk burst; the say frame then drives the
+                    # mouth in the frontend while the mock pulse keeps the rest.
+                    # With WHALE_SAY_TEXT the run is scripted: exactly one say.
+                    trigger_say(random.choice(CANNED_PHRASES))
                 MOTION["f"] = sent
                 payload = dump_json(MOTION)
                 await ws.send(payload)
@@ -231,6 +398,8 @@ async def run_driver(ws):
                     print("[whale-girl] sample: %s" % payload, flush=True)
     finally:
         reader.cancel()
+        if say_task is not None:
+            say_task.cancel()
         try:
             await reader
         except asyncio.CancelledError:
