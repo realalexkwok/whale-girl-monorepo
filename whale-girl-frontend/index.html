@@ -344,9 +344,12 @@
               fatal(detail);
               return;
             }
+            // Loader messages may already end with a period ("Network error.");
+            // strip trailing punctuation so the diagnostic suffix never doubles it.
+            var cleanDetail = detail.replace(/[.\s]+$/, '');
             diagnoseMissingFiles(settingsJson).then(function (diag) {
               if (diag.unreachable) {
-                fatal('model not loaded — ' + detail + '. Asset check incomplete: ' +
+                fatal('model not loaded — ' + cleanDetail + '. Asset check incomplete: ' +
                   diag.unreachable + ' request(s) failed at the network level' +
                   (diag.missing.length ? '; missing file(s): ' + diag.missing.join(', ') : '') +
                   ' — retry when the server is reachable.');
@@ -354,7 +357,7 @@
                 fatal('model not loaded — missing file(s): ' + diag.missing.join(', ') +
                   ' — check whale-girl-frontend/model/README.md.');
               } else {
-                fatal('model not loaded — Live2D loader failed: ' + detail +
+                fatal('model not loaded — Live2D loader failed: ' + cleanDetail +
                   ' — check the asset files (moc3 version <= 4, textures, motions).');
               }
             });
