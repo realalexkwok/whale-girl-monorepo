@@ -344,9 +344,9 @@
               fatal(detail);
               return;
             }
-            // Loader messages may already end with a period ("Network error.");
+            // Loader messages may already end with punctuation ("Network error.");
             // strip trailing punctuation so the diagnostic suffix never doubles it.
-            var cleanDetail = detail.replace(/[.\s]+$/, '');
+            var cleanDetail = detail.replace(/[.!?\s]+$/, '');
             diagnoseMissingFiles(settingsJson).then(function (diag) {
               if (diag.unreachable) {
                 fatal('model not loaded — ' + cleanDetail + '. Asset check incomplete: ' +
