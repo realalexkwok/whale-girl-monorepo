@@ -14,16 +14,21 @@
 - Branch rules: feature/whale-girl-<item>; close = merge into main → push → delete
   local branch. Agents never git commit / git push without the owner's instruction.
 
-## 2. State — Milestone 1 CLOSED (verified 2026-10-19)
-- Everything for M1 is implemented and verified: server (express :3000 + ws proxy
-  :3001), frontend (PixiJS 7.4.3 + cubism4, transparent canvas, placeholder fallback),
-  mock driver (30 FPS blink/talk/gaze/sway), probes and docs.
-- Evidence: motion probe PASS at 30.0 fps (twice), role rejection 1008, single-writer
-  replacement 4001, restart resilience, RSS node 49,984 KB / python 20,816 KB.
-  Full detail: specs/history_roadmap.md and
+## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20)
+- M1: server (express :3000 + ws proxy :3001), frontend (PixiJS 7.4.3 + cubism4,
+  transparent canvas, placeholder fallback), mock driver (30 FPS blink/talk/gaze/sway),
+  probes and docs. Evidence: motion probe PASS at 30.0 fps (twice), role rejection
+  1008, single-writer replacement 4001, restart resilience, RSS node 49,984 KB /
+  python 20,816 KB. Full detail: specs/history_roadmap.md and
   specs/features/2026-10-19-m1-pipeline-foundation/validation.md.
-- The owner's manual half (browser ?debug=1 + OBS) and the real model drop-in remain
-  the acceptance steps for M1/M2.1.
+- M2.1: real DS鲸鱼娘 model installed at whale-girl-frontend/model/ (gitignored);
+  staged load errors, window.whaleModel hooks (FORCE playMotion, resetPose),
+  validator script. Evidence: 30.0 fps probe, validator PASS (moc3 v4, 8 motions,
+  44 expressions), RSS node 27,968 KB / driver 21,360 KB, single settings fetch,
+  0 console errors. Manual half owner-confirmed 2026-10-20. Full detail:
+  specs/features/2026-10-20-m2.1-model-integration/validation.md.
+- M2.1's manual pass (browser ?debug=1, console hooks, failure path, OBS Browser
+  source) also covers the M1 manual acceptance, which was never separately recorded.
 - Agent skills installed in .agents/skills/ (2026-10-20): /spec-plan opens the
   grouped planning round for any roadmap item (use "/spec-plan M2.1");
   /spec-close runs the automatic half + bookkeeping at an item's close.
@@ -47,19 +52,27 @@
 9. M4.2 deployment (amended 2026-10-20, owner 1a/2a/3a): same-machine localhost is
    the DEFAULT for normal users; cloud deploys use git pull + install-ubuntu.sh +
    systemd (no SSH knowledge); SSH port forwarding is an OPTIONAL advanced mode.
+10. M2.1 (2026-10-20): asset = DS鲸鱼娘 (dsh-pet-live2d@3.1.3) under CC BY-NC-SA
+    4.0 — personal, non-commercial use, attribution kept; playback hooks are
+    frontend-only (wire protocol deferred to M3.1); playMotion uses FORCE priority
+    + restart; resetPose() clears leftover motion poses; the validator script is
+    the asset gate.
 
 ## 4. In-flight / next
-- NOTHING is in flight. Next: after the V4.1-Flash swap, M2.1 planning starts with the
-  ask-user-question round (requirements/plan/validation) — the real whale.model3.json
-  drop-in, carrying the M1 validation.md handoff. The combined M2–M4 roadmap governs
-  the order.
+- NOTHING is in flight. Next: M2.2 (system-audio lip sync) planning via /spec-plan,
+  carrying the M2.1 handoff (RMS → ParamMouthOpenY; the model's LipSync group exists).
+- M2.1's branch feature/whale-girl-m2-model-integration holds commits
+  1b0ed94..e691b22 plus the close bookkeeping (uncommitted); it awaits the owner's
+  merge decision (merge into main → push → delete the local branch).
 
-## 5. Environment facts (measured 2026-10-19)
+## 5. Environment facts (measured 2026-10-19; model added 2026-10-20)
 - Node v25.2.0, npm 10.5.2; whale-girl-server/node_modules installed.
 - Python 3.9.10; whale-girl-server/.venv with websockets 15.0.1 (newest supporting
   3.9; 16.0 needs 3.10+, 17.x needs 3.11+).
 - Ports 3000/3001 free at last check; env knobs PORT, WS_PORT, WHALE_WS.
 - CDN URLs pinned in tech-stack.md, all verified 200 on 2026-10-19.
+- Live2D asset installed at whale-girl-frontend/model/ (4.3 MB, gitignored;
+  DS鲸鱼娘, moc3 v4); gate it with node scripts/validate_model.js.
 
 ## 6. How to run (quick recap)
     # Terminal 1
@@ -73,8 +86,9 @@
     cd whale-girl-server && node scripts/ws_probe.js && node scripts/ws_role_probe.js
 
 ## 7. Git state
-- Remote: origin = git@github.com:realalexkwok/whale-girl-monorepo.git (added
-  2026-10-20 on the owner's instruction); main tracks origin/main.
-- Commits: de0f61b (M1 pipeline + spec-driven development, 25 files) + a follow-up
-  commit carrying the 2026-10-20 M4.2 deployment-pattern amendment (owner 1a/2a/3a).
-  Working tree clean after both; nothing pending.
+- Remote: origin = git@github.com:realalexkwok/whale-girl-monorepo.git; main tracks
+  origin/main.
+- main is at b3c0cf4 (agent skills commit). M2.1 lives on
+  feature/whale-girl-m2-model-integration: 1b0ed94 (feature), bcaebe6, 0d9db46,
+  2c84f26, e691b22 (reviewer polish), plus this close bookkeeping (uncommitted
+  until the owner commits).

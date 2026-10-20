@@ -1,12 +1,13 @@
 # Whale Girl — Roadmap
 
-> **Status: M1 complete (2026-10-19).** V1 (M1–M4) is the commitment; V2/V3 are
-> directional vision. Order is strict — execute items top-to-bottom; no skipping or
-> reordering without owner approval. One branch per item (or small item group).
-> Completed-item detail lives in [history_roadmap.md](history_roadmap.md).
+> **Status: M1 complete (2026-10-19); M2.1 closed (2026-10-20).** V1 (M1–M4) is the
+> commitment; V2/V3 are directional vision. Order is strict — execute items
+> top-to-bottom; no skipping or reordering without owner approval. One branch per item
+> (or small item group). Completed-item detail lives in
+> [history_roadmap.md](history_roadmap.md).
 >
-> Session-model note: at the M1 close the owner switches the session AI model to
-> **V4.1-Flash** (2026-10-20); M2 planning starts after the swap.
+> Session-model note: the session AI model was switched to **V4.1-Flash** after the
+> M1 close (2026-10-20); M2 work continues on it.
 
 ## Branches
 - main holds the merged state of the active project.
@@ -35,9 +36,7 @@
 > expressions" line → M3.2. Pre-replan draft IDs are retired and never reused.
 
 ### M2 — 模型与口型同步 (model + lip sync)
-- [ ] M2.1 real Live2D model integration: drop-in whale.model3.json (Cubism 4.x
-      export), asset validation + clear load errors, motion/expression playback hooks
-      (carries the M1 handoff: the placeholder path becomes the failure path)
+- [x] M2.1 real Live2D model integration: DS whale girl drop-in, asset validation + clear load errors, playback hooks — closed 2026-10-20; [detail](history_roadmap.md#m21-real-live2d-model-integration)
 - [ ] M2.2 system-audio lip sync: capture the DSH output / system audio stream
       (virtual loopback device), compute RMS client-side (Web Audio API, zero new
       deps), map it to ParamMouthOpenY in real time; the mock talk envelope stays as

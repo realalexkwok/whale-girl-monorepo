@@ -3,7 +3,8 @@
 > Verbatim archive of completed items (created 2026-10-20, mirroring the byterra
 > convention). The active roadmap keeps one-line ticks with close dates; full detail,
 > evidence and handoffs live here. Deferred work from M1 is re-listed in the M2 item
-> lines and in features/2026-10-19-m1-pipeline-foundation/validation.md.
+> lines and in features/2026-10-19-m1-pipeline-foundation/validation.md; M2.1's
+> handoffs live in features/2026-10-20-m2.1-model-integration/validation.md.
 
 ## M1.1 monorepo scaffold
 - Created whale-girl-server/ (package.json: express ^4.22.3, ws ^8.22.0, scripts.start,
@@ -66,3 +67,33 @@
 - Handoffs: see features/2026-10-19-m1-pipeline-foundation/validation.md "Handoff to
   dependant milestones" — M2.1 (model), M2.2 (audio), M3.1 (DSH),
   M4.1 (memory/OBS), M4.2 (split).
+
+## M2.1 real Live2D model integration
+- Closed 2026-10-20. The real DS鲸鱼娘 (DeepSeek whale girl) model is installed at
+  whale-girl-frontend/model/ (dsh-pet-live2d@3.1.3, CC BY-NC-SA 4.0; attribution
+  上善无形 / ZipZipPipe / 氵六青; settings file renamed to whale.model3.json,
+  FileReferences untouched; gitignored, 4.3 MB).
+- index.html: staged load errors (404 / invalid JSON / Version > 4 / loader),
+  window.whaleModel hooks (FORCE playMotion + restart, playExpression, stopMotion,
+  resetPose, listMotions/listExpressions), status line shows the model + counts,
+  single settings fetch (parsed JSON passed to Live2DModel.from with an explicit
+  url), failure-only HEAD diagnostics naming missing files and reporting
+  network-level failures as an incomplete check. Fixed a latent M1 bug: fitModel
+  set anchor on a PIXI.Container (no anchor), which aborted boot before the model
+  load and WS connect.
+- whale-girl-server/scripts/validate_model.js (new, zero-dep): settings parse,
+  Version <= 4, every FileReferences path, moc3 header <= v4, referenced size,
+  empty-Motions rejection, actionable per-file errors.
+- Evidence (2026-10-20): ws_probe PASS at 30.0 fps over 2.00 s (61 frames);
+  ws_role_probe close 1008; curl :3000 → 200, model → 200 (404 when renamed away);
+  validator PASS (moc3 v4, 2.02 MB, 8 motions, 44 expressions, 3.95 MB);
+  RSS node server.js 27,968 KB / driver 21,360 KB (budgets 60/30 MB); node --check
+  PASS; ports released after shutdown. Chrome CDP: 1 settings fetch, 0 console
+  errors, hooks verified (FORCE switch, Idle restart, resetPose 84 → 0),
+  missing/blocked diagnostics verified. Manual half (browser ?debug=1, console
+  hooks, failure path, OBS browser source) owner-confirmed 2026-10-20.
+- Commits on feature/whale-girl-m2-model-integration: 1b0ed94 (feature),
+  bcaebe6, 0d9db46, 2c84f26, e691b22 (reviewer polish).
+- Handoffs: M2.2 owns loopback RMS → ParamMouthOpenY; M3.1 owns wire-protocol
+  trigger commands for the hooks; M3.2 owns text/emotion → expression presets;
+  M4.1 owns the <100 MB OBS gate re-measured with the real model.
