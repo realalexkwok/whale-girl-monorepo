@@ -15,7 +15,8 @@
    restarts the currently-playing motion; stopMotion stops the active motion
    (idle resumes); resetPose() restores parameter defaults. The parsed settings
    JSON is passed to Live2DModel.from with an explicit url (single fetch); on
-   loader failure a HEAD-check of every FileReference names the missing files.
+   loader failure a HEAD-check of every FileReference names the missing files,
+   while network-level HEAD failures are reported as an incomplete check.
    Preserve
    autoInteract:false, motionPreload:'NONE', the placeholder failure path, and
    the no-closures/no-spreads WS hot path.

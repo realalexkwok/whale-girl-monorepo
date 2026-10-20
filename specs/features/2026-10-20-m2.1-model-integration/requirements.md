@@ -51,7 +51,8 @@
   whale.model3.json is fetched exactly once per page load and FileReferences
   still resolve relative to model/. When the loader fails, the page HEAD-checks
   every FileReference and names the missing file(s) instead of surfacing a bare
-  "Network error".
+  "Network error"; HEAD requests that fail at the network level (server
+  unreachable) are reported as an incomplete check, never as missing files.
 
 ## Context
 - Development on macOS; the model folder stays gitignored (only README.md

@@ -269,22 +269,33 @@
       // error names the missing one instead of "Network error".
       function diagnoseMissingFiles(json) {
         var files = collectFileRefs(json);
-        if (!files.length) return Promise.resolve([]);
+        if (!files.length) return Promise.resolve({ missing: [], unreachable: 0 });
         var base = new URL(MODEL_URL, window.location.href);
         var jobs = [];
         for (var i = 0; i < files.length; i++) {
           jobs.push((function (rel) {
-            return fetch(new URL(rel, base).href, { method: 'HEAD' })
-              .then(function (res) { return res.ok ? null : rel; })
-              .catch(function () { return rel; });
+            return fetch(new URL(rel, base).href, { method: 'HEAD' }).then(
+              function (res) {
+                // A definite HTTP answer: 200 = present, anything else = missing.
+                return res.ok ? null : rel;
+              },
+              function () {
+                // No HTTP answer at all (server down / blocked): not evidence
+                // of a missing file — report the check as incomplete instead.
+                return { unreachable: true };
+              }
+            );
           })(files[i]));
         }
         return Promise.all(jobs).then(function (results) {
           var missing = [];
+          var unreachable = 0;
           for (var j = 0; j < results.length; j++) {
-            if (results[j]) missing.push(results[j]);
+            if (results[j] === null) continue;
+            if (results[j] && results[j].unreachable) { unreachable++; continue; }
+            missing.push(results[j]);
           }
-          return missing;
+          return { missing: missing, unreachable: unreachable };
         });
       }
 
@@ -333,9 +344,14 @@
               fatal(detail);
               return;
             }
-            diagnoseMissingFiles(settingsJson).then(function (missing) {
-              if (missing.length) {
-                fatal('model not loaded — missing file(s): ' + missing.join(', ') +
+            diagnoseMissingFiles(settingsJson).then(function (diag) {
+              if (diag.unreachable) {
+                fatal('model not loaded — ' + detail + '. Asset check incomplete: ' +
+                  diag.unreachable + ' request(s) failed at the network level' +
+                  (diag.missing.length ? '; missing file(s): ' + diag.missing.join(', ') : '') +
+                  ' — retry when the server is reachable.');
+              } else if (diag.missing.length) {
+                fatal('model not loaded — missing file(s): ' + diag.missing.join(', ') +
                   ' — check whale-girl-frontend/model/README.md.');
               } else {
                 fatal('model not loaded — Live2D loader failed: ' + detail +
