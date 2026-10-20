@@ -62,6 +62,9 @@
   f = monotonic frame counter; p = raw Live2D parameter values.
 - server → python: {"type":"web_connected","count":N}
 - web → server: {"type":"hello"} (accepted, ignored).
+- python → server → web (M2.2): {"type":"say","audio":"/audio/<id>.mp3",
+  "words":[[t0,t1,"word"],...]} — the frontend plays the audio via Web Audio and
+  animates the mouth from the word timeline; the server serves the audio file.
 - Roles via query param: ?role=web (many) / ?role=python (single writer).
 
 ## Dev environment
@@ -92,9 +95,13 @@
 - 2026-10-20: combined roadmap adopted (advisor comparison + grouped ask round):
   M2 模型与口型同步, M3 DSH 互动大脑, M4 内存压榨与部署; the danmaku (blivedm)
   milestone is explicitly rejected.
-- 2026-10-20: M2.2 audio source = system audio / DSH output via a virtual loopback
-  device; RMS analysis runs client-side with the Web Audio API (AnalyserNode) — zero
-  new dependencies. Mic/TTS-driven mouth motion is not the V1 path.
+- 2026-10-20 (replanned same day, owner 1a/2/3a/4a): M2.2 is TTS-DRIVEN — the
+  words are explicitly specified; edge-tts (free Microsoft neural voices,
+  word-boundary timestamps) synthesizes the speech, with macOS "say" as the
+  fallback engine; the browser plays the audio via Web Audio and drives the mouth
+  from the word timeline (word-level envelope + amplitude fallback). New pip dep:
+  edge-tts (justified: timestamps + free voices). The loopback-device capture
+  approach is RETIRED.
 - 2026-10-20: M4.1 hard gate = the OBS browser source's EXTRA memory < 100 MB on the
   Mac, re-measured after every change; the per-process budgets stay in force.
 - 2026-10-20 (amended same day, owner 1a/2a/3a): M4.2 connectivity — SSH port

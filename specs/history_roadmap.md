@@ -54,7 +54,8 @@
 - Evidence: websockets 15.0.1 installed (Python 3.9-compatible ceiling verified via
   PyPI requires_python); probe measured 30.0 fps over 2 s (61 frames); RSS 20,816 KB.
 - Handoffs: M3.1 owns replacing mock synthesis with real AI-driven commands (mock mode
-  stays behind a flag); M2.2 owns real audio-driven mouth values.
+  stays behind a flag); M2.2 owns real audio-driven mouth values (replanned
+  2026-10-20: TTS-driven — edge-tts primary, macOS say fallback).
 
 ## M1.5 end-to-end verification and docs
 - Full pipeline run twice (fresh start and after driver restart): probe PASS both
@@ -94,6 +95,8 @@
   hooks, failure path, OBS browser source) owner-confirmed 2026-10-20.
 - Commits on feature/whale-girl-m2-model-integration: 1b0ed94 (feature),
   bcaebe6, 0d9db46, 2c84f26, e691b22 (reviewer polish).
-- Handoffs: M2.2 owns loopback RMS → ParamMouthOpenY; M3.1 owns wire-protocol
-  trigger commands for the hooks; M3.2 owns text/emotion → expression presets;
-  M4.1 owns the <100 MB OBS gate re-measured with the real model.
+- Handoffs: M2.2 owns TTS-driven mouth animation — edge-tts (macOS say fallback)
+  word timeline → ParamMouthOpenY (replanned 2026-10-20, owner 1a/2/3a/4a);
+  M3.1 owns wire-protocol trigger commands for the hooks; M3.2 owns text/emotion
+  → expression presets; M4.1 owns the <100 MB OBS gate re-measured with the real
+  model.

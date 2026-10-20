@@ -32,8 +32,8 @@
 - Agent skills installed in .agents/skills/ (2026-10-20): /spec-plan opens the
   grouped planning round for any roadmap item (use "/spec-plan M2.1");
   /spec-close runs the automatic half + bookkeeping at an item's close;
-  /spec-lipsync accelerates M2.2 planning (loopback capture, RMS mapping,
-  latency budget, synthetic-tone probe).
+  /spec-lipsync accelerates M2.2 planning (TTS-driven: edge-tts primary, macOS
+  say fallback, word-level envelope + amplitude fallback, browser playback).
 
 ## 3. Owner decisions (binding)
 1. M1 stops before the real model/audio/DSH work; the owner switches the session AI
@@ -48,8 +48,10 @@
    (M4.2 consumes the dev-environment.md checklist; SSH port forwarding is primary).
 6. Combined roadmap (2026-10-20, grouped ask round): M2 模型与口型同步 → M3 DSH 互动
    大脑 → M4 内存压榨与部署; the advisor's danmaku milestone is REJECTED.
-7. M2.2 lip-sync audio source: system audio / DSH output loopback; RMS computed
-   client-side with the Web Audio API.
+7. M2.2 (replanned 2026-10-20, owner 1a/2/3a/4a): TTS-driven lip sync — explicitly
+   specified words are synthesized (edge-tts primary, macOS say fallback) and played
+   in the browser via Web Audio; the mouth animates to the words (word-level
+   envelope + amplitude fallback). Loopback capture retired.
 8. M4.1 hard gate: OBS browser-source extra memory < 100 MB on the Mac.
 9. M4.2 deployment (amended 2026-10-20, owner 1a/2a/3a): same-machine localhost is
    the DEFAULT for normal users; cloud deploys use git pull + install-ubuntu.sh +
@@ -61,8 +63,10 @@
     the asset gate.
 
 ## 4. In-flight / next
-- NOTHING is in flight. Next: M2.2 (system-audio lip sync) planning via /spec-plan,
-  carrying the M2.1 handoff (RMS → ParamMouthOpenY; the model's LipSync group exists).
+- NOTHING is in flight. Next: M2.2 (TTS-driven lip sync, replanned 2026-10-20)
+  planning via /spec-plan + /spec-lipsync, carrying the M2.1 handoff (edge-tts
+  primary / macOS say fallback → ParamMouthOpenY; the model's LipSync group
+  exists).
 - M2.1 is fully closed: merged into main and pushed (2026-10-20); the local
   feature/whale-girl-m2-model-integration branch was deleted. M2.2 starts a new
   branch from main.

@@ -66,8 +66,10 @@ Owner confirmation: all six steps passed (2026-10-20).
 | Hook semantics | FORCE switching, Idle restart, resetPose | agent (Chrome CDP), 2026-10-20 |
 
 ## Handoff to dependant milestones
-- M2.2 owns: loopback-captured RMS → ParamMouthOpenY (the model's LipSync group
-  already exists); the mock talk envelope stays the no-audio fallback.
+- M2.2 owns: TTS-driven mouth animation — edge-tts (macOS say fallback) word
+  timeline drives ParamMouthOpenY (the model's LipSync group already exists);
+  the mock talk envelope stays the no-audio fallback. (Replanned 2026-10-20,
+  owner 1a/2/3a/4a: the loopback-RMS draft is retired.)
 - M3.1 owns: wire-protocol commands that trigger the M2.1 playback hooks from real
   AI (the frontend API now exists; the protocol change was deferred).
 - M3.2 owns: text/emotion → expression presets via the same hooks.

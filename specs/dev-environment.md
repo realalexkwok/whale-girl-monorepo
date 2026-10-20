@@ -83,5 +83,7 @@ running on the Mac or move to Ubuntu — both work by design.
 - #4 (2026-10-20, amended same day): SSH port forwarding is an OPTIONAL advanced
   mode, not a requirement — the general-user baselines are same-machine localhost
   and a scripted/manual cloud deploy (no SSH knowledge).
-- #5 (2026-10-20): lip-sync audio source = system audio / DSH output loopback; RMS is
-  computed in the frontend with the Web Audio API (zero new dependencies).
+- #5 (2026-10-20, replanned): lip sync is TTS-DRIVEN — explicit text is synthesized
+  by edge-tts (word timestamps; macOS say fallback) and the frontend plays the
+  audio via Web Audio while driving the mouth from the word timeline; no loopback
+  device involved.

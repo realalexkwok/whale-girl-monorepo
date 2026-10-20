@@ -30,8 +30,9 @@
 - M2.1 (real model integration) owns: the drop-in asset path, Cubism 4.x export
   validation with actionable errors, motion/expression playback hooks — the M1
   placeholder becomes the failure path.
-- M2.2 (system-audio lip sync) owns: replacing the mock talk envelope with
-  loopback-captured RMS-driven ParamMouthOpenY values.
+- M2.2 (TTS-driven lip sync) owns: replacing the mock talk envelope with
+  synthesized-speech-driven mouth animation — edge-tts (macOS say fallback) word
+  timeline drives ParamMouthOpenY (word-level envelope + amplitude fallback).
 - M3.1 (DSH interaction) owns: replacing mock synthesis with real AI-driven parameter
   commands; mock mode stays behind a flag.
 - M4.2 (Ubuntu split) owns: headless server deployment + SSH port forwarding + env

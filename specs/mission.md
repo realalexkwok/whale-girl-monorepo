@@ -22,8 +22,9 @@ server to a headless Ubuntu box while the frontend stays inside OBS on the Mac.
 1. OBS adds a transparent Browser source; the whale girl stands in the stream overlay.
 2. Natural idle motion: blinking, gaze drift, breathing sway, occasional talking —
    already live via the M1 mock driver.
-3. (M2) System-audio (DSH output loopback) RMS lip sync and motion/expression
-   playback on the real Live2D model.
+3. (M2) TTS-driven lip sync: the whale girl speaks explicitly specified words —
+   synthesized speech plays on stream while her mouth animates to the words — plus
+   motion/expression playback on the real Live2D model.
 4. (M3) DSH interaction: the AI loop decides parameters and expressions, the
    pipeline renders them.
 5. The streamer runs everything from two terminals on the Mac; later the server half

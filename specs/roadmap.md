@@ -30,17 +30,20 @@
 > **Replan 2026-10-20 (owner decision, advisor comparison + grouped ask round).**
 > The roadmap was restructured by merging the advisor's milestone plan (minus the
 > danmaku milestone, explicitly rejected) with this repo's item-level discipline:
-> M2 = 模型与口型同步 (model + RMS lip sync), M3 = DSH 互动大脑 (replaces danmaku),
+> M2 = 模型与口型同步 (model + TTS lip sync), M3 = DSH 互动大脑 (replaces danmaku),
 > M4 = 内存压榨与部署 (<100MB OBS gate + SSH tunnel). Remapping from the pre-replan
 > draft: old M2.3 → M3.1, old M2.4 → M4.2, old M2.5 → M4.1, the V2 "LLM-driven
 > expressions" line → M3.2. Pre-replan draft IDs are retired and never reused.
 
 ### M2 — 模型与口型同步 (model + lip sync)
 - [x] M2.1 real Live2D model integration: DS whale girl drop-in, asset validation + clear load errors, playback hooks — closed 2026-10-20; [detail](history_roadmap.md#m21-real-live2d-model-integration)
-- [ ] M2.2 system-audio lip sync: capture the DSH output / system audio stream
-      (virtual loopback device), compute RMS client-side (Web Audio API, zero new
-      deps), map it to ParamMouthOpenY in real time; the mock talk envelope stays as
-      the no-audio fallback
+- [ ] M2.2 TTS-driven lip sync (2026-10-20 replan, owner 1a/2/3a/4a): the brain
+      speaks explicitly specified words — TTS synthesizes the speech (edge-tts
+      primary: free neural voices + word timestamps; macOS "say" as the fallback
+      engine if edge-tts fails), the frontend plays the audio via Web Audio (OBS
+      hears it) and animates the mouth from the word timeline (word-level envelope
+      + amplitude fallback); the mock talk envelope stays as the no-audio fallback;
+      the loopback-RMS draft is retired
 
 ### M3 — DSH 互动大脑 (interaction)
 - [ ] M3.1 DSH interaction: real AI-driven parameter commands replacing mock

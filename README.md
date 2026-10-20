@@ -104,6 +104,6 @@ Until then the frontend shows a placeholder whale — by design, and OBS-safe.
 ## Milestones
 
 - [x] M1 骨架与静音渲染: repo skeleton, WS proxy, mock driver, Live2D frontend + placeholder
-- [ ] M2 模型与口型同步: real model drop-in + system-audio (loopback) RMS lip sync
+- [ ] M2 模型与口型同步: real model drop-in + TTS-driven lip sync (explicit words → speech → mouth animates to the words)
 - [ ] M3 DSH 互动大脑: AI-driven parameters + expression presets (mock behind a flag)
 - [ ] M4 内存压榨与部署: <100MB OBS extra memory + deployment patterns (same-machine / cloud scripts / optional SSH tunnel)
