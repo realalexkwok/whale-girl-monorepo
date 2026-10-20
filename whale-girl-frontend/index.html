@@ -58,10 +58,19 @@
       statusEl.textContent = text;
     }
 
+    var modelInfo = ''; // set on successful model load; prefixes the ?debug=1 status line
+    var fatalInfo = ''; // set once on a fatal error; stays visible in the status line
+    function statusLine(wsText) {
+      var head = fatalInfo || modelInfo;
+      if (head && wsText) return head + ' | ' + wsText;
+      return head || wsText;
+    }
+
     var loggedFatal = false;
     function fatal(message) {
       if (loggedFatal) return; // report once: keeps the console clean in OBS
       loggedFatal = true;
+      fatalInfo = message;
       console.error('[whale-girl] ' + message);
       setStatus(message);
     }
@@ -136,20 +145,141 @@
       app.stage.addChild(placeholder);
       fitModel();
 
-      // --- model loading ---
-      Live2DModel.from(MODEL_URL, { autoInteract: false, motionPreload: 'NONE' })
-        .then(function (m) {
-          model = m;
-          app.stage.removeChild(placeholder);
-          app.stage.addChild(m);
-          fitModel();
-          flushParams();
-          setStatus('model loaded');
-        })
-        .catch(function (err) {
-          fatal('model not loaded (' + (err && err.message ? err.message : err) +
-            ') — showing placeholder. Drop your Cubism 4 assets into model/ and refresh.');
-        });
+      // --- model loading (staged errors: 404 / bad JSON / version / loader) ---
+      function stageError(message) {
+        var err = new Error(message);
+        err.whaleStage = true;
+        return err;
+      }
+
+      // Playback hooks: frontend API only for now; M3.1 will call these from
+      // protocol commands instead of adding a second animation path.
+      // pixi-live2d-display 0.4.0 exposes expressions through
+      // internalModel.motionManager.expressionManager (not internalModel).
+      function installHooks(m) {
+        function motionManager() {
+          return (m.internalModel && m.internalModel.motionManager) || null;
+        }
+        function expressionManager() {
+          var mm = motionManager();
+          return (mm && mm.expressionManager) || null;
+        }
+        function motionGroups() {
+          var mm = motionManager();
+          var defs = mm && mm.definitions;
+          if (!defs) return [];
+          return typeof defs.keys === 'function' ? Array.from(defs.keys()) : Object.keys(defs);
+        }
+        function expressionNames() {
+          var em = expressionManager();
+          var defs = em && em.definitions;
+          if (!defs || !defs.length) return [];
+          var names = [];
+          for (var i = 0; i < defs.length; i++) {
+            names.push(defs[i].Name || defs[i].name || String(i));
+          }
+          return names;
+        }
+        window.whaleModel = {
+          model: m,
+          // 0.4.0 rejects a new motion while one plays at the same priority
+          // (returns false, never queues) — force-start so console tests work.
+          playMotion: function (group, index) {
+            var mm = motionManager();
+            if (!mm) return Promise.resolve(false);
+            var priority = (window.PIXI.live2d.MotionPriority &&
+              window.PIXI.live2d.MotionPriority.FORCE) || 3;
+            // Same motion is "already playing" and rejected even with FORCE:
+            // stop first so playMotion always restarts it.
+            if (mm.state && mm.state.currentGroup === group &&
+                (index === undefined || mm.state.currentIndex === index)) {
+              if (typeof mm.stopAllMotions === 'function') mm.stopAllMotions();
+            }
+            try { return m.motion(group, index, priority); } catch (err) { return Promise.reject(err); }
+          },
+          playExpression: function (name) {
+            try { return m.expression(name); } catch (err) { return Promise.reject(err); }
+          },
+          // Stops the active motion; the idle motion resumes automatically
+          // (by design — this is the model's resting state).
+          stopMotion: function () {
+            var mm = motionManager();
+            if (mm && typeof mm.stopAllMotions === 'function') mm.stopAllMotions();
+          },
+          // Restores every parameter to its default value: clears leftover
+          // poses/props that accumulate when motions are switched quickly.
+          resetPose: function () {
+            var mm = motionManager();
+            if (mm && typeof mm.stopAllMotions === 'function') mm.stopAllMotions();
+            var cm = m.internalModel && m.internalModel.coreModel;
+            if (!cm || typeof cm.getParameterCount !== 'function') return;
+            var count = cm.getParameterCount();
+            for (var i = 0; i < count; i++) {
+              cm.setParameterValueByIndex(i, cm.getParameterDefaultValue(i));
+            }
+          },
+          resetExpression: function () {
+            var em = expressionManager();
+            if (em && typeof em.resetExpression === 'function') em.resetExpression();
+          },
+          listMotions: motionGroups,
+          listExpressions: expressionNames
+        };
+      }
+
+      function describeModel() {
+        var groups = [];
+        var exprs = [];
+        try { groups = window.whaleModel.listMotions(); } catch (err) { /* ignore */ }
+        try { exprs = window.whaleModel.listExpressions(); } catch (err) { /* ignore */ }
+        return 'model: ' + MODEL_URL.split('/').pop() + ' — ' + groups.length +
+          ' motion groups, ' + exprs.length + ' expressions';
+      }
+
+      function loadModel() {
+        fetch(MODEL_URL)
+          .then(function (res) {
+            if (!res.ok) {
+              throw stageError('model not found at ' + MODEL_URL + ' (HTTP ' + res.status +
+                ') — drop your Cubism assets into model/ and refresh.');
+            }
+            return res.text();
+          })
+          .then(function (text) {
+            var json;
+            try {
+              json = JSON.parse(text);
+            } catch (err) {
+              throw stageError('whale.model3.json is not valid JSON (' + err.message + ')');
+            }
+            var version = json && json.Version;
+            if (typeof version === 'number' && version > 4) {
+              throw stageError('Cubism ' + version + ' model is not supported by the ' +
+                'Cubism 4 runtime in this frontend — re-export the asset for Cubism 4.x.');
+            }
+            return Live2DModel.from(MODEL_URL, { autoInteract: false, motionPreload: 'NONE' });
+          })
+          .then(function (m) {
+            model = m;
+            app.stage.removeChild(placeholder);
+            app.stage.addChild(m);
+            fitModel();
+            flushParams();
+            installHooks(m);
+            modelInfo = describeModel();
+            setStatus(modelInfo);
+          })
+          .catch(function (err) {
+            var detail = err && err.message ? err.message : String(err);
+            if (err && err.whaleStage) {
+              fatal(detail);
+            } else {
+              fatal('model not loaded — Live2D loader failed: ' + detail +
+                ' — check the asset files (moc3 version <= 4, textures, motions).');
+            }
+          });
+      }
+      loadModel();
 
       // --- fit pipeline: bottom-center, ~90% of viewport height ---
       function fitModel() {
@@ -162,7 +292,13 @@
         var bh = bounds.height || 200;
         var scale = Math.min((h * 0.9) / bh, (w * 0.6) / bw);
         target.scale.set(scale);
-        target.anchor.set(0.5, 1);
+        if (target.anchor) {
+          target.anchor.set(0.5, 1);
+        } else {
+          // PIXI.Container (the placeholder) has no anchor: pin the bounds'
+          // bottom-center to the viewport bottom with pivot instead.
+          target.pivot.set(bounds.x + bw / 2, bounds.y + bh);
+        }
         target.x = w / 2;
         target.y = h;
       }
@@ -186,7 +322,7 @@
         ws.onopen = function () {
           wsRetry = 0;
           ws.send('{"type":"hello"}');
-          setStatus('ws connected');
+          setStatus(statusLine('ws connected'));
         };
         ws.onmessage = function (evt) {
           var msg;
@@ -207,10 +343,10 @@
           } else {
             for (var id in msg.p) lastParams.set(id, msg.p[id]);
           }
-          if (DEBUG) setStatus('ws connected, frame ' + msg.f);
+          if (DEBUG) setStatus(statusLine('ws connected, frame ' + msg.f));
         };
         ws.onclose = function () {
-          setStatus('ws disconnected, retrying...');
+          setStatus(statusLine('ws disconnected, retrying...'));
           scheduleReconnect();
         };
         ws.onerror = function () {
