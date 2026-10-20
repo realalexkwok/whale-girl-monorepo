@@ -119,6 +119,9 @@ function main() {
         motionCount++;
       }
     }
+    if (motionCount === 0) {
+      fail('FileReferences.Motions is empty (the playback hooks need at least one motion group).');
+    }
   } else {
     fail('FileReferences.Motions is missing (the playback hooks need at least one motion group).');
   }

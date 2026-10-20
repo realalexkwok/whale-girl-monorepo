@@ -46,6 +46,12 @@
   design. A resetPose() hook restores every parameter to its default value and
   clears leftover motion poses.
 - Validation tooling = zero-dep Node script — no new npm packages.
+- Loader efficiency and diagnostics (2026-10-20, reviewer polish): the parsed
+  settings JSON is handed to Live2DModel.from with an explicit url field, so
+  whale.model3.json is fetched exactly once per page load and FileReferences
+  still resolve relative to model/. When the loader fails, the page HEAD-checks
+  every FileReference and names the missing file(s) instead of surfacing a bare
+  "Network error".
 
 ## Context
 - Development on macOS; the model folder stays gitignored (only README.md

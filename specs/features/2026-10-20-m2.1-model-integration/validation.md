@@ -10,6 +10,7 @@
 | Frontend inline JS | node --check (extracted script) | PENDING |
 | Asset validation, present | node scripts/validate_model.js | PENDING (expect PASS + size + moc3 v4) |
 | Asset validation, absent | node scripts/validate_model.js with model/ emptied | PENDING (expect exit 1 + actionable per-file list) |
+| Asset validation, empty Motions | node scripts/validate_model.js on settings with "Motions": {} | PENDING (expect exit 1, empty-motions message) |
 | Model URL, present | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/model/whale.model3.json | PENDING (expect 200) |
 | Model URL, absent | same, model/ emptied | PENDING (expect 404) |
 | Motion probe | node scripts/ws_probe.js | PENDING (expect PASS, 20–40 fps, monotonic f) |

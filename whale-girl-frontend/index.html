@@ -236,7 +236,60 @@
           ' motion groups, ' + exprs.length + ' expressions';
       }
 
+      function collectFileRefs(json) {
+        var refs = json && json.FileReferences;
+        var files = [];
+        if (!refs) return files;
+        if (typeof refs.Moc === 'string') files.push(refs.Moc);
+        if (Array.isArray(refs.Textures)) {
+          for (var i = 0; i < refs.Textures.length; i++) files.push(refs.Textures[i]);
+        }
+        if (typeof refs.Physics === 'string') files.push(refs.Physics);
+        if (typeof refs.DisplayInfo === 'string') files.push(refs.DisplayInfo);
+        if (refs.Motions && typeof refs.Motions === 'object') {
+          for (var g in refs.Motions) {
+            var list = refs.Motions[g];
+            if (!Array.isArray(list)) continue;
+            for (var k = 0; k < list.length; k++) {
+              if (list[k] && typeof list[k].File === 'string') files.push(list[k].File);
+            }
+          }
+        }
+        if (Array.isArray(refs.Expressions)) {
+          for (var e = 0; e < refs.Expressions.length; e++) {
+            if (refs.Expressions[e] && typeof refs.Expressions[e].File === 'string') {
+              files.push(refs.Expressions[e].File);
+            }
+          }
+        }
+        return files;
+      }
+
+      // Runs only after a loader failure: HEAD every referenced file so the
+      // error names the missing one instead of "Network error".
+      function diagnoseMissingFiles(json) {
+        var files = collectFileRefs(json);
+        if (!files.length) return Promise.resolve([]);
+        var base = new URL(MODEL_URL, window.location.href);
+        var jobs = [];
+        for (var i = 0; i < files.length; i++) {
+          jobs.push((function (rel) {
+            return fetch(new URL(rel, base).href, { method: 'HEAD' })
+              .then(function (res) { return res.ok ? null : rel; })
+              .catch(function () { return rel; });
+          })(files[i]));
+        }
+        return Promise.all(jobs).then(function (results) {
+          var missing = [];
+          for (var j = 0; j < results.length; j++) {
+            if (results[j]) missing.push(results[j]);
+          }
+          return missing;
+        });
+      }
+
       function loadModel() {
+        var settingsJson = null;
         fetch(MODEL_URL)
           .then(function (res) {
             if (!res.ok) {
@@ -257,7 +310,12 @@
               throw stageError('Cubism ' + version + ' model is not supported by the ' +
                 'Cubism 4 runtime in this frontend — re-export the asset for Cubism 4.x.');
             }
-            return Live2DModel.from(MODEL_URL, { autoInteract: false, motionPreload: 'NONE' });
+            // Hand the parsed settings to the loader with an explicit url: one
+            // fetch of whale.model3.json, and FileReferences still resolve
+            // relative to the settings file's directory.
+            json.url = new URL(MODEL_URL, window.location.href).href;
+            settingsJson = json;
+            return Live2DModel.from(json, { autoInteract: false, motionPreload: 'NONE' });
           })
           .then(function (m) {
             model = m;
@@ -273,10 +331,17 @@
             var detail = err && err.message ? err.message : String(err);
             if (err && err.whaleStage) {
               fatal(detail);
-            } else {
-              fatal('model not loaded — Live2D loader failed: ' + detail +
-                ' — check the asset files (moc3 version <= 4, textures, motions).');
+              return;
             }
+            diagnoseMissingFiles(settingsJson).then(function (missing) {
+              if (missing.length) {
+                fatal('model not loaded — missing file(s): ' + missing.join(', ') +
+                  ' — check whale-girl-frontend/model/README.md.');
+              } else {
+                fatal('model not loaded — Live2D loader failed: ' + detail +
+                  ' — check the asset files (moc3 version <= 4, textures, motions).');
+              }
+            });
           });
       }
       loadModel();

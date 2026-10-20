@@ -13,7 +13,10 @@
    ?debug=1 status line showing the model name + motion/expression counts.
    Hook semantics per live testing: playMotion uses MotionPriority.FORCE and
    restarts the currently-playing motion; stopMotion stops the active motion
-   (idle resumes); resetPose() restores parameter defaults. Preserve
+   (idle resumes); resetPose() restores parameter defaults. The parsed settings
+   JSON is passed to Live2DModel.from with an explicit url (single fetch); on
+   loader failure a HEAD-check of every FileReference names the missing files.
+   Preserve
    autoInteract:false, motionPreload:'NONE', the placeholder failure path, and
    the no-closures/no-spreads WS hot path.
 2. Group B — whale-girl-server/scripts/validate_model.js (zero-dep) +
