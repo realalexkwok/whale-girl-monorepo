@@ -1,6 +1,6 @@
 # Whale Girl — Roadmap
 
-> **Status: M1 complete (2026-10-19); M2.1 closed (2026-10-20).** V1 (M1–M4) is the
+> **Status: M1 complete (2026-10-19); M2.1 closed (2026-10-20).** V1 (M1–M5) is the
 > commitment; V2/V3 are directional vision. Order is strict — execute items
 > top-to-bottom; no skipping or reordering without owner approval. One branch per item
 > (or small item group). Completed-item detail lives in
@@ -25,7 +25,7 @@
 - [x] M1.4 control_whale.py: 30 FPS drift-corrected mock driver (blink/talk/gaze/sway, zero-alloc loop) — closed 2026-10-19; [detail](history_roadmap.md#m14-control_whalepy-mock-motion-driver)
 - [x] M1.5 end-to-end verification + run docs — closed 2026-10-19; [detail](history_roadmap.md#m15-end-to-end-verification-and-docs)
 
-## V1 (commitment: M1 closed + M2–M4 pending)
+## V1 (commitment: M1 closed + M2–M5 pending)
 
 > **Replan 2026-10-20 (owner decision, advisor comparison + grouped ask round).**
 > The roadmap was restructured by merging the advisor's milestone plan (minus the
@@ -34,6 +34,11 @@
 > M4 = 内存压榨与部署 (<100MB OBS gate + SSH tunnel). Remapping from the pre-replan
 > draft: old M2.3 → M3.1, old M2.4 → M4.2, old M2.5 → M4.1, the V2 "LLM-driven
 > expressions" line → M3.2. Pre-replan draft IDs are retired and never reused.
+>
+> **Amendment 2026-10-21 (owner, grouped round 1a/2a/3a):** the AI-agent progress
+> notifier (design drafts: ../docs/drafts/ai-agent-notifier/) becomes milestone
+> **M5 inside V1** — DSH-first with cross-agent seams ready, registry in
+> whale-girl-server.
 
 ### M2 — 模型与口型同步 (model + lip sync)
 - [x] M2.1 real Live2D model integration: DS whale girl drop-in, asset validation + clear load errors, playback hooks — closed 2026-10-20; [detail](history_roadmap.md#m21-real-live2d-model-integration)
@@ -65,6 +70,18 @@
 - [ ] M4.2 validation gate: a fresh Ubuntu VM reaches the streaming state in ≤10 min
       following only the README and the shipped scripts — no SSH or port-forwarding
       knowledge required
+
+### M5 — AI agent progress notifier (DSH-first; drafts: ../docs/drafts/ai-agent-notifier/)
+- [ ] M5.1 session integration: per-session MCP attach/detach + session naming +
+      round-finished announcement — turn/end → say 主人，%会话名%有任务完成啦;
+      cross-agent hook seams (Claude Code / Codex) designed, verified later
+- [ ] M5.2 automatic mid-round progress: whale_progress MCP tool + context
+      injection (CLAUDE.md / AGENTS.md / GEMINI.md / .cursor rules / DSH profile)
+      + speech policy (cooldown, priority, session name untranslated)
+- [ ] M5.3 voice commands: sherpa-onnx KWS host-process listener —
+      有什么会话还在跑？ / 有什么会话未处理？ (DSH-only, sorted by last
+      finished time) / 停止会话一…十 → session.cancel; reply templates in
+      ../docs/drafts/ai-agent-notifier/03-feature3-voice-commands.md
 
 ## V2 — Directional vision (P1; replanned after V1 exits)
 - multi-model support (model hot-swap at runtime)

@@ -3,8 +3,8 @@
 ## Part A — System Prompt Context
 You are an expert full-stack developer and architect operating in the Whale Girl
 monorepo — a low-memory Live2D interactive streaming system.
-ACTIVE PROJECT (this branch): **Whale Girl** (V1; M1 pipeline foundation closed, M2
-is the next milestone).
+ACTIVE PROJECT (this branch): **Whale Girl** (V1 M1–M5; M1 closed, M2.1 closed,
+M2.2 implemented on its feature branch, M3–M5 pending).
 Before writing any code, read the project constitution files first:
 specs/mission.md, tech-stack.md, roadmap.md, dev-environment.md.
 Before every write to disk, an ask-user-question round covering requirements
@@ -14,7 +14,7 @@ must be answered by the user.
 ## Part B — Project Constitution (active project)
 - **Core Mission:** specs/mission.md — goals, audiences, principles.
 - **Current Goals:** specs/roadmap.md — strict item order; V1 (M1 closed +
-  M2–M4) is the commitment, V2/V3 are directional vision.
+  M2–M5) is the commitment, V2/V3 are directional vision.
 - **Roadmap history:** specs/history_roadmap.md — the archive of completed
   items (M1.1–M1.5) with measured evidence; the active roadmap keeps one-line ticks
   with close dates and links into the archive.

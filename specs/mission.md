@@ -27,7 +27,10 @@ server to a headless Ubuntu box while the frontend stays inside OBS on the Mac.
    motion/expression playback on the real Live2D model.
 4. (M3) DSH interaction: the AI loop decides parameters and expressions, the
    pipeline renders them.
-5. The streamer runs everything from two terminals on the Mac; later the server half
+5. (M5) The whale girl attends agent sessions: she announces finished rounds
+   (主人，%会话名%有任务完成啦), reports mid-round progress in short Chinese
+   lines, and answers voice commands.
+6. The streamer runs everything from two terminals on the Mac; later the server half
    moves to Ubuntu with config-only changes (no code paths assume localhost).
 
 ## Audiences
@@ -50,5 +53,5 @@ server to a headless Ubuntu box while the frontend stays inside OBS on the Mac.
   absolute paths and measured numbers (fps, RSS, exit codes).
 - **Owner commits:** agents must NOT git commit / git push; the owner reviews and
   commits when instructed.
-- **Minimal surface:** V1 (M1–M4) is the commitment; V2/V3 are directional vision,
+- **Minimal surface:** V1 (M1–M5) is the commitment; V2/V3 are directional vision,
   not promises. No speculative features.

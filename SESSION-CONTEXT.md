@@ -61,6 +61,11 @@
     frontend-only (wire protocol deferred to M3.1); playMotion uses FORCE priority
     + restart; resetPose() clears leftover motion poses; the validator script is
     the asset gate.
+11. M5 (2026-10-21, owner grouped round 1a/2a/3a): the AI-agent progress notifier
+    becomes milestone M5 inside V1 — M5.1 session integration + round-finished
+    announcement, M5.2 automatic mid-round progress, M5.3 voice commands;
+    DSH-first with cross-agent seams ready, registry in whale-girl-server.
+    Design drafts: docs/drafts/ai-agent-notifier/.
 
 ## 4. In-flight / next
 - M2.2 (TTS-driven lip sync) IMPLEMENTED on branch feature/whale-girl-m22-lipsync
