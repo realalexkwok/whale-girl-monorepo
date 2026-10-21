@@ -334,14 +334,45 @@ async function cmdState(chrome) {
     'engine=' + (pageSay && pageSay.engine) + ' decoded=' + (pageSay && pageSay.bufferBytes) + ' bytes, duration ' +
     (pageSay && pageSay.duration ? pageSay.duration.toFixed(2) : '?') + ' s');
 
-  // 7) the motion stream is still healthy at ~30 fps.
+  // 7) mock mode must never cut a commanded line (M3.1 fix: src + hold).
+  probeWs.send(JSON.stringify({ type: 'mode', mock: true }));
+  await waitMode(true, 5000);
+  const cannedBefore = sayFrames.length;
+  await waitFor(() => sayFrames.some((m, i) => i >= cannedBefore && m.src === 'mock'),
+    25000, 'canned say in mock mode');
+  const canned2 = sayFrames.filter((m, i) => i >= cannedBefore && m.src === 'mock').pop();
+  record('say frames carry src', canned2.src === 'mock' && dshSay.src === 'cmd',
+    'canned src="mock", commanded src="' + dshSay.src + '"');
+
+  const cutBefore = sayFrames.length;
+  probeWs.send(JSON.stringify({ type: 'say', text: sayText }));
+  let cmd2 = null;
+  await waitFor(() => {
+    for (let i = cutBefore; i < sayFrames.length; i++) {
+      if (sayFrames[i].src === 'cmd') { cmd2 = sayFrames[i]; return true; }
+    }
+    return false;
+  }, 120000, 'commanded say in mock mode');
+  await waitFor(async () => {
+    const st = await chrome.evaluate('window.whaleSpeech.probeStats().say');
+    return st && st.audio === cmd2.audio;
+  }, 20000, 'page playing the commanded say (mock mode)');
+  const cutDuration = Array.isArray(cmd2.words) && cmd2.words.length
+    ? cmd2.words[cmd2.words.length - 1][1] : 2.0;
+  await sleep(Math.round((cutDuration + 0.7) * 1000));
+  const still = await chrome.evaluate('window.whaleSpeech.probeStats().say');
+  record('mock does not cut the commanded line', !!still && still.audio === cmd2.audio,
+    'after ' + (cutDuration + 0.7).toFixed(1) + ' s the page still plays ' +
+    (still ? still.audio : 'nothing'));
+
+  // 8) the motion stream is still healthy at ~30 fps.
   const beforeCount = motionCount;
   const beforeAt = Date.now();
   await sleep(2000);
   const rate = (motionCount - beforeCount) / ((Date.now() - beforeAt) / 1000);
   record('motion stream 25-35 fps', rate >= 25 && rate <= 35, rate.toFixed(1) + ' fps over 2.00 s');
 
-  // 8) RSS budgets with commands active.
+  // 9) RSS budgets with commands active.
   const serverRss = rssKb(server.pid);
   const driverRss = rssKb(driver.pid);
   record('server RSS <= 60 MB', serverRss <= 60 * 1024, serverRss + ' KB');

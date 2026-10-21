@@ -9,17 +9,17 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 
 | Check | Command | Result |
 | --- | --- | --- |
-| cmd_probe (v1 frame types end to end) | node scripts/cmd_probe.js | PASS — 16/16 checks (breakdown below) |
-| Say byte-compatibility regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 54/54 (100%), gap max 0.108, latency mean 14 ms / max 30 ms, decoded 847,872 B / 4.42 s |
+| cmd_probe (v1 frame types end to end) | node scripts/cmd_probe.js | PASS — 18/18 checks (breakdown below), incl. the fix-round checks |
+| Say byte-compatibility regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 52/52 (100%), gap max 0.079, latency mean 17 ms / max 35 ms, decoded 847,872 B / 4.42 s |
 | CLI validation paths | whale_cmd.py motion Nope / no server | PASS — unknown group exits 2 with the 8 groups listed; connection refused exits 1 with an actionable message |
 | Motion probe | node scripts/ws_probe.js | PASS — 30.0 fps over 2.00 s, 61 frames |
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | HTTP static host | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ | 200 PASS |
-| Frontend inline JS | node --check (extracted script) | PASS — 30,944 B at /tmp/m31-inline.js |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | PASS — mock stack 54,896 / 23,568 KB; cmd_probe 30,784 / 17,952 KB (earlier pass 35,888 / 20,624 KB); say_probe 50,848 / 15,600 KB — all within 60 / 30 MB |
+| Frontend inline JS | node --check (extracted script) | PASS — 31,122 B at /tmp/m31-inline.js |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | PASS in the probe runs — cmd_probe 48,384 / 20,160 KB; say_probe 51,984 / 20,800 KB. The restarted standalone stack measured 62,336 / 28,960 KB — the server's noisy end (29–63 MB observed across runs; M4.1 owns the OBS-gate multi-sample re-measure), driver within 30 MB |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released, no stray processes |
 
-### cmd_probe.js breakdown (PASS 16/16)
+### cmd_probe.js breakdown (PASS 18/18)
 | Check | Measured |
 | --- | --- |
 | live boot: mock speech paused | 0 say frames in 10 s (WHALE_MODE=live) |
@@ -34,6 +34,8 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | say command frame | /audio/say-<id>.mp3, words=4 — schema == M2.2 |
 | say audio served | HTTP 200, content-type audio/mpeg |
 | page played the commanded say | engine=edge-tts, decoded 442,368 B, 2.30 s |
+| say frames carry src | canned src="mock", commanded src="cmd" |
+| mock never cuts a commanded line | in mock mode, 2.1 s into the line the page still plays the commanded audio (no cut) |
 | motion stream | 30.0 fps over 2.00 s |
 | server / driver RSS | 30,784 KB / 17,952 KB |
 | ports released | :3000 and :3001 free |
@@ -54,9 +56,12 @@ mode: mock" and the say lines).
      plays; ?debug=1 shows `cmd motion: Hammer`; an unknown group
      (`motion Nope`) prints the 8 groups and exits 2.
    - `.venv/bin/python scripts/whale_cmd.py say 你好，我是鲸鱼娘` — the whale
-     speaks with lip sync.
-   - `.venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeBallX":0.8}'` —
-     the eyes stay to one side; `pose '{}'` releases.
+     speaks with lip sync; the line plays to its end even while the mock keeps
+     talking (canned lines never cut it; a new command still may).
+   - `.venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeLOpen":0,"ParamEyeROpen":0}'` —
+     the eyes stay shut while held (an unmistakable check; ParamEyeBallX is too
+     subtle to judge); `pose '{}'` reopens them. `pose '{"ParamAngleZ":15}'`
+     (head tilt) is an alternative.
    - `.venv/bin/python scripts/whale_cmd.py mode live` — the mock mouth/talk
      bursts stop (idle blink/gaze/sway continue); `mode mock` resumes the
      canned speech.

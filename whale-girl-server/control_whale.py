@@ -37,6 +37,10 @@ SAY_TEXT = os.environ.get("WHALE_SAY_TEXT", "").strip()
 # and hands the mouth to explicit commands (say / pose); a mode frame flips it
 # at runtime. Anything other than an explicit "live" keeps mock behavior.
 MODE = "live" if os.environ.get("WHALE_MODE", "").strip().lower() == "live" else "mock"
+# M3.1 fix (2026-10-21): a say owns the speech until it ends — the mock must not
+# trigger canned phrases over it. Set by send_say() to the words' end + 0.3 s
+# (an estimate for the macOS-say fallback, which has no timeline).
+SAY_HOLD_UNTIL = 0.0
 AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audio")
 AUDIO_MAX_AGE = 3600.0  # prune speech files older than 1 h on each synthesis
 # edge-tts runs in this short-lived child process: importing it + aiohttp in
@@ -278,21 +282,38 @@ def _prune_audio_sync(now):
         pass
 
 
-async def send_say(ws, text):
-    """Synthesize + send the say frame.
+def say_duration(text, words):
+    """Playback length: exact from the word timeline, else ~0.25 s per char."""
+    if words:
+        return words[-1][1]
+    return 0.25 * len(text) + 0.5
+
+
+async def send_say(ws, text, src="cmd"):
+    """Synthesize + send the say frame (src: "cmd" | "mock").
 
     Synthesis failures are swallowed (the mock envelope stays the fallback);
-    send errors propagate to the caller.
+    send errors propagate to the caller. The frame keeps the M2.2 shape and adds
+    an additive "src" field so the frontend can let a mock line never interrupt
+    a playing line while an explicit command still does.
     """
+    global SAY_HOLD_UNTIL
     result = await synthesize(text)
     if not result:
         return
     name, words, engine = result
     await asyncio.to_thread(_prune_audio_sync, time.time())
-    payload = dump_json({"type": "say", "audio": "/audio/" + name, "words": words})
+    payload = dump_json({
+        "type": "say",
+        "audio": "/audio/" + name,
+        "words": words,
+        "src": src,
+    })
     await ws.send(payload)
+    SAY_HOLD_UNTIL = time.monotonic() + say_duration(text, words) + 0.3
     print(
-        "[whale-girl] say: %s (%d words, %s)" % (name, len(words), engine),
+        "[whale-girl] say: %s (%d words, %s, %s)"
+        % (name, len(words), engine, src),
         flush=True,
     )
 
@@ -387,7 +408,7 @@ async def run_driver(ws):
                 elif kind == "say":
                     text = event.get("text")
                     if isinstance(text, str) and text.strip():
-                        trigger_say(text.strip())
+                        trigger_say(text.strip(), "cmd")
                 elif kind == "pose":
                     overrides = event.get("p")
                     if isinstance(overrides, dict):
@@ -421,37 +442,60 @@ async def run_driver(ws):
 
     say_task = None
     say_text_pending = bool(SAY_TEXT)
+    pending_say = None  # (text, src) queued behind an in-flight synthesis
 
-    async def run_say(text):
+    def start_say(text, src):
+        nonlocal say_task
+        say_task = asyncio.create_task(run_say(text, src))
+
+    async def run_say(text, src):
+        nonlocal pending_say
+        cancelled = False
         try:
-            await send_say(ws, text)
+            await send_say(ws, text, src)
+        except asyncio.CancelledError:
+            cancelled = True  # shutdown: do not chain the queued say
+            raise
         except ConnectionClosed:
             pass
         except Exception as exc:  # TTS must never kill the 30 FPS loop
             print("[whale-girl] say error: %s" % exc, flush=True)
+        finally:
+            if not cancelled and pending_say is not None:
+                next_text, next_src = pending_say
+                pending_say = None
+                start_say(next_text, next_src)
 
-    def trigger_say(text):
-        nonlocal say_task
+    def trigger_say(text, src):
+        nonlocal pending_say
         if say_task is not None and not say_task.done():
-            print("[whale-girl] say busy, dropped: %s" % text[:40], flush=True)
+            if src == "cmd":
+                # An explicit command must not be lost while a synthesis runs
+                # (the mock's canned line is the usual in-flight one).
+                pending_say = (text, src)
+                print("[whale-girl] say queued: %s" % text[:40], flush=True)
+            else:
+                print("[whale-girl] say busy, dropped: %s" % text[:40], flush=True)
             return
-        say_task = asyncio.create_task(run_say(text))
+        start_say(text, src)
 
     try:
         while True:
             if web_count > 0:
+                now = loop.time()
                 if say_text_pending and (say_task is None or say_task.done()):
                     # WHALE_SAY_TEXT is a one-shot trigger (probe / manual test).
                     say_text_pending = False
-                    trigger_say(SAY_TEXT)
+                    trigger_say(SAY_TEXT, "cmd")
                 talking_before = talk.talking
-                synth(loop.time(), blink, talk, MOTION)
+                synth(now, blink, talk, MOTION)
                 if (MODE == "mock" and talk.talking and not talking_before
-                        and not SAY_TEXT):
+                        and not SAY_TEXT and now >= SAY_HOLD_UNTIL):
                     # One synthesis per talk burst; the say frame then drives the
                     # mouth in the frontend while the mock pulse keeps the rest.
-                    # With WHALE_SAY_TEXT the run is scripted: exactly one say.
-                    trigger_say(random.choice(CANNED_PHRASES))
+                    # A say owns the speech until it ends: the hold window keeps
+                    # the mock from cutting a playing line (M3.1 fix).
+                    trigger_say(random.choice(CANNED_PHRASES), "mock")
                 MOTION["f"] = sent
                 payload = dump_json(MOTION)
                 await ws.send(payload)

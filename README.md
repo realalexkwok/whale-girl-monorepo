@@ -64,8 +64,10 @@ fallback, writes the audio to whale-girl-server/audio/ (gitignored) and sends
 a say frame; the browser plays it via Web Audio (OBS captures it) and animates
 the mouth from the words, while the mock talk envelope remains the no-audio
 fallback. In mock mode a random canned Chinese phrase is spoken at each talk
-burst; in live mode a DSH session supplies the text (see Commands below). See
-specs/dev-environment.md for the env knobs and the say probe.
+burst; in live mode a DSH session supplies the text (see Commands below). A
+line plays to its end: canned mock lines never interrupt a playing line, while
+an explicit command say still does (latest-wins). See specs/dev-environment.md
+for the env knobs and the say probe.
 
 ## Commands (M3.1 DSH interaction)
 

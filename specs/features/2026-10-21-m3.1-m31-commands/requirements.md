@@ -34,6 +34,13 @@
    mode frames.
 3. Validation — **cmd_probe.js + full gate** (automatic) + the owner's
    manual pass from a real DSH session in OBS.
+4. Fix round 2026-10-21 (owner answer "A"): a mock (canned) line must never
+   interrupt a playing line — say frames gain an additive
+   "src":"mock"|"cmd" field, the driver suppresses canned triggers until a
+   line ends and queues one commanded say behind an in-flight synthesis, and
+   the frontend ignores src:"mock" while a line plays; a commanded say keeps
+   latest-wins. The manual pose step now uses the eyes-closed parameter
+   (ParamEyeBallX was too subtle to judge).
 
 ## Semantics (binding)
 - Priority ladder: **say > motion > mock envelope**. The existing frontend

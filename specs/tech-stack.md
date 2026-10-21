@@ -74,10 +74,16 @@
   {"type":"say","text":"<words>"} /
   {"type":"pose","p":{"ParamEyeBallX":0.8}} ({} clears the overlay) /
   {"type":"mode","mock":true|false}.
-- python → server → web: the v0 motion frame and the M2.2 say frame unchanged;
+- python → server → web: the v0 motion frame and the M2.2 say frame (shape
+  unchanged, plus an additive "src":"mock"|"cmd" field — fix 2026-10-21);
   motion/expression command frames forwarded for execution; a
   {"type":"mode","mock":bool} frame on a flip. Pose overrides are applied
   driver-side and ride inside the normal motion frames.
+- Speech ownership: a say owns the line until it ends — the driver suppresses
+  canned triggers while a say plays (hold = words end + 0.3 s, estimated for
+  the macOS-say fallback) and queues one commanded say behind an in-flight
+  synthesis; the frontend ignores src:"mock" while a line plays, so the mock
+  never interrupts a playing line while a commanded say keeps latest-wins.
 - Driver semantics: WHALE_MODE=mock|live (default mock). Live pauses the mock
   talk bursts + canned phrases and zeroes the mock mouth; idle blink/gaze/sway
   continue; a mode flip clears the pose overlay and the frontend resets poses.

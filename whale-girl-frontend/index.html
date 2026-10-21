@@ -528,6 +528,9 @@
       function handleSay(msg) {
         var url = msg && msg.audio;
         if (typeof url !== 'string') return;
+        // M3.1: a mock (canned) line never interrupts a playing line; an
+        // explicit command say keeps latest-wins.
+        if (msg.src === 'mock' && sayActive) return;
         var words = Array.isArray(msg.words) ? msg.words : [];
         var engine = /\.m4a(\?|$)/i.test(url) ? 'say' : 'edge-tts';
         var gen = ++sayGen;

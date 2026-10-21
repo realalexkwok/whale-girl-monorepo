@@ -108,6 +108,22 @@
 - The say path must stay byte-compatible: say_probe.js is re-run as a
   regression, not modified.
 
+## Implementation notes (2026-10-21, fix round)
+- The owner's manual half surfaced two issues: (1) the pose test used
+  ParamEyeBallX, too subtle to judge — the manual step now holds the eyes shut
+  (ParamEyeLOpen/ROpen = 0; ParamAngleZ = 15 as an alternative, both exist in
+  the 247-parameter model); (2) canned mock lines cut playing speech at a
+  frantic pace (the driver's "busy" check covered synthesis only, not
+  playback, and the frontend was latest-wins for every say).
+- Fix (owner answer "A"): say frames carry an additive "src":"mock"|"cmd"; the
+  driver holds mock triggers until the line ends (SAY_HOLD_UNTIL = words end +
+  0.3 s, estimated for the macOS-say fallback) and queues a commanded say
+  behind an in-flight synthesis (one slot); the frontend ignores src:"mock"
+  while a line plays. Commanded says keep latest-wins.
+- Verification after the fix: cmd_probe 18/18 (new: src fields, mock never
+  cuts a commanded line), say_probe 12/12, ws_probe 30.0 fps, role probe 1008,
+  curl 200, node --check 31,122 B, ports released.
+
 ## Validation plan
 - Automatic: cmd_probe.js per-frame-type assertions, say byte-compat,
   mock pause both ways, RSS snapshot with commands active; ws_probe
