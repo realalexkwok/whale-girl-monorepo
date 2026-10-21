@@ -112,8 +112,9 @@
 ## 7. Git state
 - Remote: origin = git@github.com:realalexkwok/whale-girl-monorepo.git; main tracks
   origin/main.
-- main is at c579c43 (pushed): M2.1 feature 1b0ed94 + reviewer polish bcaebe6,
-  0d9db46, 2c84f26, e691b22 + close bookkeeping 0df6a76 + bf2a319 + the M2.2
-  replan c579c43 ("specs: replan M2.2 as TTS-driven lip sync", owner
-  1a/2/3a/4a). Current branch: feature/whale-girl-m22-lipsync — M2.2 committed
-  as 8a68d2f plus the review-round fix d684afa (not pushed/merged).
+- main is at 6261a9c (pushed 2026-10-21): M1, M2.1 and M2.2 closed. The M2.2
+  series: 8a68d2f (feature), d684afa (review round), 9c6cd93 + d3a1523 (doc
+  corrections), 6261a9c (close bookkeeping); the owner's fcdb6d8 (M5 promo)
+  rode along and the previously local replan c579c43 was published by the same
+  push (bf2a319..6261a9c). The local feature/whale-girl-m22-lipsync branch was
+  deleted after the ff merge; working tree clean; on main.
