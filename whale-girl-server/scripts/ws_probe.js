@@ -10,8 +10,9 @@ ws.on('open', () => console.log('probe: connected'));
 ws.on('message', (data) => {
   const msg = JSON.parse(data.toString());
   if (msg.type === 'web_connected') { console.log('probe: event ' + JSON.stringify(msg)); return; }
-  if (msg.type === 'say') return; // M2.2 speech frame: not a motion frame, no noise
-  if (msg.type !== 'motion') { console.log('probe: unexpected ' + JSON.stringify(msg).slice(0, 120)); return; }
+  // v1 (M3.1): only v0 motion frames carry p (and f); commands, say and mode
+  // frames are not motion frames — ignore them instead of counting or printing.
+  if (msg.type !== 'motion' || !msg.p) return;
   frames += 1;
   if (!first) first = { t: Date.now(), f: msg.f };
   last = { t: Date.now(), f: msg.f, p: msg.p };

@@ -94,6 +94,8 @@ shows the last command and the mode.
   a second instance replaces the first).
 - Browser and the CLI tool connect to ws://localhost:3001?role=web (many
   allowed); the server relays their command frames to the python writer raw.
+  Browser pages are accepted only when the page origin host matches the
+  WebSocket host, so a visited website cannot command the whale.
 - Python → server → browser:
 
       {"type":"motion","f":12345,"p":{"ParamMouthOpenY":0.42,"ParamEyeBallX":-0.1}}
@@ -102,11 +104,13 @@ shows the last command and the mode.
   some Live2D params are degrees, e.g. body angles).
 - Python → server → browser (M2.2):
 
-      {"type":"say","audio":"/audio/say-123.mp3","words":[[0.1,0.56,"你好"],...]}
+      {"type":"say","audio":"/audio/say-123.mp3","words":[[0.1,0.56,"你好"],...],"src":"cmd"}
 
   The browser plays the audio via Web Audio and drives ParamMouthOpenY from the
   word timeline; an empty words list (macOS say fallback) uses an amplitude
-  envelope of the decoded audio instead.
+  envelope of the decoded audio instead. "src":"mock" marks the canned mock
+  line, "cmd" a whale_cmd.py line: a mock line never interrupts a playing line,
+  a commanded one does (latest-wins).
 - Server → python:
 
       {"type":"web_connected","count":N}
@@ -122,10 +126,12 @@ shows the last command and the mode.
       {"type":"pose","p":{"ParamEyeBallX":0.8}}     ({} clears the overlay)
       {"type":"mode","mock":true|false}
 
-  The driver executes say (TTS), pose (driver-side overlay; values arrive inside
-  normal motion frames), mode (mock/live flag) and forwards motion/expression to
-  the browser, which runs them on the M2.1 hooks. A mode flip is echoed to the
-  browser as {"type":"mode","mock":bool}.
+  The driver executes say (TTS), pose (driver-side overlay, max 32 keys with
+  ids ≤ 64 chars; values arrive inside normal motion frames), mode (mock/live
+  flag) and forwards motion/expression to the browser, which runs them on the
+  M2.1 hooks. A mode frame is sent on connect/reconnect and on real flips; the
+  frontend resets the pose only when the mode actually changes. A pose {} also
+  restores the dropped parameters to their defaults in the model.
 
 ## Configuration
 
@@ -135,13 +141,15 @@ shows the last command and the mode.
 - WHALE_DEBUG=1 enables per-frame python logging (off by default).
 - TTS knobs: WHALE_VOICE, WHALE_SAY_VOICE, WHALE_ENGINE=say, WHALE_SAY_TEXT
   (see specs/dev-environment.md).
-- WHALE_MODE=mock|live (default mock; live pauses mock talk bursts — a mode
-  command flips it at runtime). WHALE_CMD_WS overrides the CLI endpoint.
+- WHALE_MODE=mock|live (default mock): commands work in both modes, live only
+  pauses the mock talk bursts/canned speech; a mode command flips it at runtime.
+  WHALE_CMD_WS overrides the CLI endpoint (WS_PORT is not 3001).
 
 ## Troubleshooting
 
 - Port busy: PORT=3002 WS_PORT=3003 npm start, then open
-  http://localhost:3002?ws=ws://localhost:3003 (python: WHALE_WS=...).
+  http://localhost:3002?ws=ws://localhost:3003 (python: WHALE_WS=...;
+  CLI: WHALE_CMD_WS=ws://localhost:3003?role=web).
 - Model not moving: open http://localhost:3000?debug=1 and check the status
   line + console; make sure the model was exported for Cubism SDK 4.x.
 - CDN blocked: the page falls back to cdnjs for PixiJS; Cubism Core and the

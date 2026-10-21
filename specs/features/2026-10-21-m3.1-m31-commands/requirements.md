@@ -2,8 +2,9 @@
 
 > Confirmed by the owner (2026-10-21, grouped ask round: requirements / plan /
 > validation; answers: full skill default / symmetric WS relay + driver
-> executor / cmd_probe.js + full gate). Status: planning complete —
-> implementation in progress on feature/whale-girl-m31-commands.
+> executor / cmd_probe.js + full gate). Status: implemented on
+> feature/whale-girl-m31-commands — automatic half green; the owner's manual
+> half is pending at the close.
 
 ## Scope
 - Real DSH sessions drive the whale through a wire-protocol **v1 command
@@ -97,6 +98,7 @@
   ports released after shutdown.
 - Manual (owner, at the close): from a DSH session (Web or TUI) run
   `whale_cmd.py motion Hammer`, `whale_cmd.py say 你好，我是鲸鱼娘`,
-  `whale_cmd.py pose '{"ParamEyeBallX":0.8}'`, `whale_cmd.py mode live`
+  `whale_cmd.py pose '{"ParamEyeLOpen":0,"ParamEyeROpen":0}'`,
+  `whale_cmd.py mode live`
   (mock talking stops), `whale_cmd.py mode mock` (resumes); ?debug=1 shows
   the last command + mode; OBS reflects every step.

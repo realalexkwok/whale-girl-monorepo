@@ -93,8 +93,13 @@
   motion, whale_say → say, whale_pose → pose, whale_mode → mode.
   Exit codes: 0 sent, 1 server unreachable, 2 validation error.
 - Mock vs live: WHALE_MODE=mock (default) keeps the canned talk bursts; live
-  pauses them and hands the mouth to explicit commands. A mode command flips at
-  runtime and clears the pose overlay. ?debug=1 shows the last command + mode.
+  pauses them and hands the mouth to explicit commands. Commands work in both
+  modes; a mode command flips at runtime (an idempotent one does nothing) and a
+  real flip clears the pose overlay. ?debug=1 shows the last command + mode.
+- Limits: say text ≤ 300 chars; pose ≤ 32 keys with ids ≤ 64 chars and finite
+  numbers; oversized commands are rejected with a rate-limited driver log.
+  With no driver connected the server closes the command socket with 4002 and
+  whale_cmd.py exits 1 ("no brain connected").
 - Verify (each pass boots server + Chrome + driver itself — stop the running
   server first):
 

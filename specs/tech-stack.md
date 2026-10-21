@@ -78,8 +78,10 @@
 - python → server → web: the v0 motion frame and the M2.2 say frame (shape
   unchanged, plus an additive "src":"mock"|"cmd" field — fix 2026-10-21);
   motion/expression command frames forwarded for execution; a
-  {"type":"mode","mock":bool} frame on a flip. Pose overrides are applied
-  driver-side and ride inside the normal motion frames.
+  {"type":"mode","mock":bool} frame on connect and on every web_connected
+  (re-announce, so a page that joins later learns the mode), plus a frame on a
+  real flip. Pose overrides are applied driver-side and ride inside the normal
+  motion frames.
 - Speech ownership: a say owns the line until it ends — the driver suppresses
   canned triggers while a say plays (hold = words end + 0.3 s, estimated for
   the macOS-say fallback) and queues one commanded say behind an in-flight
@@ -90,11 +92,21 @@
   can stop the 30 FPS stream by spoofing the count. Malformed frames
   (non-finite numbers, huge ints, deep nesting, oversized poses) are rejected
   with a rate-limited log and never kill the command reader.
-- Pose: max 32 keys, finite numbers only; a new pose replaces the overlay and
-  every key the overlay no longer sets is deleted from the frame dict (no
-  stale parameters, no unbounded frame growth). {} clears.
-- Mode: a mode frame is emitted on driver connect (current state) and only on
-  real flips; an idempotent mode command does not clear a held pose.
+- Pose: max 32 keys, key ids ≤ 64 chars, finite numbers only; a new pose
+  replaces the overlay and every key the overlay no longer sets is deleted from
+  the frame dict (no stale parameters, no unbounded frame growth). {} clears;
+  the frontend restores dropped keys to their default values.
+- Say: text ≤ 300 chars; the serialized say frame is size-checked (8 KB) before
+  send, so an oversized line is logged and dropped instead of silently lost.
+- Mode: a mode frame is emitted on driver connect and on every web_connected
+  (re-announce); only a real flip changes the mode, clears the pose overlay and
+  echoes the frame — an idempotent mode command does not clear a held pose.
+- Relay hardening: the command relay is capped at 100 commands/s and drops when
+  the python writer's buffer exceeds 256 KB; with no python writer connected the
+  server closes the sender with 4002 and whale_cmd.py exits 1 with a message.
+- Browser-origin guard: a page whose Origin host differs from the WebSocket host
+  is closed with 1008 (a visited website cannot command the whale). Non-browser
+  clients (CLI/probes) send no Origin and are unaffected.
 - Driver semantics: WHALE_MODE=mock|live (default mock). Live pauses the mock
   talk bursts + canned phrases and zeroes the mock mouth; idle blink/gaze/sway
   continue; a mode flip clears the pose overlay and the frontend resets poses.
@@ -108,8 +120,10 @@
 - macOS: two terminals (npm start; .venv/bin/python control_whale.py) + browser
   http://localhost:3000 (?debug=1 shows the status line) + OBS Browser source.
 - Env knobs: PORT, WS_PORT, WHALE_WS (python endpoint), WHALE_DEBUG=1 (per-frame
-  driver logs, off by default), ?ws=ws://host:port (frontend endpoint override — the
-  only change needed for the Ubuntu split).
+  driver logs, off by default), WHALE_MODE=mock|live (default mock),
+  WHALE_CMD_WS (CLI endpoint), WHALE_MODEL_MANIFEST (CLI motion-name validation),
+  ?ws=ws://host:port (frontend endpoint override — the only change needed for
+  the Ubuntu split).
 - See dev-environment.md for the full runbook and the deployment patterns (M4.2).
 
 ## Testing & verification (two-sided)

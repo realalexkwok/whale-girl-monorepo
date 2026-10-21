@@ -120,9 +120,10 @@
   0.3 s, estimated for the macOS-say fallback) and queues a commanded say
   behind an in-flight synthesis (one slot); the frontend ignores src:"mock"
   while a line plays. Commanded says keep latest-wins.
-- Verification after the fix: cmd_probe 18/18 (new: src fields, mock never
-  cuts a commanded line), say_probe 12/12, ws_probe 30.0 fps, role probe 1008,
-  curl 200, node --check 31,122 B, ports released.
+- Verification after the fix rounds: cmd_probe 25/25 (src fields, mock never
+  cuts a commanded line, pose key clearing, malformed-frame rejection, live
+  flip silence, page-after-driver mode), say_probe 12/12, ws_probe 30.0 fps,
+  role probe 1008, curl 200, node --check 32,272 B, ports released.
 
 ## Validation plan
 - Automatic: cmd_probe.js per-frame-type assertions, say byte-compat,

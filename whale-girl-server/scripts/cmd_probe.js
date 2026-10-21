@@ -26,8 +26,27 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.PORT) || 3000;
 const WS_PORT = Number(process.env.WS_PORT) || 3001;
 const VISIBLE = process.argv.includes('--visible');
-const SILENCE_MS = 10000;   // a mock burst must have fired in this window
-const EXPRESSION = '爱心眼';
+const SILENCE_MS = 10000;   // live mode: no canned line may fire in this window
+const MANIFEST = path.join(ROOT, '..', 'whale-girl-frontend', 'model', 'whale.model3.json');
+let MOTION = '';
+let EXPRESSION = '';
+try {
+  // The DS model is gitignored: fail with an actionable message, never a
+  // generic timeout, when it is missing or has no motions/expressions.
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
+  const refs = manifest.FileReferences || {};
+  MOTION = Object.keys(refs.Motions || {})[0] || '';
+  EXPRESSION = (refs.Expressions || []).map((e) => e && e.Name).filter(Boolean)[0] || '';
+} catch (err) {
+  console.error('probe: cannot read the model manifest ' + MANIFEST +
+    ' (' + err.message + ') — install the DS model first');
+  process.exit(1);
+}
+if (!MOTION || !EXPRESSION) {
+  console.error('probe: the manifest at ' + MANIFEST +
+    ' has no motions/expressions — install the DS model first');
+  process.exit(1);
+}
 
 const children = [];
 let chromeProfile = null;
@@ -147,6 +166,7 @@ async function startChrome() {
   ];
   if (!VISIBLE) args.unshift('--headless=new');
   const child = track(spawn(CHROME, args, { stdio: 'ignore' }));
+  child.on('error', (err) => fail(err));
   let target = null;
   await waitFor(async () => {
     try {
@@ -222,9 +242,9 @@ async function waitSay(predicate, timeoutMs, label) {
 
 // (waitSay is used for the canned mock frame; the DSH say waits for a NEW one.)
 
-async function waitMode(mock, timeoutMs) {
-  await waitFor(() => modeFrames.some((m) => m.mock === mock), timeoutMs, 'mode frame mock=' + mock);
-  return modeFrames.filter((m) => m.mock === mock).pop();
+async function waitModeAfter(mock, baseline, timeoutMs) {
+  await waitFor(() => modeFrames.some((m, i) => i >= baseline && m.mock === mock),
+    timeoutMs, 'mode frame mock=' + mock);
 }
 
 async function cmdState(chrome) {
@@ -260,14 +280,20 @@ async function cmdState(chrome) {
     sayFrames.length + ' say frames in ' + (SILENCE_MS / 1000) + ' s (expected 0)');
 
   // 2) motion through the CLI tool end to end.
-  let cli = spawnSync(PYTHON, [CLI, 'motion', 'Hammer'], { cwd: ROOT, timeout: 15000 });
+  let cli = spawnSync(PYTHON, [CLI, 'motion', MOTION], {
+    cwd: ROOT, timeout: 15000,
+    env: Object.assign({}, process.env, {
+      WHALE_CMD_WS: 'ws://localhost:' + WS_PORT + '?role=web',
+    }),
+  });
   record('CLI motion exits 0', cli.status === 0,
     'status=' + cli.status + ' out=' + String(cli.stdout || '').trim());
   await waitFor(async () => {
     const st = await cmdState(chrome);
-    return st && st.last === 'motion: Hammer' && st.ok === true;
-  }, 8000, 'frontend applied motion Hammer');
-  record('motion applied on the frontend', true, 'cmdState.last="motion: Hammer", ok=true');
+    return st && st.last === 'motion: ' + MOTION && st.ok === true;
+  }, 8000, 'frontend applied motion ' + MOTION);
+  record('motion applied on the frontend', true,
+    'cmdState.last="motion: ' + MOTION + '", ok=true (after the hook resolved)');
 
   // 3) expression on the same transport.
   probeWs.send(JSON.stringify({ type: 'expression', name: EXPRESSION }));
@@ -300,8 +326,9 @@ async function cmdState(chrome) {
     'ParamBrowLY present while held, absent from the frames after {}');
 
   // 5) mode mock: the flip frame arrives and the canned speech resumes.
+  const modeMockBase = modeFrames.length;
   probeWs.send(JSON.stringify({ type: 'mode', mock: true }));
-  await waitMode(true, 5000);
+  await waitModeAfter(true, modeMockBase, 5000);
   await waitFor(async () => {
     const st = await cmdState(chrome);
     return st && st.mode === 'mock';
@@ -316,8 +343,9 @@ async function cmdState(chrome) {
     'audio=' + cannedSay.audio + ' words=' + (Array.isArray(cannedSay.words) ? cannedSay.words.length : 'none'));
 
   // 6) mode live again, then a real DSH say command (byte-compat with M2.2).
+  const modeLiveBase = modeFrames.length;
   probeWs.send(JSON.stringify({ type: 'mode', mock: false }));
-  await waitMode(false, 5000);
+  await waitModeAfter(false, modeLiveBase, 5000);
   await waitFor(async () => {
     const st = await cmdState(chrome);
     return st && st.mode === 'live';
@@ -360,8 +388,9 @@ async function cmdState(chrome) {
     (pageSay && pageSay.duration ? pageSay.duration.toFixed(2) : '?') + ' s');
 
   // 7) mock mode must never cut a commanded line (M3.1 fix: src + hold).
+  const modeMockBase2 = modeFrames.length;
   probeWs.send(JSON.stringify({ type: 'mode', mock: true }));
-  await waitMode(true, 5000);
+  await waitModeAfter(true, modeMockBase2, 5000);
   const cannedBefore = sayFrames.length;
   await waitFor(() => sayFrames.some((m, i) => i >= cannedBefore && m.src === 'mock'),
     25000, 'canned say in mock mode');
@@ -390,6 +419,11 @@ async function cmdState(chrome) {
     !!midState && midState.active === true && !!midSay && midSay.audio === cmd2.audio,
     '1 s into the line: active=' + (midState && midState.active) +
     ' audio=' + (midSay && midSay.audio));
+  // The hold's own contract: no mock line may be sent after the commanded one.
+  const midMockFrames = sayFrames.slice(sayFrames.indexOf(cmd2) + 1)
+    .filter((m) => m.src === 'mock').length;
+  record('driver hold suppresses mock lines during the command',
+    midMockFrames === 0, midMockFrames + ' mock frames after the commanded frame');
   await waitFor(async () => {
     const st = await chrome.evaluate('window.whaleSpeech.state()');
     return !!st && st.active === false;
@@ -399,33 +433,68 @@ async function cmdState(chrome) {
     !!endSay && endSay.audio === cmd2.audio,
     'after the line: last say ' + (endSay && endSay.audio));
 
-  // 8) malformed frames must never kill the command pipeline.
+  // 8) malformed frames must be rejected without killing the pipeline.
+  const bigKey = 'k' + 'x'.repeat(300);                 // > the driver's 64-char cap
+  const manyKeys = {};
+  for (let i = 0; i < 33; i++) manyKeys['ParamP' + i] = 1;  // > the 32-key cap
   const badFrames = [
-    '{"type":"pose","p":{"ParamBrowLY":1e999}}',
-    '{"type":"pose","p":{"ParamBrowLY":' + '9'.repeat(400) + '}}',
-    '{"type":"pose","p":{"k' + 'x'.repeat(300) + '":1}}',
-    '{"type":"web_connected","count":0}',
-    '{"type":"motion","group":' + '['.repeat(1500) + ']'.repeat(1500) + '}'
+    '{"type":"pose","p":{"ParamBrowLY":1e999}}',                    // non-finite
+    '{"type":"pose","p":{"ParamBrowLY":' + '9'.repeat(400) + '}}',  // int overflow
+    '{"type":"pose","p":{"' + bigKey + '":1}}',                     // key too long
+    '{"type":"pose","p":' + JSON.stringify(manyKeys) + '}',         // too many keys
+    '{"type":"web_connected","count":0}',                           // spoofed event
+    '{"type":"motion","group":' + '['.repeat(1500) + ']'.repeat(1500) + '}'  // deep nesting
   ];
   for (const frame of badFrames) probeWs.send(frame);
-  await sleep(600);
+  await sleep(700);
+  const lastP = lastMotion ? lastMotion.p : {};
+  const badKeysAbsent = !('ParamBrowLY' in lastP) && !(bigKey in lastP) && !('ParamP0' in lastP);
+  record('bad pose frames are rejected', badKeysAbsent,
+    'non-finite / 400-digit / long-key / 33-key poses left the frames clean');
   probeWs.send(JSON.stringify({ type: 'expression', name: EXPRESSION }));
   await waitFor(async () => {
     const st = await cmdState(chrome);
     return st && st.last === 'expression: ' + EXPRESSION;
   }, 8000, 'pipeline alive after malformed frames');
   record('malformed frames are ignored safely', true,
-    badFrames.length + ' bad frames (non-finite, huge int, long key, spoofed ' +
-    'web_connected, deep nesting), expression still applied');
+    badFrames.length + ' bad frames (non-finite, huge int, long key, 33 keys, ' +
+    'spoofed web_connected, deep nesting), expression still applied');
 
-  // 9) the motion stream is still healthy at ~30 fps.
+  // 9) a live flip during mock activity silences the canned lines at once.
+  const canned3Base = sayFrames.length;
+  await waitFor(() => sayFrames.some((m, i) => i >= canned3Base && m.src === 'mock'),
+    25000, 'canned say before the live flip');
+  const liveFlipBase = sayFrames.length;
+  const liveFlipModeBase = modeFrames.length;
+  probeWs.send(JSON.stringify({ type: 'mode', mock: false }));
+  await waitModeAfter(false, liveFlipModeBase, 5000);
+  await sleep(SILENCE_MS);
+  const leaked = sayFrames.length - liveFlipBase;
+  record('live flip silences canned speech', leaked === 0,
+    leaked + ' say frames in ' + (SILENCE_MS / 1000) + ' s after the flip');
+
+  // 10) a page that joins AFTER the driver must learn the current mode.
+  try { await chrome.evaluate('location.reload()'); } catch (err) { /* teardown */ }
+  await waitFor(async () => {
+    try {
+      return (await chrome.evaluate(
+        'window.whaleModel && window.whaleModel.cmdState ? window.whaleModel.cmdState.mode : null'
+      )) === 'live';
+    } catch (err) {
+      return false;
+    }
+  }, 20000, 'reloaded page learns the live mode');
+  record('page joining after the driver learns the live mode', true,
+    'reloaded page cmdState.mode="live"');
+
+  // 11) the motion stream is still healthy at ~30 fps.
   const beforeCount = motionCount;
   const beforeAt = Date.now();
   await sleep(2000);
   const rate = (motionCount - beforeCount) / ((Date.now() - beforeAt) / 1000);
   record('motion stream 25-35 fps', rate >= 25 && rate <= 35, rate.toFixed(1) + ' fps over 2.00 s');
 
-  // 10) RSS budgets with commands active.
+  // 12) RSS budgets with commands active.
   const serverRss = rssKb(server.pid);
   const driverRss = rssKb(driver.pid);
   record('server RSS <= 60 MB', serverRss <= 60 * 1024, serverRss + ' KB');

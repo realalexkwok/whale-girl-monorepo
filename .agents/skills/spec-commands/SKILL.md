@@ -10,9 +10,10 @@ scaffold and workflow rules; this skill supplies the M3.1 content.
 (DSH command usage — Web and TUI — is already supported and needs no
 investigation; only the command DESIGN is planned here.)
 
-Status: IMPLEMENTED 2026-10-21 — the shipped design is recorded below so a
-future item (M3.2, M5) works from reality, not from the pre-implementation
-draft: specs/features/2026-10-21-m3.1-m31-commands/ and specs/tech-stack.md
+Status: IMPLEMENTED 2026-10-21 (automatic half green; owner manual half
+pending) — the shipped design is recorded below so a future item (M3.2, M5)
+works from reality, not from the pre-implementation draft:
+specs/features/2026-10-21-m3.1-m31-commands/ and specs/tech-stack.md
 ("Wire protocol v1").
 
 ## 1. Read first

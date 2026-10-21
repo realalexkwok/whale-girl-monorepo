@@ -48,6 +48,10 @@ must be answered by the user.
   WHALE_DEBUG=1 for per-frame logs).
 - Probes: node scripts/ws_probe.js (expect PASS, 20–40 fps, monotonic f) and
   node scripts/ws_role_probe.js (expect close 1008).
+- M3.1 gate: node scripts/cmd_probe.js (v1 command frames end to end, malformed
+  safety, say byte-compat — prints its check count) and node scripts/say_probe.js
+  (M2.2 regression). DSH commands: scripts/whale_cmd.py motion|say|pose|mode
+  (venv python); WHALE_MODE=mock|live selects the boot mode.
 - Smoke: curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ → 200.
 - Ports: lsof -nP -iTCP:3000 -iTCP:3001 -sTCP:LISTEN (both must be free before start).
 - Memory: ps -axo pid,rss,command | grep -E 'node server.js|control_whale.py'.
@@ -67,6 +71,9 @@ must be answered by the user.
 ### Quality gates
 - Frontend: node --check on the inline script (extract between the bare <script>
   tags); CDN URLs must stay the pinned, verified versions from tech-stack.md.
+- The M3.1 gate (scripts/cmd_probe.js) and the M2.2 regression
+  (scripts/say_probe.js) must stay green; the M3.1 probe needs the DS model
+  installed (it reads the manifest and fails actionably otherwise).
 - Python: it must run clean on the pinned websockets (15.x on Python 3.9) — test the
   installed version, not an assumption.
 - Every probe/verification report names ABSOLUTE paths and measured numbers.

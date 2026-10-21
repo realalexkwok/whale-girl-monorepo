@@ -104,7 +104,10 @@ MOTION = {
 # overlay shrinks — a stale key would otherwise ride in every frame forever
 # (and enough keys would push the frame past the proxy's 8 KB cap).
 POSE_OVERRIDES = {}
-POSE_LIMIT = 32  # max overlay entries per command (frame-size safety)
+POSE_LIMIT = 32   # max overlay entries per command
+MAX_POSE_KEY = 64 # longest accepted parameter id (bounds the frame size)
+MAX_SAY_CHARS = 300  # longest accepted say line (TTS + word timeline)
+MAX_FRAME_BYTES = 8 * 1024  # the proxy's soft cap for relayed frames
 BAD_CMD_AT = 0.0  # rate limit for rejected-frame logging
 
 
@@ -331,6 +334,11 @@ async def send_say(ws, text, src="cmd"):
     result = await synthesize(text)
     if not result:
         return
+    if src == "mock" and MODE == "live":
+        # The mode flipped while this canned line was synthesizing: drop it so
+        # live mode really is silent (the hold is not extended either).
+        print("[whale-girl] mock line dropped (mode is live)", flush=True)
+        return
     name, words, engine = result
     await asyncio.to_thread(_prune_audio_sync, time.time())
     payload = dump_json({
@@ -339,6 +347,14 @@ async def send_say(ws, text, src="cmd"):
         "words": words,
         "src": src,
     })
+    size = len(payload.encode("utf-8"))
+    if size > MAX_FRAME_BYTES:
+        print(
+            "[whale-girl] say frame too large (%d bytes, limit %d); dropped"
+            % (size, MAX_FRAME_BYTES),
+            flush=True,
+        )
+        return
     await ws.send(payload)
     SAY_HOLD_UNTIL = time.monotonic() + say_duration(text, words) + 0.3
     print(
@@ -426,7 +442,12 @@ async def run_driver(ws):
         elif kind == "say":
             text = event.get("text")
             if isinstance(text, str) and text.strip():
-                trigger_say(text.strip(), "cmd")
+                text = text.strip()
+                if len(text) > MAX_SAY_CHARS:
+                    log_bad_cmd("say text too long (%d chars, limit %d)"
+                                % (len(text), MAX_SAY_CHARS))
+                    return
+                trigger_say(text, "cmd")
         elif kind == "pose":
             overrides = event.get("p")
             if not isinstance(overrides, dict):
@@ -437,6 +458,10 @@ async def run_driver(ws):
                         or isinstance(value, bool)
                         or not isinstance(value, (int, float))):
                     log_bad_cmd("pose value %r for %r" % (value, pid))
+                    return
+                if len(pid) > MAX_POSE_KEY:
+                    log_bad_cmd("pose key too long (%d chars, limit %d)"
+                                % (len(pid), MAX_POSE_KEY))
                     return
                 try:
                     number = float(value)
@@ -501,10 +526,10 @@ async def run_driver(ws):
                         count = max(0, int(event.get("count", 0)))
                     except (TypeError, ValueError):
                         continue
-                    if web_count == 0 and count > 0:
-                        # A page just (re)connected: tell it the current mode.
-                        await forward({"type": "mode", "mock": MODE == "mock"})
                     web_count = count
+                    # Announce the current mode on every (re)connect so a page
+                    # that joined after the driver boot learns it too.
+                    await forward({"type": "mode", "mock": MODE == "mock"})
                     continue
                 # Anything else at the top level is not a server event: ignore.
         except ConnectionClosed:

@@ -123,6 +123,22 @@
 
       var model = null;
       var lastParams = new Map(); // latest value per parameter, applied when the model is ready
+      var frameP = null;          // the frame being applied (for the reset below)
+      var frameCore = null;       // its core model
+
+      // A parameter that stops appearing in the frames was a pose-overlay key:
+      // restore its default so a cleared pose really leaves the model too.
+      // Allocation-free: one shared callback, a Map forEach and no objects.
+      function resetGoneParam(value, id) {
+        if (!frameP || (id in frameP)) return;
+        if (id === 'ParamMouthOpenY' && sayActive) return;
+        lastParams.delete(id);
+        if (!frameCore || typeof frameCore.getParameterIndex !== 'function') return;
+        var index = frameCore.getParameterIndex(id);
+        if (index >= 0) {
+          frameCore.setParameterValueById(id, frameCore.getParameterDefaultValue(index));
+        }
+      }
 
       // --- placeholder whale (shown until/unless the real model loads) ---
       function buildPlaceholder() {
@@ -678,7 +694,7 @@
       // the M2.1 hooks; pose and mode are executed driver-side (pose values
       // arrive inside motion frames, a mode frame resets leftover poses).
       // Commands are rare events — nothing here runs per frame.
-      var cmdState = { last: '', ok: true, mode: 'mock' };
+      var cmdState = { last: '', ok: null, mode: null }; // null = pending / unknown
 
       function cmdFailed(what, detail) {
         cmdState.ok = false;
@@ -695,7 +711,7 @@
         var group = String(msg.group);
         var index = (typeof msg.index === 'number') ? msg.index : undefined;
         cmdState.last = 'motion: ' + group + (index !== undefined ? '/' + index : '');
-        cmdState.ok = true;
+        cmdState.ok = null; // pending: resolves to true/false below
         if (!window.whaleModel) {
           cmdFailed('motion ' + group, 'no model loaded');
           return;
@@ -719,7 +735,7 @@
       function runExpressionCommand(msg) {
         var name = String(msg.name);
         cmdState.last = 'expression: ' + name;
-        cmdState.ok = true;
+        cmdState.ok = null; // pending: resolves to true/false below
         if (!window.whaleModel) {
           cmdFailed('expression ' + name, 'no model loaded');
           return;
@@ -804,6 +820,9 @@
               lastParams.set(id, value);
               core.setParameterValueById(id, value);
             }
+            frameP = msg.p;
+            frameCore = core;
+            lastParams.forEach(resetGoneParam);
             if (sayActive) applyMouth(core);
           } else {
             for (var id2 in msg.p) lastParams.set(id2, msg.p[id2]);
@@ -812,10 +831,10 @@
             if (sayActive) {
               setStatus(statusLine('say: ' + sayActive.label + ' | mouth ' +
                 mouthValue.toFixed(2) + ' | ' + sayActive.engine +
-                ' | mode: ' + cmdState.mode));
+                ' | mode: ' + (cmdState.mode || 'unknown')));
             } else {
               setStatus(statusLine('ws connected, frame ' + msg.f +
-                ' | mode: ' + cmdState.mode +
+                ' | mode: ' + (cmdState.mode || 'unknown') +
                 (cmdState.last ? ' | cmd ' + cmdState.last : '')));
             }
           }

@@ -31,6 +31,7 @@ const AUDIO_DIR = path.resolve(__dirname, 'audio');
 
 const MAX_FRAME_BYTES = 8 * 1024;        // soft cap for forwarded frames
 const MAX_BUFFERED_BYTES = 256 * 1024;   // per-client backpressure threshold
+const MAX_CMDS_PER_SEC = 100;            // command-relay rate cap (flood guard)
 const HEARTBEAT_MS = 30_000;             // ping sweep interval
 const LOG_INTERVAL_MS = 5_000;           // aggregate logging cadence
 
@@ -76,19 +77,36 @@ function notifyWebCount() {
 
 // v1 (M3.1): relay a web-client command to the python writer verbatim.
 // Raw text only — the proxy never parses frames (tech-stack.md invariant).
-function relayCommandToPython(data, isBinary) {
+let cmdWindowStart = 0;
+let cmdWindowCount = 0;
+
+function relayCommandToPython(ws, data, isBinary) {
   if (isBinary) { framesDropped++; return; }
   const text = data.toString();
   if (text.length > MAX_FRAME_BYTES) { framesDropped++; return; }
-  if (pythonClient && pythonClient.readyState === WebSocket.OPEN) {
-    // Tag the frame so the driver can tell commands apart from server events
-    // (a web client must not be able to impersonate web_connected). String
-    // concatenation only — the proxy still never parses JSON.
-    pythonClient.send('{"relay":' + JSON.stringify(text) + '}');
-    cmdsRelayed++;
-  } else {
-    framesDropped++; // no brain connected: the command goes nowhere
+  if (text === '{"type":"hello"}') return; // page handshake: web-only, not a command
+  const now = Date.now();
+  if (now - cmdWindowStart >= 1000) { cmdWindowStart = now; cmdWindowCount = 0; }
+  if (++cmdWindowCount > MAX_CMDS_PER_SEC) { framesDropped++; return; }
+  if (!pythonClient || pythonClient.readyState !== WebSocket.OPEN) {
+    framesDropped++;
+    // Tell the sender instead of pretending the command was delivered.
+    try { ws.close(4002, 'no python writer connected'); } catch (err) { /* ignore */ }
+    return;
   }
+  if (pythonClient.bufferedAmount > MAX_BUFFERED_BYTES) {
+    framesDropped++; // stalled brain: drop instead of buffering unboundedly
+    return;
+  }
+  // Tag the frame so the driver can tell commands apart from server events
+  // (a web client must not be able to impersonate web_connected). String
+  // concatenation only — the proxy still never parses JSON.
+  pythonClient.send('{"relay":' + JSON.stringify(text) + '}');
+  cmdsRelayed++;
+}
+
+function hostnameOf(url) {
+  try { return new URL(url).hostname; } catch (err) { return ''; }
 }
 
 function maybeLog(force) {
@@ -110,11 +128,25 @@ wss.on('connection', (ws, req) => {
   const url = new URL(req.url, 'ws://localhost');
   const role = url.searchParams.get('role') || 'unknown';
 
+  // Browser-origin guard: a page from any other origin must not be able to
+  // command the whale. The origin host must match the WebSocket host
+  // (localhost in dev, the server name in the Ubuntu split). The CLI and the
+  // probes send no Origin header and are unaffected.
+  const origin = req.headers.origin;
+  if (origin) {
+    const requestHost = hostnameOf('http://' + (req.headers.host || ''));
+    const originHost = hostnameOf(origin);
+    if (!originHost || originHost !== requestHost) {
+      ws.close(1008, 'origin not allowed (use the local page)');
+      return;
+    }
+  }
+
   if (role === 'web') {
     ws.isAlive = true;
     ws.on('pong', () => { ws.isAlive = true; });
     // v1 (M3.1): command frames go to the python writer (raw passthrough).
-    ws.on('message', (data, isBinary) => relayCommandToPython(data, isBinary));
+    ws.on('message', (data, isBinary) => relayCommandToPython(ws, data, isBinary));
     ws.on('error', () => {});
     ws.on('close', () => {
       webClients.delete(ws);

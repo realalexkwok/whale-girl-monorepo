@@ -80,11 +80,13 @@
     Design drafts: docs/drafts/ai-agent-notifier/.
 
 ## 4. In-flight / next
-- NOTHING is in flight. M2.2 is fully closed (2026-10-21): merged into main and
-  pushed; its local feature branch was deleted. NEXT: M3.1 (DSH interaction)
-  planning via /spec-plan, carrying the M2.2 handoff — real DSH text → say
-  commands (the canned-phrase picker and WHALE_SAY_TEXT are the seam; the
-  frontend say path is text-agnostic).
+- M3.1 (DSH interaction) is IN FLIGHT on feature/whale-girl-m31-commands:
+  implemented (v1 command surface, whale_cmd.py, cmd_probe.js), automatic half
+  green (cmd_probe 25/25, say_probe 12/12) and in the review/fix loop; the
+  owner's manual half is still owed. Close (roadmap tick, history archive,
+  merge, push) only on the owner's instruction.
+- M2.2 is fully closed (2026-10-21): merged into main and pushed; its local
+  feature branch was deleted.
 - M2.1 is fully closed: merged into main and pushed (2026-10-20); its local
   feature branch was deleted.
 

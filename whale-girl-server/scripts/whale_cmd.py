@@ -32,7 +32,7 @@ import math
 import os
 import sys
 
-from websockets.exceptions import WebSocketException
+from websockets.exceptions import ConnectionClosed, WebSocketException
 from websockets.sync.client import connect
 
 WS_URL = os.environ.get("WHALE_CMD_WS", "ws://localhost:3001?role=web")
@@ -43,6 +43,8 @@ DEFAULT_MANIFEST = os.path.join(
 MANIFEST = os.environ.get("WHALE_MODEL_MANIFEST", DEFAULT_MANIFEST)
 MAX_FRAME_BYTES = 8 * 1024   # the server's soft cap for relayed frames
 MAX_POSE_KEYS = 32           # keep the 30 FPS frame well under that cap
+MAX_POSE_KEY = 64            # longest parameter id the driver accepts
+MAX_SAY_CHARS = 300          # longest say line the driver accepts
 
 
 def motion_groups(path):
@@ -69,6 +71,19 @@ def send(payload):
     try:
         with connect(WS_URL, open_timeout=5, close_timeout=2) as ws:
             ws.send(payload)
+            try:
+                # Commands are one-way: no reply is normal. A 4002 close means
+                # the server has no python writer and dropped the command.
+                ws.recv(timeout=0.4)
+            except TimeoutError:
+                return 0
+            except ConnectionClosed as exc:
+                if exc.code == 4002:
+                    return fail(
+                        "the server has no brain connected (driver not running) "
+                        "— command dropped", 1
+                    )
+                raise
     except (OSError, WebSocketException) as exc:
         return fail(
             "cannot reach the server at %s (%s). Is 'npm start' running?"
@@ -106,6 +121,7 @@ def check_pose(overrides):
     """Return an error message for a bad pose object, else None."""
     for key, value in overrides.items():
         if (not isinstance(key, str)
+                or len(key) > MAX_POSE_KEY
                 or isinstance(value, bool)
                 or not isinstance(value, (int, float))):
             return "pose values must be numbers (got %r for %r)" % (value, key)
@@ -161,6 +177,11 @@ def main(argv):
         text = " ".join(args.text).strip()
         if not text:
             return fail("say text is empty")
+        if len(text) > MAX_SAY_CHARS:
+            return fail(
+                "say text is %d chars; at most %d are accepted"
+                % (len(text), MAX_SAY_CHARS)
+            )
         frame = {"type": "say", "text": text}
     elif args.cmd == "pose":
         try:
@@ -192,7 +213,10 @@ def main(argv):
 
     code = send(payload)
     if code == 0:
-        print("whale_cmd: sent " + payload)
+        try:
+            print("whale_cmd: sent " + payload)
+        except UnicodeEncodeError:
+            print("whale_cmd: sent (non-ASCII payload omitted)")
     return code
 
 
