@@ -197,6 +197,8 @@
         }
         window.whaleModel = {
           model: m,
+          // v1 (M3.1): last command + outcome, for ?debug=1 and the probes.
+          cmdState: cmdState,
           // 0.4.0 rejects a new motion while one plays at the same priority
           // (returns false, never queues) — force-start so console tests work.
           playMotion: function (group, index) {
@@ -667,6 +669,87 @@
         }
       };
 
+      // --- v1 command surface (M3.1) ---------------------------------------
+      // DSH sessions send motion / expression / say / pose / mode commands
+      // through the server relay. The frontend executes motion/expression on
+      // the M2.1 hooks; pose and mode are executed driver-side (pose values
+      // arrive inside motion frames, a mode frame resets leftover poses).
+      // Commands are rare events — nothing here runs per frame.
+      var cmdState = { last: '', ok: true, mode: 'mock' };
+
+      function cmdFailed(what, detail) {
+        cmdState.ok = false;
+        console.error('[whale] ' + what + ' failed: ' + detail);
+      }
+
+      function motionListText() {
+        var list = [];
+        try { list = window.whaleModel.listMotions(); } catch (err) { /* ignore */ }
+        return list.join(', ');
+      }
+
+      function runMotionCommand(msg) {
+        var group = String(msg.group);
+        var index = (typeof msg.index === 'number') ? msg.index : undefined;
+        cmdState.last = 'motion: ' + group + (index !== undefined ? '/' + index : '');
+        cmdState.ok = true;
+        if (!window.whaleModel) {
+          cmdFailed('motion ' + group, 'no model loaded');
+          return;
+        }
+        var res;
+        try {
+          res = window.whaleModel.playMotion(group, index);
+        } catch (err) {
+          cmdFailed('motion ' + group, (err && err.message) || String(err));
+          return;
+        }
+        Promise.resolve(res).then(function (ok) {
+          cmdState.ok = !!ok;
+          if (!ok) cmdFailed('motion ' + group, 'not started — motions: ' + motionListText());
+        }, function (err) {
+          var why = (err && err.message) || String(err);
+          cmdFailed('motion ' + group, why + ' — motions: ' + motionListText());
+        });
+      }
+
+      function runExpressionCommand(msg) {
+        var name = String(msg.name);
+        cmdState.last = 'expression: ' + name;
+        cmdState.ok = true;
+        if (!window.whaleModel) {
+          cmdFailed('expression ' + name, 'no model loaded');
+          return;
+        }
+        var res;
+        try {
+          res = window.whaleModel.playExpression(name);
+        } catch (err) {
+          cmdFailed('expression ' + name, (err && err.message) || String(err));
+          return;
+        }
+        Promise.resolve(res).then(function (ok) {
+          cmdState.ok = !!ok;
+          if (!ok) {
+            var list = [];
+            try { list = window.whaleModel.listExpressions(); } catch (e) { /* ignore */ }
+            cmdFailed('expression ' + name, 'not applied — expressions: ' + list.join(', '));
+          }
+        }, function (err) {
+          cmdFailed('expression ' + name, (err && err.message) || String(err));
+        });
+      }
+
+      function runModeCommand(msg) {
+        cmdState.mode = msg.mock ? 'mock' : 'live';
+        cmdState.last = 'mode: ' + cmdState.mode;
+        cmdState.ok = true;
+        // A mode switch clears leftover motion poses (M2.1 resetPose hook).
+        if (window.whaleModel) {
+          try { window.whaleModel.resetPose(); } catch (err) { /* ignore */ }
+        }
+      }
+
       // --- websocket (auto-reconnect with capped backoff + jitter) ---
       var ws = null;
       var wsRetry = 0;
@@ -691,6 +774,18 @@
             handleSay(msg);
             return;
           }
+          if (msg.type === 'motion' && msg.group) {
+            runMotionCommand(msg);
+            return;
+          }
+          if (msg.type === 'expression' && msg.name) {
+            runExpressionCommand(msg);
+            return;
+          }
+          if (msg.type === 'mode') {
+            runModeCommand(msg);
+            return;
+          }
           if (msg.type !== 'motion' || !msg.p) return;
 
           if (model && model.internalModel && model.internalModel.coreModel) {
@@ -710,9 +805,12 @@
           if (DEBUG) {
             if (sayActive) {
               setStatus(statusLine('say: ' + sayActive.label + ' | mouth ' +
-                mouthValue.toFixed(2) + ' | ' + sayActive.engine));
+                mouthValue.toFixed(2) + ' | ' + sayActive.engine +
+                ' | mode: ' + cmdState.mode));
             } else {
-              setStatus(statusLine('ws connected, frame ' + msg.f));
+              setStatus(statusLine('ws connected, frame ' + msg.f +
+                ' | mode: ' + cmdState.mode +
+                (cmdState.last ? ' | cmd ' + cmdState.last : '')));
             }
           }
         };

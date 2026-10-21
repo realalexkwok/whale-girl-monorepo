@@ -43,7 +43,9 @@
   grouped planning round for any roadmap item (use "/spec-plan M2.1");
   /spec-close runs the automatic half + bookkeeping at an item's close;
   /spec-lipsync accelerates M2.2 planning (TTS-driven: edge-tts primary, macOS
-  say fallback, word-level envelope + amplitude fallback, browser playback).
+  say fallback, word-level envelope + amplitude fallback, browser playback);
+  /spec-commands accelerates M3.1 planning (wire-protocol command surface,
+  DSH tool surface, Live2D playback semantics, mock-behind-a-flag).
 
 ## 3. Owner decisions (binding)
 1. M1 stops before the real model/audio/DSH work; the owner switches the session AI

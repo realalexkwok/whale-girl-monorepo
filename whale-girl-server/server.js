@@ -11,6 +11,9 @@
  *   never parses JSON, so CPU and allocation churn per frame are near zero.
  * - ?role=web    : many allowed, receives forwarded motion frames
  * - ?role=python : single writer; a newer instance replaces the old one (4001)
+ * - v1 (M3.1): web-client text frames are relayed RAW to the python writer
+ *   (commands: motion / expression / say / pose / mode) — still no JSON
+ *   parsing; the driver validates and executes them.
  */
 
 const path = require('path');
@@ -45,6 +48,7 @@ let pythonClient = null;
 
 let framesRelayed = 0;
 let framesDropped = 0;
+let cmdsRelayed = 0;
 let lastLogAt = 0;
 
 function broadcastToWeb(text) {
@@ -69,6 +73,20 @@ function notifyWebCount() {
   sendToPython({ type: 'web_connected', count: webClients.size });
 }
 
+// v1 (M3.1): relay a web-client command to the python writer verbatim.
+// Raw text only — the proxy never parses frames (tech-stack.md invariant).
+function relayCommandToPython(data, isBinary) {
+  if (isBinary) { framesDropped++; return; }
+  const text = data.toString();
+  if (text.length > MAX_FRAME_BYTES) { framesDropped++; return; }
+  if (pythonClient && pythonClient.readyState === WebSocket.OPEN) {
+    pythonClient.send(text);
+    cmdsRelayed++;
+  } else {
+    framesDropped++; // no brain connected: the command goes nowhere
+  }
+}
+
 function maybeLog(force) {
   const now = Date.now();
   if (force || now - lastLogAt >= LOG_INTERVAL_MS) {
@@ -78,6 +96,7 @@ function maybeLog(force) {
       ' web=' + webClients.size +
       ' python=' + (pythonClient ? 1 : 0) +
       ' relayed=' + framesRelayed +
+      ' cmds=' + cmdsRelayed +
       ' dropped=' + framesDropped
     );
   }
@@ -90,8 +109,8 @@ wss.on('connection', (ws, req) => {
   if (role === 'web') {
     ws.isAlive = true;
     ws.on('pong', () => { ws.isAlive = true; });
-    // web -> server messages are accepted and ignored in Milestone 1
-    ws.on('message', () => {});
+    // v1 (M3.1): command frames go to the python writer (raw passthrough).
+    ws.on('message', (data, isBinary) => relayCommandToPython(data, isBinary));
     ws.on('error', () => {});
     ws.on('close', () => {
       webClients.delete(ws);

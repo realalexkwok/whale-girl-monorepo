@@ -74,6 +74,31 @@
   suspended (autoplay policy), a small "click to enable audio" pill appears —
   click it once via OBS Interact; it hides when audio runs.
 
+## DSH command surface (M3.1)
+- A DSH session (Web or TUI) calls the native tool
+  whale-girl-server/scripts/whale_cmd.py with the venv python:
+
+      cd whale-girl-server
+      .venv/bin/python scripts/whale_cmd.py motion Hammer [index]
+      .venv/bin/python scripts/whale_cmd.py say 你好，我是鲸鱼娘
+      .venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeBallX":0.8}'
+      .venv/bin/python scripts/whale_cmd.py mode live|mock
+
+- The tool connects to ws://localhost:3001?role=web (env WHALE_CMD_WS), sends ONE
+  frame and exits. The server relays it raw to the driver; the driver executes
+  say/pose/mode and forwards motion/expression to the browser (M2.1 hooks).
+- Motion groups are validated against whale-girl-frontend/model/whale.model3.json
+  (env WHALE_MODEL_MANIFEST; absent in a split deployment → warn + send anyway).
+  Exit codes: 0 sent, 1 server unreachable, 2 validation error.
+- Mock vs live: WHALE_MODE=mock (default) keeps the canned talk bursts; live
+  pauses them and hands the mouth to explicit commands. A mode command flips at
+  runtime and clears the pose overlay. ?debug=1 shows the last command + mode.
+- Verify (each pass boots server + Chrome + driver itself — stop the running
+  server first):
+
+      cd whale-girl-server
+      node scripts/cmd_probe.js     # 16 checks: every frame type, say byte-compat, RSS
+
 ## Deployment patterns (M4.2 consumes this — config only, no code rewrite)
 
 ### Pattern 1 — same machine (DEFAULT for normal users; zero SSH)

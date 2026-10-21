@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""whale_cmd.py — DSH tool: send a v1 command to the Whale Girl pipeline (M3.1).
+
+A DSH session (Web or TUI) calls this script as a native tool. It connects to
+the server's WebSocket as a web client (the server relays raw text to the
+python driver), sends ONE command frame and exits. No new process stays
+behind; the pipeline is the already-running server + driver.
+
+Usage (the venv holds websockets; the system Python does not):
+    .venv/bin/python scripts/whale_cmd.py motion Hammer
+    .venv/bin/python scripts/whale_cmd.py motion Hammer 1
+    .venv/bin/python scripts/whale_cmd.py say 你好，我是鲸鱼娘
+    .venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeBallX":0.8}'
+    .venv/bin/python scripts/whale_cmd.py pose '{}'      # clear the overlay
+    .venv/bin/python scripts/whale_cmd.py mode live       # pause mock talk
+    .venv/bin/python scripts/whale_cmd.py mode mock
+
+Exit codes: 0 sent, 1 connection error, 2 validation error.
+Env: WHALE_CMD_WS (default ws://localhost:3001?role=web),
+     WHALE_MODEL_MANIFEST (default ../whale-girl-frontend/model/whale.model3.json).
+"""
+
+import argparse
+import json
+import os
+import sys
+
+from websockets.exceptions import WebSocketException
+from websockets.sync.client import connect
+
+WS_URL = os.environ.get("WHALE_CMD_WS", "ws://localhost:3001?role=web")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_MANIFEST = os.path.join(
+    ROOT, "..", "whale-girl-frontend", "model", "whale.model3.json"
+)
+MANIFEST = os.environ.get("WHALE_MODEL_MANIFEST", DEFAULT_MANIFEST)
+
+
+def motion_groups(path):
+    """Read the model manifest's motion groups -> [(name, count), ...]."""
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    motions = (data.get("FileReferences") or {}).get("Motions") or {}
+    groups = []
+    for name, entries in motions.items():
+        if isinstance(entries, list):
+            groups.append((name, len(entries)))
+    return groups
+
+
+def fail(message, code=2):
+    print("whale_cmd: " + message, file=sys.stderr)
+    return code
+
+
+def send(frame):
+    try:
+        with connect(WS_URL, open_timeout=5, close_timeout=2) as ws:
+            ws.send(json.dumps(frame, ensure_ascii=False, separators=(",", ":")))
+    except (OSError, WebSocketException) as exc:
+        return fail(
+            "cannot reach the server at %s (%s). Is 'npm start' running?"
+            % (WS_URL, exc),
+            1,
+        )
+    return 0
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="whale_cmd.py",
+        description="Send a Whale Girl v1 command (M3.1).",
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    motion = sub.add_parser("motion", help="play a Live2D motion")
+    motion.add_argument("group", help="motion group name (e.g. Hammer)")
+    motion.add_argument("index", nargs="?", type=int, help="motion index (optional)")
+
+    say = sub.add_parser("say", help="speak a line (TTS + lip sync)")
+    say.add_argument("text", nargs="+", help="the words to speak")
+
+    pose = sub.add_parser("pose", help="hold parameter overrides (JSON; {} clears)")
+    pose.add_argument("p", help='JSON object, e.g. \'{"ParamEyeBallX":0.8}\'')
+
+    mode = sub.add_parser("mode", help="flip mock/live mode")
+    mode.add_argument("mode", choices=("live", "mock"))
+    return parser
+
+
+def main(argv):
+    args = build_parser().parse_args(argv)
+
+    if args.cmd == "motion":
+        try:
+            groups = motion_groups(MANIFEST)
+        except (OSError, ValueError) as exc:
+            print(
+                "whale_cmd: model manifest not readable (%s) — sending without "
+                "name validation." % exc,
+                file=sys.stderr,
+            )
+        else:
+            names = [name for name, _count in groups]
+            if args.group not in names:
+                listing = ", ".join(
+                    "%s (%d)" % (name, count) for name, count in groups
+                )
+                return fail(
+                    "unknown motion group '%s'. Available groups: %s"
+                    % (args.group, listing)
+                )
+        frame = {"type": "motion", "group": args.group}
+        if args.index is not None:
+            if args.index < 0:
+                return fail("motion index must be >= 0")
+            frame["index"] = args.index
+    elif args.cmd == "say":
+        text = " ".join(args.text).strip()
+        if not text:
+            return fail("say text is empty")
+        frame = {"type": "say", "text": text}
+    elif args.cmd == "pose":
+        try:
+            overrides = json.loads(args.p)
+        except ValueError as exc:
+            return fail(
+                "pose expects a JSON object, e.g. '{\"ParamEyeBallX\":0.8}' (%s)"
+                % exc
+            )
+        if not isinstance(overrides, dict):
+            return fail("pose expects a JSON object, e.g. '{\"ParamEyeBallX\":0.8}'")
+        for key, value in overrides.items():
+            if (not isinstance(key, str)
+                    or isinstance(value, bool)
+                    or not isinstance(value, (int, float))):
+                return fail(
+                    "pose values must be numbers (got %r for %r)" % (value, key)
+                )
+        frame = {"type": "pose", "p": overrides}
+    else:  # mode
+        frame = {"type": "mode", "mock": args.mode == "mock"}
+
+    code = send(frame)
+    if code == 0:
+        print("whale_cmd: sent " + json.dumps(frame, ensure_ascii=False))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -15,9 +15,11 @@ the tree. Reference layout: the byterra-monorepo.
 
 ## Architecture
 
+    [ DSH session ] --- whale_cmd.py ---> ws://:3001?role=web ---+
+                                                                 v
     [ Python driver ] -- ws://:3001?role=python --> [ Node server.js ]
-    control_whale.py    (30 FPS mock params)       express :3000 (static)
-                                                   ws      :3001 (proxy)
+    control_whale.py   (mock params + TTS + commands)   express :3000 (static)
+                                                        ws      :3001 (proxy)
     [ OBS Browser source ] <-- http://:3000 -- [ index.html: PixiJS 7 + Live2D ]
 
 ## Quick start (macOS, dev)
@@ -28,7 +30,7 @@ Terminal 1 — server:
     npm install
     npm start
 
-Terminal 2 — mock motion driver:
+Terminal 2 — driver (mock mode by default; WHALE_MODE=live takes commands):
 
     cd whale-girl-server
     python3 -m venv .venv
@@ -62,14 +64,34 @@ fallback, writes the audio to whale-girl-server/audio/ (gitignored) and sends
 a say frame; the browser plays it via Web Audio (OBS captures it) and animates
 the mouth from the words, while the mock talk envelope remains the no-audio
 fallback. In mock mode a random canned Chinese phrase is spoken at each talk
-burst; DSH supplies real text in M3.1. See specs/dev-environment.md for the
-env knobs and the say probe.
+burst; in live mode a DSH session supplies the text (see Commands below). See
+specs/dev-environment.md for the env knobs and the say probe.
 
-## Wire protocol (v0)
+## Commands (M3.1 DSH interaction)
+
+The whale takes commands from a DSH session. The native tool is
+whale-girl-server/scripts/whale_cmd.py (run it with the venv python):
+
+    cd whale-girl-server
+    .venv/bin/python scripts/whale_cmd.py motion Hammer                  # play a motion
+    .venv/bin/python scripts/whale_cmd.py say 你好，我是鲸鱼娘             # speak (TTS + lip sync)
+    .venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeBallX":0.8}'   # hold params
+    .venv/bin/python scripts/whale_cmd.py pose '{}'                      # release
+    .venv/bin/python scripts/whale_cmd.py mode live                      # pause mock synthesis
+    .venv/bin/python scripts/whale_cmd.py mode mock                      # resume
+
+WHALE_MODE=mock|live sets the boot mode (default mock). In live mode the mock
+talk bursts and canned phrases pause while the idle blink/gaze/sway keep going;
+say > motion > mock envelope is the priority ladder. Motion names are validated
+against the model manifest, so a typo prints the available groups. ?debug=1
+shows the last command and the mode.
+
+## Wire protocol (v0 + v1 commands)
 
 - Python connects to ws://localhost:3001?role=python (one writer at a time;
   a second instance replaces the first).
-- Browser connects to ws://localhost:3001?role=web (many allowed).
+- Browser and the CLI tool connect to ws://localhost:3001?role=web (many
+  allowed); the server relays their command frames to the python writer raw.
 - Python → server → browser:
 
       {"type":"motion","f":12345,"p":{"ParamMouthOpenY":0.42,"ParamEyeBallX":-0.1}}
@@ -89,6 +111,20 @@ env knobs and the say probe.
 
   The driver idles while count is 0 (nobody watching).
 
+- v1 command frames (M3.1) — browser/CLI → server → python, relayed RAW (the
+  server never parses frames):
+
+      {"type":"motion","group":"Hammer","index":0}
+      {"type":"expression","name":"爱心眼"}
+      {"type":"say","text":"..."}
+      {"type":"pose","p":{"ParamEyeBallX":0.8}}     ({} clears the overlay)
+      {"type":"mode","mock":true|false}
+
+  The driver executes say (TTS), pose (driver-side overlay; values arrive inside
+  normal motion frames), mode (mock/live flag) and forwards motion/expression to
+  the browser, which runs them on the M2.1 hooks. A mode flip is echoed to the
+  browser as {"type":"mode","mock":bool}.
+
 ## Configuration
 
 - PORT / WS_PORT env vars (defaults 3000 / 3001).
@@ -97,6 +133,8 @@ env knobs and the say probe.
 - WHALE_DEBUG=1 enables per-frame python logging (off by default).
 - TTS knobs: WHALE_VOICE, WHALE_SAY_VOICE, WHALE_ENGINE=say, WHALE_SAY_TEXT
   (see specs/dev-environment.md).
+- WHALE_MODE=mock|live (default mock; live pauses mock talk bursts — a mode
+  command flips it at runtime). WHALE_CMD_WS overrides the CLI endpoint.
 
 ## Troubleshooting
 
@@ -112,6 +150,9 @@ env knobs and the say probe.
 - Whale silent but moving: check the driver log for "say:" lines; if the page
   shows a "click to enable audio" pill, click it once (OBS Interact).
   WHALE_ENGINE=say forces the macOS fallback engine.
+- Command has no effect: run the whale_cmd.py examples from whale-girl-server —
+  "cannot reach the server" means npm start is not running; "unknown motion
+  group" lists the available groups; ?debug=1 shows the last command + mode.
 
 ## Deployment patterns (M4.2)
 
@@ -126,7 +167,7 @@ env knobs and the say probe.
 
 ## Milestones
 
-- [x] M1 骨架与静音渲染: repo skeleton, WS proxy, mock driver, Live2D frontend + placeholder
-- [ ] M2 模型与口型同步: real model drop-in + TTS-driven lip sync (explicit words → speech → mouth animates to the words)
-- [ ] M3 DSH 互动大脑: AI-driven parameters + expression presets (mock behind a flag)
+- [x] M1 骨架与静音渲染: repo skeleton, WS proxy, mock driver, Live2D frontend + placeholder — closed 2026-10-19
+- [x] M2 模型与口型同步: real model drop-in + TTS-driven lip sync (explicit words → speech → mouth animates to the words) — M2.1 closed 2026-10-20, M2.2 closed 2026-10-21
+- [ ] M3 DSH 互动大脑: M3.1 command surface implemented (motion/say/pose/mode/expression, mock behind a flag); M3.2 expression presets pending
 - [ ] M4 内存压榨与部署: <100MB OBS extra memory + deployment patterns (same-machine / cloud scripts / optional SSH tunnel)

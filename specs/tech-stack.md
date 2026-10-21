@@ -67,6 +67,26 @@
   animates the mouth from the word timeline; the server serves the audio file.
 - Roles via query param: ?role=web (many) / ?role=python (single writer).
 
+## Wire protocol v1 (M3.1 command surface — additive; v0 frames unchanged)
+- web → server → python (commands, relayed RAW — the server still never parses
+  JSON): {"type":"motion","group":"<MotionGroup>","index":0} /
+  {"type":"expression","name":"<ExpressionName>"} /
+  {"type":"say","text":"<words>"} /
+  {"type":"pose","p":{"ParamEyeBallX":0.8}} ({} clears the overlay) /
+  {"type":"mode","mock":true|false}.
+- python → server → web: the v0 motion frame and the M2.2 say frame unchanged;
+  motion/expression command frames forwarded for execution; a
+  {"type":"mode","mock":bool} frame on a flip. Pose overrides are applied
+  driver-side and ride inside the normal motion frames.
+- Driver semantics: WHALE_MODE=mock|live (default mock). Live pauses the mock
+  talk bursts + canned phrases and zeroes the mock mouth; idle blink/gaze/sway
+  continue; a mode flip clears the pose overlay and the frontend resets poses.
+  Priority ladder: say > motion > mock envelope.
+- Roles and caps are unchanged (single python writer, many web clients, 8 KB
+  soft frame cap / 64 KB maxPayload, raw passthrough).
+- Trust: any web client can send commands — acceptable for localhost/V1;
+  WebSocket auth is V3 work.
+
 ## Dev environment
 - macOS: two terminals (npm start; .venv/bin/python control_whale.py) + browser
   http://localhost:3000 (?debug=1 shows the status line) + OBS Browser source.

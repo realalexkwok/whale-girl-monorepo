@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Whale Girl — mock motion driver (Milestone 1).
+"""Whale Girl — motion driver (Milestone 1; command surface added in M3.1).
 
-Streams natural-looking mock facial parameters (blink, talk, gaze, sway) to
-the Whale Girl WebSocket proxy at a drift-corrected 30 FPS.
+Streams natural-looking facial parameters (blink, talk, gaze, sway) to the
+Whale Girl WebSocket proxy at a drift-corrected 30 FPS. In mock mode (the
+default) it synthesizes its own talk bursts; in live mode explicit commands
+(motion / expression / say / pose / mode) from a DSH session drive the whale.
 
 Design goals: low CPU, low memory, zero per-frame allocations. Python 3.9+.
 """
@@ -31,6 +33,10 @@ WHALE_VOICE = os.environ.get("WHALE_VOICE", "zh-CN-XiaoyiNeural")
 WHALE_SAY_VOICE = os.environ.get("WHALE_SAY_VOICE", "Tingting")
 SAY_ENGINE = os.environ.get("WHALE_ENGINE", "").strip().lower()
 SAY_TEXT = os.environ.get("WHALE_SAY_TEXT", "").strip()
+# M3.1: mock synthesis stays the default. live mode pauses the mock talk bursts
+# and hands the mouth to explicit commands (say / pose); a mode frame flips it
+# at runtime. Anything other than an explicit "live" keeps mock behavior.
+MODE = "live" if os.environ.get("WHALE_MODE", "").strip().lower() == "live" else "mock"
 AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audio")
 AUDIO_MAX_AGE = 3600.0  # prune speech files older than 1 h on each synthesis
 # edge-tts runs in this short-lived child process: importing it + aiohttp in
@@ -43,7 +49,7 @@ TTS_HELPER = os.path.join(
 TTS_TIMEOUT = 45.0
 
 # Canned phrases the mock brain speaks at each talk burst. DSH supplies real
-# text in M3.1; the say path itself is text-agnostic.
+# text in live mode (whale_say); the say path itself is text-agnostic.
 CANNED_PHRASES = (
     "你好，我是鲸鱼娘。",
     "今天也要开心哦！",
@@ -87,6 +93,10 @@ MOTION = {
         PARAM_ANGLE_Z: 0.0,
     },
 }
+
+# M3.1 pose overlay: values from a pose command win over the synthesized values
+# until the next pose command ({} clears) or a mode flip. Mutated in place.
+POSE_OVERRIDES = {}
 
 
 def dump_json(obj):
@@ -326,6 +336,12 @@ def synth(now, blink, talk, frame):
     p[PARAM_ANGLE_Y] = 1.5 * math.sin(2 * math.pi * 0.17 * now + 0.8)
     p[PARAM_ANGLE_Z] = 0.8 * math.sin(2 * math.pi * 0.21 * now + 1.5)
 
+    if MODE == "live":
+        p[PARAM_MOUTH] = 0.0  # explicit commands own the mouth in live mode
+    if POSE_OVERRIDES:
+        for pid, value in POSE_OVERRIDES.items():
+            p[pid] = value
+
 
 async def run_driver(ws):
     """30 FPS drift-corrected send loop; idles while no web client is connected."""
@@ -333,15 +349,62 @@ async def run_driver(ws):
     web_count = 1  # optimistic start; the server corrects this via events
 
     async def read_events():
+        """Server events + v1 command frames (rare events, never per-frame work)."""
         nonlocal web_count
+        global MODE
+
+        async def forward(frame):
+            # Relay a v1 frame to the frontend over the python connection.
+            try:
+                await ws.send(dump_json(frame))
+            except ConnectionClosed:
+                pass
+
         try:
             async for raw in ws:
                 try:
                     event = json.loads(raw)
                 except ValueError:
                     continue
-                if event.get("type") == "web_connected":
+                if not isinstance(event, dict):
+                    continue
+                kind = event.get("type")
+                if kind == "web_connected":
                     web_count = max(0, int(event.get("count", 0)))
+                elif kind == "motion":
+                    group = event.get("group")
+                    if isinstance(group, str) and group:
+                        frame = {"type": "motion", "group": group}
+                        index = event.get("index")
+                        if (isinstance(index, int) and not isinstance(index, bool)
+                                and index >= 0):
+                            frame["index"] = index
+                        await forward(frame)
+                elif kind == "expression":
+                    name = event.get("name")
+                    if isinstance(name, str) and name:
+                        await forward({"type": "expression", "name": name})
+                elif kind == "say":
+                    text = event.get("text")
+                    if isinstance(text, str) and text.strip():
+                        trigger_say(text.strip())
+                elif kind == "pose":
+                    overrides = event.get("p")
+                    if isinstance(overrides, dict):
+                        # A pose command replaces the overlay; {} clears it.
+                        POSE_OVERRIDES.clear()
+                        for pid, value in overrides.items():
+                            if (isinstance(pid, str)
+                                    and isinstance(value, (int, float))
+                                    and not isinstance(value, bool)):
+                                POSE_OVERRIDES[pid] = float(value)
+                elif kind == "mode":
+                    mock = event.get("mock")
+                    if isinstance(mock, bool):
+                        MODE = "mock" if mock else "live"
+                        POSE_OVERRIDES.clear()
+                        await forward({"type": "mode", "mock": MODE == "mock"})
+                        print("[whale-girl] mode: %s" % MODE, flush=True)
         except ConnectionClosed:
             pass
 
@@ -370,6 +433,7 @@ async def run_driver(ws):
     def trigger_say(text):
         nonlocal say_task
         if say_task is not None and not say_task.done():
+            print("[whale-girl] say busy, dropped: %s" % text[:40], flush=True)
             return
         say_task = asyncio.create_task(run_say(text))
 
@@ -382,7 +446,8 @@ async def run_driver(ws):
                     trigger_say(SAY_TEXT)
                 talking_before = talk.talking
                 synth(loop.time(), blink, talk, MOTION)
-                if talk.talking and not talking_before and not SAY_TEXT:
+                if (MODE == "mock" and talk.talking and not talking_before
+                        and not SAY_TEXT):
                     # One synthesis per talk burst; the say frame then drives the
                     # mouth in the frontend while the mock pulse keeps the rest.
                     # With WHALE_SAY_TEXT the run is scripted: exactly one say.
@@ -407,8 +472,8 @@ async def run_driver(ws):
                 logged_sent = sent
                 last_log = now
                 print(
-                    "[whale-girl] driver: %d fps, web clients: %d"
-                    % (rate, web_count),
+                    "[whale-girl] driver: %d fps, web clients: %d, mode: %s"
+                    % (rate, web_count, MODE),
                     flush=True,
                 )
                 if DEBUG and payload:
