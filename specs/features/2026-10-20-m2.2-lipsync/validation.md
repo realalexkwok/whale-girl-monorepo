@@ -16,7 +16,7 @@
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | Frontend inline JS | node --check (extracted script) | PASS (26.7 KB script) |
 | Python dep | .venv/bin/pip show edge-tts | edge-tts 7.3.1 (Python 3.9.10) |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | node server.js 53–63 MB across runs (idle baseline ~60 MB; stream peaks occasionally ~1 MB over the 60 MB line) / driver 21–28 MB — driver within the 30 MB budget; server headroom is thin, see the review note (M4.1 owns the OBS re-measure) |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | node server.js 29–63 MB across runs (noisy — page-cache/GC dependent; peaks occasionally ~1 MB over the 60 MB line) / driver 21–28 MB — driver within the 30 MB budget; server headroom is thin and noisy, see the review note (M4.1 owns the OBS re-measure) |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released |
 
 ## Say-path behaviour (browser engine, measured 2026-10-20 with headless Chrome CDP)
@@ -40,12 +40,17 @@
 > (3) ws_probe ignores say frames (no cosmetic "unexpected" lines); (4) the gap
 > check is conservative by design: it asserts only gap interiors (≥ ~400 ms —
 > +250 ms after the previous word, −50 ms before the next); shorter gaps are
-> bounded by the 120 ms release smoother; (5) server RSS observed 53–63 MB
-> across runs with occasional ~1 MB over-budget stream peaks — the pinned stack
-> alone (Node 25.2.0 + express 4 + ws 8, no traffic) measures ~60.5 MB, so this
-> is a platform baseline, not a leak (Node flags --max-semi-space-size=4,
-> --optimize-for-size and --jitless were measured and did not help); M4.1 owns
-> the OBS-gate re-measure and any Node-version/flag decision.
+> bounded by the 120 ms release smoother; (5) server RSS is noisy as well as
+> thin: single samples ranged 29–63 MB across runs (fresh idle process ~60 MB in
+> one setting, 43.6 MB cold in the reviewer's run; 29–56 MB across the
+> reviewer's six runs), consistent with macOS RSS counting page-cache/shared
+> pages and GC timing rather than a leak — the pinned stack alone (Node 25.2.0 +
+> express 4 + ws 8, zero traffic) also measured inconsistently (43.6–60.5 MB),
+> so the earlier "~60.5 MB platform baseline" claim was too strong; Node flags
+> --max-semi-space-size=4, --optimize-for-size and --jitless did not help. M4.1
+> owns the OBS-gate re-measure: sample multiple times (post-GC and post-traffic)
+> instead of one-shot numbers, and decide whether a Node-version/flag change is
+> needed. (Corrected 2026-10-21 after the reviewer's cold measurement.)
 >
 > Implementation note (2026-10-21): the owner's manual run caught the driver at
 > 32,160 KB RSS (> the 30 MB budget) because importing edge-tts + aiohttp in
@@ -87,6 +92,7 @@
 | Frontend inline script syntax | node --check on the extracted script | agent, 2026-10-20 |
 | Say probe, edge-tts pass | words timeline, gaps, latency, decode, RSS | agent, 2026-10-20 |
 | Say probe, say fallback pass | .m4a decode, amplitude envelope | agent, 2026-10-20 |
+| Real-browser pill path + mouth match | headed Chrome 155 via CDP :9222 (owner-authorized): fresh tab → say arrives with ctxState=suspended + pill visible → click → ctxState=running, pill hidden; 9 words, in-word 53/53, latency mean 17 ms / max 27 ms; audio played audibly in the window (~4.4 s). OBS-side pill (Interact) still pending. | agent, 2026-10-21 |
 | WS probes | 30.0 fps with increasing f; close 1008 | agent, 2026-10-20 |
 | Memory + shutdown | RSS within budgets, ports released | agent, 2026-10-20 |
 | Asset validator (M2.1) | unchanged by M2.2 (no asset changes) | agent (M2.1 close) |
