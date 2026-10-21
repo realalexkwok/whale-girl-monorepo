@@ -25,7 +25,7 @@
 | Say frame observed (python → web passthrough) | PASS — {"type":"say","audio":"/audio/say-…mp3","words":9} |
 | Audio fetch 200 + decodeAudioData OK | PASS — mp3 200 audio/mpeg and m4a 200 audio/mp4 both decoded |
 | Word tracking: in-word ≥ 0.4 (≥ 80% of frames), gaps ≥ 150 ms ≤ 0.15 | PASS — 54/54 in-word samples (100%); gap max 0.079 ≤ 0.15 |
-| Audio→mouth latency: word-onset → 0.5-crossing < 100 ms (mean + max) | PASS — mean 18 ms, max 32 ms over 9/9 word onsets |
+| Audio→mouth latency: word-onset → 0.5-crossing < 100 ms (mean + max) | PASS — mean 18 ms / max 32 ms in this run, 9/9 word onsets (across all runs: mean ~13–21 ms / max 27–62 ms; single samples are not a bound) |
 | Decoded PCM < 10 MB per utterance | PASS — 847,872 B (edge-tts, Xiaoyi) / 759,116 B (say) |
 | Amplitude fallback (WHALE_ENGINE=say): mouth max ≥ 0.3, loud-window mean ≥ 0.3, sustained silence (≥ 300 ms) ≤ 0.15 | PASS — max 0.99; loud mean 0.87; sustained silence: none in the utterance (n/a) |
 
@@ -92,7 +92,7 @@
 | Frontend inline script syntax | node --check on the extracted script | agent, 2026-10-20 |
 | Say probe, edge-tts pass | words timeline, gaps, latency, decode, RSS | agent, 2026-10-20 |
 | Say probe, say fallback pass | .m4a decode, amplitude envelope | agent, 2026-10-20 |
-| Real-browser pill path + mouth match | headed Chrome 155 via CDP :9222 (owner-authorized): fresh tab → say arrives with ctxState=suspended + pill visible → click → ctxState=running, pill hidden; 9 words, in-word 53/53, latency mean 17 ms / max 27 ms; audio played audibly in the window (~4.4 s). OBS-side pill (Interact) still pending. | agent, 2026-10-21 |
+| Real-browser pill path + mouth match | headed Chrome 155 via CDP :9222 (owner-authorized): fresh tab → say arrives with ctxState=suspended + pill visible → click → ctxState=running, pill hidden; 9 words, in-word 53/53; latency this run mean 17 ms / max 27 ms — spread across all runs so far: mean ~13–21 ms / max 27–62 ms (single samples are not a bound; the earliest implementation run measured 21/62, current-code runs 17–18/27–37, the reviewer's runs max 36–37 ms); audio played audibly in the window (~4.4 s). OBS-side pill (Interact) still pending. | agent, 2026-10-21 |
 | WS probes | 30.0 fps with increasing f; close 1008 | agent, 2026-10-20 |
 | Memory + shutdown | RSS within budgets, ports released | agent, 2026-10-20 |
 | Asset validator (M2.1) | unchanged by M2.2 (no asset changes) | agent (M2.1 close) |
@@ -103,5 +103,6 @@
   and ready for real AI text.
 - M4.1 owns: the OBS browser-source memory re-measure with audio playback
   active (decoded buffers + playback) and any OBS audio-policy hardening —
-  plus the server RSS headroom (53–63 MB observed, 60 MB budget) under the OBS
-  gate, deciding whether a Node-version/flag change is needed.
+  plus the server RSS headroom (29–63 MB observed across runs, noisy; 60 MB
+  budget) under the OBS gate, deciding whether a Node-version/flag change is
+  needed.
