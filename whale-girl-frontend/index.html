@@ -744,10 +744,13 @@
       }
 
       function runModeCommand(msg) {
-        cmdState.mode = msg.mock ? 'mock' : 'live';
+        var next = msg.mock ? 'mock' : 'live';
+        // A repeated mode (e.g. an idempotent 'mode live' from an AI) must not
+        // wipe a held pose; only a real switch resets the model.
+        if (next === cmdState.mode) return;
+        cmdState.mode = next;
         cmdState.last = 'mode: ' + cmdState.mode;
         cmdState.ok = true;
-        // A mode switch clears leftover motion poses (M2.1 resetPose hook).
         if (window.whaleModel) {
           try { window.whaleModel.resetPose(); } catch (err) { /* ignore */ }
         }

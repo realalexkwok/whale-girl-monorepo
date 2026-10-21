@@ -11,9 +11,10 @@
  *   never parses JSON, so CPU and allocation churn per frame are near zero.
  * - ?role=web    : many allowed, receives forwarded motion frames
  * - ?role=python : single writer; a newer instance replaces the old one (4001)
- * - v1 (M3.1): web-client text frames are relayed RAW to the python writer
- *   (commands: motion / expression / say / pose / mode) — still no JSON
- *   parsing; the driver validates and executes them.
+ * - v1 (M3.1): web-client text frames are relayed RAW to the python writer,
+ *   tagged as {"relay":"<frame>"} (string concatenation, no parsing), so the
+ *   driver can tell commands from server events. The driver validates and
+ *   executes them (motion / expression / say / pose / mode).
  */
 
 const path = require('path');
@@ -80,7 +81,10 @@ function relayCommandToPython(data, isBinary) {
   const text = data.toString();
   if (text.length > MAX_FRAME_BYTES) { framesDropped++; return; }
   if (pythonClient && pythonClient.readyState === WebSocket.OPEN) {
-    pythonClient.send(text);
+    // Tag the frame so the driver can tell commands apart from server events
+    // (a web client must not be able to impersonate web_connected). String
+    // concatenation only — the proxy still never parses JSON.
+    pythonClient.send('{"relay":' + JSON.stringify(text) + '}');
     cmdsRelayed++;
   } else {
     framesDropped++; // no brain connected: the command goes nowhere

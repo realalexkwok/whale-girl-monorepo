@@ -10,6 +10,11 @@ scaffold and workflow rules; this skill supplies the M3.1 content.
 (DSH command usage — Web and TUI — is already supported and needs no
 investigation; only the command DESIGN is planned here.)
 
+Status: IMPLEMENTED 2026-10-21 — the shipped design is recorded below so a
+future item (M3.2, M5) works from reality, not from the pre-implementation
+draft: specs/features/2026-10-21-m3.1-m31-commands/ and specs/tech-stack.md
+("Wire protocol v1").
+
 ## 1. Read first
 - specs/roadmap.md (M3.1 / M3.2 lines), specs/tech-stack.md (wire protocol
   v0, memory budgets), specs/dev-environment.md
@@ -26,22 +31,29 @@ investigation; only the command DESIGN is planned here.)
   listExpressions() — 8 motions / 44 expressions on the DS whale girl.
 
 ## 2. Ask-round additions (fold into the /spec-plan questions)
-- PROTOCOL: v1 frame types — {"type":"motion","group","index"} /
-  {"type":"expression","name"} / {"type":"say",...} (existing, unchanged) /
-  {"type":"pose","p":{...}} (one-shot param overrides) /
-  {"type":"mode","mock":true|false}; confirm which ship in M3.1 vs M3.2
-  (expressions are M3.2's vehicle — M3.1 provides transport + execution)
+- PROTOCOL: v1 command frames — {"type":"motion","group","index"} /
+  {"type":"expression","name"} / {"type":"say","text"} /
+  {"type":"pose","p":{...}} (driver-side overlay; {} clears; max 32 keys,
+  finite numbers) / {"type":"mode","mock":true|false}; the server tags
+  web-role frames as {"relay":"<frame>"} before relaying them to the python
+  writer (string concatenation, still no parsing). Outbound: the v0 motion
+  frame, the M2.2 say frame (unchanged shape + additive "src":"mock"|"cmd"),
+  forwarded motion/expression, and a mode frame on connect + real flips.
+  Expressions are M3.2's vehicle — M3.1 ships transport + execution
 - TOOL SURFACE (what a DSH session calls): whale_motion(group,index),
   whale_say(text) (reuses M2.2), whale_pose(p), whale_mode(mock) —
-  snake_case whale_* prefix per mcp-builder conventions; actionable errors
-  (unknown group/index -> include listMotions() output in the error text)
+  snake_case whale_* prefix per mcp-builder conventions, implemented by
+  whale-girl-server/scripts/whale_cmd.py subcommands motion / say / pose /
+  mode; actionable errors (unknown group/index -> the manifest group list)
 - SEMANTICS: priority ladder say > motion > mock envelope; playMotion FORCE
   + restart (M2.1 precedent); resetPose() on mode switch; no double-driving
 - MOCK FLAG: WHALE_MODE=mock is the default today; the mode frame flips at
   runtime; mock synthesis pauses while live commands drive the mouth
-- DSH FLOW: a DSH session tool (native tool or MCP) emits a command -> the
-  existing python-role relay forwards it -> server raw-passthrough -> the
-  frontend executes on the hooks (no new process, no new transport)
+- DSH FLOW (shipped): a DSH session tool (native CLI here; MCP surface by
+  name) connects ?role=web -> the server relays the frame tagged
+  {"relay":...} to the python writer -> the driver executes say (TTS) / pose
+  (overlay) / mode (flag) and forwards motion/expression -> the frontend runs
+  them on the M2.1 hooks (no new process, no new transport)
 
 ## 3. Hard constraints (enforce in the plan, do not ask)
 - The server keeps raw-text passthrough (never JSON.parses frames); new
@@ -63,6 +75,7 @@ investigation; only the command DESIGN is planned here.)
 
 ## 5. Output
 - Augmented ask round -> /spec-plan scaffold:
-  specs/features/<date>-m31-commands/{requirements,plan,validation}.md
+  specs/features/2026-10-21-m3.1-m31-commands/{requirements,plan,validation}.md
+  (the scaffold lowercases the item id, hence "m3.1")
 - validation.md criteria must include: per-frame-type probe PASS, say
   byte-compatibility, RSS within budget, and the mock-flag flip verified.

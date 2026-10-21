@@ -19,8 +19,9 @@
 - Native CLI tool whale-girl-server/scripts/whale_cmd.py with the DSH tool
   surface: whale_motion(group,index), whale_say(text) (reuses M2.2),
   whale_pose(p), whale_mode(mock) — snake_case whale_* names per
-  mcp-builder conventions; actionable errors (unknown group → the motion
-  group list in the error text).
+  mcp-builder conventions, mapped to the CLI subcommands (whale_motion →
+  motion, whale_say → say, whale_pose → pose, whale_mode → mode); actionable
+  errors (unknown group → the motion group list in the error text).
 - Probe whale-girl-server/scripts/cmd_probe.js: every v1 frame type end to
   end (CDP-style), say byte-compatibility, mock-pause both ways, RSS.
 
@@ -57,9 +58,10 @@
   overlay and emits {"type":"mode","mock":true|false} to web; the frontend
   calls resetPose() and shows the mode in ?debug=1. WHALE_SAY_TEXT keeps
   working in both modes (say_probe depends on it).
-- say while a synthesis is in flight → dropped with a log (no queue in
-  M3.1; documented). TTS failures still fall back edge-tts → macOS say →
-  no frame (mock keeps the mouth in mock mode; silent in live mode).
+- say while a synthesis is in flight → the newest commanded say is queued
+  (one slot) behind it; a mock say in that window is dropped with a log. TTS
+  failures still fall back edge-tts → macOS say → no frame (mock keeps the
+  mouth in mock mode; silent in live mode).
 - DSH flow: a DSH session tool (native CLI here; MCP surface documented by
   name) sends a v1 frame to WS :3001 as ?role=web → the server relays it
   raw → the driver executes/forwards → the frontend hooks. No new port.

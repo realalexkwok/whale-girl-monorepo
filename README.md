@@ -77,7 +77,7 @@ whale-girl-server/scripts/whale_cmd.py (run it with the venv python):
     cd whale-girl-server
     .venv/bin/python scripts/whale_cmd.py motion Hammer                  # play a motion
     .venv/bin/python scripts/whale_cmd.py say 你好，我是鲸鱼娘             # speak (TTS + lip sync)
-    .venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeBallX":0.8}'   # hold params
+    .venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeLOpen":0,"ParamEyeROpen":0}'  # hold params (eyes shut)
     .venv/bin/python scripts/whale_cmd.py pose '{}'                      # release
     .venv/bin/python scripts/whale_cmd.py mode live                      # pause mock synthesis
     .venv/bin/python scripts/whale_cmd.py mode mock                      # resume

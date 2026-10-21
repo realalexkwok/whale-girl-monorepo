@@ -9,17 +9,17 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 
 | Check | Command | Result |
 | --- | --- | --- |
-| cmd_probe (v1 frame types end to end) | node scripts/cmd_probe.js | PASS — 18/18 checks (breakdown below), incl. the fix-round checks |
-| Say byte-compatibility regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 52/52 (100%), gap max 0.079, latency mean 17 ms / max 35 ms, decoded 847,872 B / 4.42 s |
+| cmd_probe (v1 frame types end to end) | node scripts/cmd_probe.js | PASS — 21/21 checks (breakdown below), incl. the fix-round and review-round checks |
+| Say byte-compatibility regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 53/53 (100%), gap max 0.083, latency mean 22 ms / max 36 ms, decoded 847,872 B / 4.42 s |
 | CLI validation paths | whale_cmd.py motion Nope / no server | PASS — unknown group exits 2 with the 8 groups listed; connection refused exits 1 with an actionable message |
 | Motion probe | node scripts/ws_probe.js | PASS — 30.0 fps over 2.00 s, 61 frames |
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | HTTP static host | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ | 200 PASS |
-| Frontend inline JS | node --check (extracted script) | PASS — 31,122 B at /tmp/m31-inline.js |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | PASS in the probe runs — cmd_probe 48,384 / 20,160 KB; say_probe 51,984 / 20,800 KB. The restarted standalone stack measured 62,336 / 28,960 KB — the server's noisy end (29–63 MB observed across runs; M4.1 owns the OBS-gate multi-sample re-measure), driver within 30 MB |
+| Frontend inline JS | node --check (extracted script) | PASS — 31,260 B at /tmp/m31-inline.js |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Probe runs PASS — cmd_probe 52,288 / 20,672 KB; say_probe 54,656 / 22,336 KB. The restarted standalone stack measured 62,208 / 28,832 KB: the server sample is over the 60 MB budget and is recorded as the known noisy end (29–63 MB across runs); M4.1 owns the OBS-gate multi-sample re-measure and the headroom decision. Driver within 30 MB in every sample |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released, no stray processes |
 
-### cmd_probe.js breakdown (PASS 18/18)
+### cmd_probe.js breakdown (PASS 21/21)
 | Check | Measured |
 | --- | --- |
 | live boot: mock speech paused | 0 say frames in 10 s (WHALE_MODE=live) |
@@ -35,7 +35,10 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | say audio served | HTTP 200, content-type audio/mpeg |
 | page played the commanded say | engine=edge-tts, decoded 442,368 B, 2.30 s |
 | say frames carry src | canned src="mock", commanded src="cmd" |
-| mock never cuts a commanded line | in mock mode, 2.1 s into the line the page still plays the commanded audio (no cut) |
+| mock never cuts a commanded line | in mock mode, sampled 1 s into the line: active=true, audio = the commanded file |
+| commanded line plays to its end | after the line: last say is still the commanded file |
+| pose clears non-synthesized keys | ParamBrowLY present while held, absent from the frames after {} |
+| malformed frames are ignored safely | 5 bad frames (non-finite, huge int, long key, spoofed web_connected, deep nesting) then the expression still applied; the 30 fps stream continued |
 | motion stream | 30.0 fps over 2.00 s |
 | server / driver RSS | 30,784 KB / 17,952 KB |
 | ports released | :3000 and :3001 free |

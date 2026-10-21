@@ -99,13 +99,43 @@ MOTION = {
 }
 
 # M3.1 pose overlay: values from a pose command win over the synthesized values
-# until the next pose command ({} clears) or a mode flip. Mutated in place.
+# until the next pose command ({} clears) or a mode flip. The frame dict is
+# pre-allocated, so every key the overlay writes must be removed when the
+# overlay shrinks — a stale key would otherwise ride in every frame forever
+# (and enough keys would push the frame past the proxy's 8 KB cap).
 POSE_OVERRIDES = {}
+POSE_LIMIT = 32  # max overlay entries per command (frame-size safety)
+BAD_CMD_AT = 0.0  # rate limit for rejected-frame logging
 
 
 def dump_json(obj):
-    """Compact serialization for the wire."""
-    return json.dumps(obj, separators=(",", ":"))
+    """Compact, strict serialization for the wire (no NaN/Infinity)."""
+    return json.dumps(obj, separators=(",", ":"), allow_nan=False)
+
+
+def log_bad_cmd(detail):
+    """Rate-limited (1 Hz) log for rejected or malformed command frames."""
+    global BAD_CMD_AT
+    now = time.monotonic()
+    if now - BAD_CMD_AT >= 1.0:
+        BAD_CMD_AT = now
+        print("[whale-girl] bad command ignored: %s" % detail, flush=True)
+
+
+def clear_pose():
+    """Drop the overlay and every parameter key it wrote into the frame dict."""
+    for key in POSE_OVERRIDES:
+        MOTION["p"].pop(key, None)
+    POSE_OVERRIDES.clear()
+
+
+def set_pose(overrides):
+    """Replace the overlay; keys the new overlay does not set are removed."""
+    for key in list(POSE_OVERRIDES):
+        if key not in overrides:
+            POSE_OVERRIDES.pop(key, None)
+            MOTION["p"].pop(key, None)
+    POSE_OVERRIDES.update(overrides)
 
 
 def clamp(value, low, high):
@@ -369,63 +399,114 @@ async def run_driver(ws):
     loop = asyncio.get_running_loop()
     web_count = 1  # optimistic start; the server corrects this via events
 
+    async def forward(frame):
+        """Send a v1 frame to the frontend over the python connection."""
+        try:
+            await ws.send(dump_json(frame))
+        except ConnectionClosed:
+            pass
+
+    async def dispatch(event):
+        """Execute one v1 command frame (already unwrapped from the relay)."""
+        global MODE
+        kind = event.get("type")
+        if kind == "motion":
+            group = event.get("group")
+            if isinstance(group, str) and group:
+                frame = {"type": "motion", "group": group}
+                index = event.get("index")
+                if (isinstance(index, int) and not isinstance(index, bool)
+                        and index >= 0):
+                    frame["index"] = index
+                await forward(frame)
+        elif kind == "expression":
+            name = event.get("name")
+            if isinstance(name, str) and name:
+                await forward({"type": "expression", "name": name})
+        elif kind == "say":
+            text = event.get("text")
+            if isinstance(text, str) and text.strip():
+                trigger_say(text.strip(), "cmd")
+        elif kind == "pose":
+            overrides = event.get("p")
+            if not isinstance(overrides, dict):
+                return
+            clean = {}
+            for pid, value in overrides.items():
+                if (not isinstance(pid, str)
+                        or isinstance(value, bool)
+                        or not isinstance(value, (int, float))):
+                    log_bad_cmd("pose value %r for %r" % (value, pid))
+                    return
+                try:
+                    number = float(value)
+                except (OverflowError, ValueError):
+                    log_bad_cmd("pose value too large for %r" % (pid,))
+                    return
+                if not math.isfinite(number):
+                    log_bad_cmd("non-finite pose value for %r" % (pid,))
+                    return
+                clean[pid] = number
+            if len(clean) > POSE_LIMIT:
+                log_bad_cmd("pose has %d keys (limit %d)"
+                            % (len(clean), POSE_LIMIT))
+                return
+            if clean:
+                set_pose(clean)
+            else:
+                clear_pose()
+        elif kind == "mode":
+            mock = event.get("mock")
+            if isinstance(mock, bool):
+                wanted = "mock" if mock else "live"
+                if wanted != MODE:
+                    MODE = wanted
+                    clear_pose()
+                    await forward({"type": "mode", "mock": MODE == "mock"})
+                    print("[whale-girl] mode: %s" % MODE, flush=True)
+
     async def read_events():
         """Server events + v1 command frames (rare events, never per-frame work)."""
         nonlocal web_count
-        global MODE
-
-        async def forward(frame):
-            # Relay a v1 frame to the frontend over the python connection.
-            try:
-                await ws.send(dump_json(frame))
-            except ConnectionClosed:
-                pass
-
         try:
             async for raw in ws:
                 try:
                     event = json.loads(raw)
-                except ValueError:
+                except (ValueError, RecursionError):
+                    log_bad_cmd("invalid JSON")
                     continue
                 if not isinstance(event, dict):
                     continue
-                kind = event.get("type")
-                if kind == "web_connected":
-                    web_count = max(0, int(event.get("count", 0)))
-                elif kind == "motion":
-                    group = event.get("group")
-                    if isinstance(group, str) and group:
-                        frame = {"type": "motion", "group": group}
-                        index = event.get("index")
-                        if (isinstance(index, int) and not isinstance(index, bool)
-                                and index >= 0):
-                            frame["index"] = index
-                        await forward(frame)
-                elif kind == "expression":
-                    name = event.get("name")
-                    if isinstance(name, str) and name:
-                        await forward({"type": "expression", "name": name})
-                elif kind == "say":
-                    text = event.get("text")
-                    if isinstance(text, str) and text.strip():
-                        trigger_say(text.strip(), "cmd")
-                elif kind == "pose":
-                    overrides = event.get("p")
-                    if isinstance(overrides, dict):
-                        # A pose command replaces the overlay; {} clears it.
-                        POSE_OVERRIDES.clear()
-                        for pid, value in overrides.items():
-                            if (isinstance(pid, str)
-                                    and isinstance(value, (int, float))
-                                    and not isinstance(value, bool)):
-                                POSE_OVERRIDES[pid] = float(value)
-                elif kind == "mode":
-                    mock = event.get("mock")
-                    if isinstance(mock, bool):
-                        MODE = "mock" if mock else "live"
-                        POSE_OVERRIDES.clear()
+                relayed = event.get("relay")
+                if isinstance(relayed, str):
+                    # Commands arrive wrapped by the server ({"relay":"<frame>"})
+                    # so a web client cannot impersonate a server event such as
+                    # web_connected. Only command frames are accepted here.
+                    try:
+                        command = json.loads(relayed)
+                    except (ValueError, RecursionError):
+                        log_bad_cmd("invalid relayed frame")
+                        continue
+                    if not isinstance(command, dict):
+                        continue
+                    try:
+                        await dispatch(command)
+                    except Exception as exc:  # one bad frame must never kill commands
+                        log_bad_cmd("handler error: %r" % (exc,))
+                    continue
+                if "relay" in event:
+                    continue
+                if event.get("type") == "web_connected":
+                    try:
+                        count = max(0, int(event.get("count", 0)))
+                    except (TypeError, ValueError):
+                        continue
+                    if web_count == 0 and count > 0:
+                        # A page just (re)connected: tell it the current mode.
                         await forward({"type": "mode", "mock": MODE == "mock"})
-                        print("[whale-girl] mode: %s" % MODE, flush=True)
+                    web_count = count
+                    continue
+                # Anything else at the top level is not a server event: ignore.
         except ConnectionClosed:
             pass
 
@@ -479,6 +560,10 @@ async def run_driver(ws):
             return
         start_say(text, src)
 
+    # Announce the mode once on connect so a page that was already open (or a
+    # reconnect) shows the real state without waiting for a mode command.
+    await forward({"type": "mode", "mock": MODE == "mock"})
+
     try:
         while True:
             if web_count > 0:
@@ -530,6 +615,8 @@ async def run_driver(ws):
             await reader
         except asyncio.CancelledError:
             pass
+        except Exception as exc:  # reader already logs per event; never crash it
+            print("[whale-girl] event reader stopped: %r" % (exc,), flush=True)
 
 
 async def main():

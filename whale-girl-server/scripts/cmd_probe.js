@@ -30,6 +30,7 @@ const SILENCE_MS = 10000;   // a mock burst must have fired in this window
 const EXPRESSION = '爱心眼';
 
 const children = [];
+let chromeProfile = null;
 function track(child) {
   children.push(child);
   return child;
@@ -102,9 +103,18 @@ async function startServer() {
 }
 
 function startDriver() {
+  const env = Object.assign({}, process.env, {
+    WHALE_MODE: 'live',
+    WHALE_WS: 'ws://localhost:' + WS_PORT + '?role=python',
+  });
+  // The probe owns the run: never inherit a developer's scripted say or logs,
+  // and always talk to THIS probe's proxy (PORT/WS_PORT are env knobs).
+  delete env.WHALE_SAY_TEXT;
+  delete env.WHALE_DEBUG;
+  delete env.WHALE_ENGINE;
   const child = track(spawn(PYTHON, [DRIVER], {
     cwd: ROOT,
-    env: Object.assign({}, process.env, { WHALE_MODE: 'live' }),
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
   }));
   child.stdout.on('data', (d) => { if (process.env.PROBE_DEBUG) process.stdout.write('[driver] ' + d); });
@@ -123,6 +133,7 @@ function openWeb() {
 async function startChrome() {
   const debugPort = await freePort();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'whale-cmd-probe-'));
+  chromeProfile = profile;
   const args = [
     '--remote-debugging-port=' + debugPort,
     '--autoplay-policy=no-user-gesture-required',
@@ -131,7 +142,8 @@ async function startChrome() {
     '--no-default-browser-check',
     '--disable-extensions',
     '--window-size=1280,900',
-    'http://localhost:' + PORT + '/?debug=1',
+    'http://localhost:' + PORT + '/?debug=1&ws=' +
+      encodeURIComponent('ws://localhost:' + WS_PORT),
   ];
   if (!VISIBLE) args.unshift('--headless=new');
   const child = track(spawn(CHROME, args, { stdio: 'ignore' }));
@@ -183,6 +195,9 @@ async function startChrome() {
 function fail(error) {
   console.error('probe: ' + (error && error.message ? error.message : error));
   killAll();
+  if (chromeProfile) {
+    try { fs.rmSync(chromeProfile, { recursive: true, force: true }); } catch (err) { /* ignore */ }
+  }
   process.exit(1);
 }
 
@@ -274,6 +289,16 @@ async function cmdState(chrome) {
   record('pose {} clears the overlay', true,
     'ParamEyeBallX=' + lastMotion.p.ParamEyeBallX.toFixed(3) + ' (mock gaze resumes)');
 
+  // A parameter the synthesis never rewrites must leave the frame dict on {}.
+  probeWs.send(JSON.stringify({ type: 'pose', p: { ParamBrowLY: 1 } }));
+  await waitFor(() => lastMotion && lastMotion.p.ParamBrowLY === 1, 5000,
+    'non-synthesized pose key in motion frames');
+  probeWs.send(JSON.stringify({ type: 'pose', p: {} }));
+  await waitFor(() => lastMotion && !('ParamBrowLY' in lastMotion.p), 5000,
+    'non-synthesized pose key removed');
+  record('pose clears non-synthesized keys', true,
+    'ParamBrowLY present while held, absent from the frames after {}');
+
   // 5) mode mock: the flip frame arrives and the canned speech resumes.
   probeWs.send(JSON.stringify({ type: 'mode', mock: true }));
   await waitMode(true, 5000);
@@ -354,25 +379,53 @@ async function cmdState(chrome) {
     return false;
   }, 120000, 'commanded say in mock mode');
   await waitFor(async () => {
-    const st = await chrome.evaluate('window.whaleSpeech.probeStats().say');
-    return st && st.audio === cmd2.audio;
-  }, 20000, 'page playing the commanded say (mock mode)');
-  const cutDuration = Array.isArray(cmd2.words) && cmd2.words.length
-    ? cmd2.words[cmd2.words.length - 1][1] : 2.0;
-  await sleep(Math.round((cutDuration + 0.7) * 1000));
-  const still = await chrome.evaluate('window.whaleSpeech.probeStats().say');
-  record('mock does not cut the commanded line', !!still && still.audio === cmd2.audio,
-    'after ' + (cutDuration + 0.7).toFixed(1) + ' s the page still plays ' +
-    (still ? still.audio : 'nothing'));
+    const st = await chrome.evaluate('window.whaleSpeech.state()');
+    const say = await chrome.evaluate('window.whaleSpeech.probeStats().say');
+    return !!st && st.active === true && !!say && say.audio === cmd2.audio;
+  }, 20000, 'commanded say playback (mock mode)');
+  await sleep(1000); // sample mid-line, while the mock is muted by the hold
+  const midState = await chrome.evaluate('window.whaleSpeech.state()');
+  const midSay = await chrome.evaluate('window.whaleSpeech.probeStats().say');
+  record('mock does not cut the commanded line',
+    !!midState && midState.active === true && !!midSay && midSay.audio === cmd2.audio,
+    '1 s into the line: active=' + (midState && midState.active) +
+    ' audio=' + (midSay && midSay.audio));
+  await waitFor(async () => {
+    const st = await chrome.evaluate('window.whaleSpeech.state()');
+    return !!st && st.active === false;
+  }, 20000, 'commanded line finished (mock mode)');
+  const endSay = await chrome.evaluate('window.whaleSpeech.probeStats().say');
+  record('commanded line plays to its end',
+    !!endSay && endSay.audio === cmd2.audio,
+    'after the line: last say ' + (endSay && endSay.audio));
 
-  // 8) the motion stream is still healthy at ~30 fps.
+  // 8) malformed frames must never kill the command pipeline.
+  const badFrames = [
+    '{"type":"pose","p":{"ParamBrowLY":1e999}}',
+    '{"type":"pose","p":{"ParamBrowLY":' + '9'.repeat(400) + '}}',
+    '{"type":"pose","p":{"k' + 'x'.repeat(300) + '":1}}',
+    '{"type":"web_connected","count":0}',
+    '{"type":"motion","group":' + '['.repeat(1500) + ']'.repeat(1500) + '}'
+  ];
+  for (const frame of badFrames) probeWs.send(frame);
+  await sleep(600);
+  probeWs.send(JSON.stringify({ type: 'expression', name: EXPRESSION }));
+  await waitFor(async () => {
+    const st = await cmdState(chrome);
+    return st && st.last === 'expression: ' + EXPRESSION;
+  }, 8000, 'pipeline alive after malformed frames');
+  record('malformed frames are ignored safely', true,
+    badFrames.length + ' bad frames (non-finite, huge int, long key, spoofed ' +
+    'web_connected, deep nesting), expression still applied');
+
+  // 9) the motion stream is still healthy at ~30 fps.
   const beforeCount = motionCount;
   const beforeAt = Date.now();
   await sleep(2000);
   const rate = (motionCount - beforeCount) / ((Date.now() - beforeAt) / 1000);
   record('motion stream 25-35 fps', rate >= 25 && rate <= 35, rate.toFixed(1) + ' fps over 2.00 s');
 
-  // 9) RSS budgets with commands active.
+  // 10) RSS budgets with commands active.
   const serverRss = rssKb(server.pid);
   const driverRss = rssKb(driver.pid);
   record('server RSS <= 60 MB', serverRss <= 60 * 1024, serverRss + ' KB');

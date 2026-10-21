@@ -81,7 +81,7 @@
       cd whale-girl-server
       .venv/bin/python scripts/whale_cmd.py motion Hammer [index]
       .venv/bin/python scripts/whale_cmd.py say 你好，我是鲸鱼娘
-      .venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeBallX":0.8}'
+      .venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeLOpen":0,"ParamEyeROpen":0}'
       .venv/bin/python scripts/whale_cmd.py mode live|mock
 
 - The tool connects to ws://localhost:3001?role=web (env WHALE_CMD_WS), sends ONE
@@ -89,6 +89,8 @@
   say/pose/mode and forwards motion/expression to the browser (M2.1 hooks).
 - Motion groups are validated against whale-girl-frontend/model/whale.model3.json
   (env WHALE_MODEL_MANIFEST; absent in a split deployment → warn + send anyway).
+  The tool names a DSH/MCP wrapper uses map to the subcommands: whale_motion →
+  motion, whale_say → say, whale_pose → pose, whale_mode → mode.
   Exit codes: 0 sent, 1 server unreachable, 2 validation error.
 - Mock vs live: WHALE_MODE=mock (default) keeps the canned talk bursts; live
   pauses them and hands the mouth to explicit commands. A mode command flips at
@@ -97,7 +99,7 @@
   server first):
 
       cd whale-girl-server
-      node scripts/cmd_probe.js     # 16 checks: every frame type, say byte-compat, RSS
+      node scripts/cmd_probe.js     # every frame type + malformed safety (prints its count)
 
 ## Deployment patterns (M4.2 consumes this — config only, no code rewrite)
 

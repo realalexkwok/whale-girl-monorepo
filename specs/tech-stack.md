@@ -68,8 +68,9 @@
 - Roles via query param: ?role=web (many) / ?role=python (single writer).
 
 ## Wire protocol v1 (M3.1 command surface — additive; v0 frames unchanged)
-- web → server → python (commands, relayed RAW — the server still never parses
-  JSON): {"type":"motion","group":"<MotionGroup>","index":0} /
+- web → server → python (commands, relayed RAW and tagged as
+  {"relay":"<frame text>"} by string concatenation — the server still never
+  parses JSON): {"type":"motion","group":"<MotionGroup>","index":0} /
   {"type":"expression","name":"<ExpressionName>"} /
   {"type":"say","text":"<words>"} /
   {"type":"pose","p":{"ParamEyeBallX":0.8}} ({} clears the overlay) /
@@ -84,6 +85,16 @@
   the macOS-say fallback) and queues one commanded say behind an in-flight
   synthesis; the frontend ignores src:"mock" while a line plays, so the mock
   never interrupts a playing line while a commanded say keeps latest-wins.
+- Commands vs server events: the {"relay":...} tag is the only command path;
+  web_connected is accepted only top-level from the server, so no web client
+  can stop the 30 FPS stream by spoofing the count. Malformed frames
+  (non-finite numbers, huge ints, deep nesting, oversized poses) are rejected
+  with a rate-limited log and never kill the command reader.
+- Pose: max 32 keys, finite numbers only; a new pose replaces the overlay and
+  every key the overlay no longer sets is deleted from the frame dict (no
+  stale parameters, no unbounded frame growth). {} clears.
+- Mode: a mode frame is emitted on driver connect (current state) and only on
+  real flips; an idempotent mode command does not clear a held pose.
 - Driver semantics: WHALE_MODE=mock|live (default mock). Live pauses the mock
   talk bursts + canned phrases and zeroes the mock mouth; idle blink/gaze/sway
   continue; a mode flip clears the pose overlay and the frontend resets poses.
