@@ -10,6 +10,7 @@ ws.on('open', () => console.log('probe: connected'));
 ws.on('message', (data) => {
   const msg = JSON.parse(data.toString());
   if (msg.type === 'web_connected') { console.log('probe: event ' + JSON.stringify(msg)); return; }
+  if (msg.type === 'say') return; // M2.2 speech frame: not a motion frame, no noise
   if (msg.type !== 'motion') { console.log('probe: unexpected ' + JSON.stringify(msg).slice(0, 120)); return; }
   frames += 1;
   if (!first) first = { t: Date.now(), f: msg.f };

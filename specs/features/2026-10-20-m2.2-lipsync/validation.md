@@ -16,7 +16,7 @@
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | Frontend inline JS | node --check (extracted script) | PASS (26.7 KB script) |
 | Python dep | .venv/bin/pip show edge-tts | edge-tts 7.3.1 (Python 3.9.10) |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | node server.js 53,520 KB / driver 21,376 KB — within 60/30 MB (re-measured 2026-10-21) |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | node server.js 53–63 MB across runs (idle baseline ~60 MB; stream peaks occasionally ~1 MB over the 60 MB line) / driver 21–28 MB — driver within the 30 MB budget; server headroom is thin, see the review note (M4.1 owns the OBS re-measure) |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released |
 
 ## Say-path behaviour (browser engine, measured 2026-10-20 with headless Chrome CDP)
@@ -31,6 +31,21 @@
 
 > Voice note (2026-10-21): the default edge-tts voice is now zh-CN-XiaoyiNeural
 > (owner switch from Xiaoxiao); the probe re-ran 12/12 with it.
+>
+> Review round (2026-10-21, low-severity findings): (1) the edge-tts child now
+> runs under a 45 s asyncio.wait_for — a hung synthesis is killed and the
+> macOS say fallback fires; verified with a stub helper (timeout raised in 1.0 s,
+> child reaped, fallback .m4a produced); (2) the say path uses a generation
+> counter, so the newest say wins even if an older decode resolves later;
+> (3) ws_probe ignores say frames (no cosmetic "unexpected" lines); (4) the gap
+> check is conservative by design: it asserts only gap interiors (≥ ~400 ms —
+> +250 ms after the previous word, −50 ms before the next); shorter gaps are
+> bounded by the 120 ms release smoother; (5) server RSS observed 53–63 MB
+> across runs with occasional ~1 MB over-budget stream peaks — the pinned stack
+> alone (Node 25.2.0 + express 4 + ws 8, no traffic) measures ~60.5 MB, so this
+> is a platform baseline, not a leak (Node flags --max-semi-space-size=4,
+> --optimize-for-size and --jitless were measured and did not help); M4.1 owns
+> the OBS-gate re-measure and any Node-version/flag decision.
 >
 > Implementation note (2026-10-21): the owner's manual run caught the driver at
 > 32,160 KB RSS (> the 30 MB budget) because importing edge-tts + aiohttp in
@@ -81,4 +96,6 @@
   WHALE_SAY_TEXT trigger are the seam; the frontend say path is text-agnostic
   and ready for real AI text.
 - M4.1 owns: the OBS browser-source memory re-measure with audio playback
-  active (decoded buffers + playback) and any OBS audio-policy hardening.
+  active (decoded buffers + playback) and any OBS audio-policy hardening —
+  plus the server RSS headroom (53–63 MB observed, 60 MB budget) under the OBS
+  gate, deciding whether a Node-version/flag change is needed.

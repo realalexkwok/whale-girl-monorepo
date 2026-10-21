@@ -38,6 +38,9 @@ AUDIO_MAX_AGE = 3600.0  # prune speech files older than 1 h on each synthesis
 TTS_HELPER = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "scripts", "tts_synth.py"
 )
+# A hung edge-tts child must not block say_task forever: time it out, kill it
+# and let synthesize() fall back to macOS say.
+TTS_TIMEOUT = 45.0
 
 # Canned phrases the mock brain speaks at each talk burst. DSH supplies real
 # text in M3.1; the say path itself is text-agnostic.
@@ -182,7 +185,21 @@ async def _edge_tts(text):
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    out, err = await proc.communicate(text.encode("utf-8"))
+    try:
+        out, err = await asyncio.wait_for(
+            proc.communicate(text.encode("utf-8")), timeout=TTS_TIMEOUT
+        )
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        await proc.wait()
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        raise RuntimeError("edge-tts timed out after %.0f s" % TTS_TIMEOUT)
     try:
         payload = json.loads(out.decode("utf-8", "replace").strip() or "{}")
     except ValueError:

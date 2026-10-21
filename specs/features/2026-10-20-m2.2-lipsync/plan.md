@@ -92,3 +92,7 @@
   child exits after each utterance.
 - The say probe samples RSS after playback completes, so it catches
   steady-state memory from the TTS path.
+- Review round (2026-10-21): the edge-tts child is wrapped in a 45 s timeout
+  (kill + macOS say fallback on hang); the frontend keeps a say generation
+  counter so the newest say wins even when an older decode resolves later;
+  ws_probe ignores say frames to keep its output clean.

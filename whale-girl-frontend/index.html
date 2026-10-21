@@ -429,6 +429,7 @@
       var probeN = 0;
       var lastSay = null;
       var sayErrorLogged = false;
+      var sayGen = 0; // newest say wins even if an older decode resolves later
 
       function sayAsyncError(message) {
         if (!sayErrorLogged) {
@@ -527,6 +528,7 @@
         if (typeof url !== 'string') return;
         var words = Array.isArray(msg.words) ? msg.words : [];
         var engine = /\.m4a(\?|$)/i.test(url) ? 'say' : 'edge-tts';
+        var gen = ++sayGen;
         var ctx;
         try {
           ctx = ensureAudio();
@@ -540,6 +542,9 @@
         }).then(function (buf) {
           return ctx.decodeAudioData(buf);
         }).then(function (buffer) {
+          // Latest-wins guard: a newer say arrived while this one decoded, so
+          // drop this (now stale) buffer instead of replacing the new say.
+          if (gen !== sayGen) return;
           stopSay(); // latest wins: a new say replaces the current playback
           sayActive = {
             words: words,

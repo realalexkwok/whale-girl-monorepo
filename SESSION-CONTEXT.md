@@ -79,10 +79,14 @@
   GREEN: say probe PASS 12/12 in both engine passes (latency mean 17 ms /
   max 31 ms), ws_probe 30.0 fps, role probe close 1008, node --check, RSS
   within budgets, ports released.
-- NOTHING is committed — the whole diff sits uncommitted for owner review
-  (owner-commit rule). NEXT: the owner's manual half (first-time-user pass in
-  specs/features/2026-10-20-m2.2-lipsync/validation.md), then the close
-  bookkeeping (roadmap tick + history archive) on the owner's instruction.
+- Committed as 8a68d2f on feature/whale-girl-m22-lipsync (2026-10-21, owner
+  instruction). The review-round low-severity fixes (edge-tts child timeout,
+  say generation guard, ws_probe say-frame ignore, docs) were applied after
+  that commit and sit UNCOMMITTED in the working tree. NEXT: the owner's
+  manual half (first-time-user pass in
+  specs/features/2026-10-20-m2.2-lipsync/validation.md), commit the review
+  fixes, then the close bookkeeping (roadmap tick + history archive) on the
+  owner's instruction.
 - M2.1 is fully closed: merged into main and pushed (2026-10-20); its local
   feature branch was deleted.
 
@@ -112,5 +116,6 @@
 - main is at c579c43 (pushed): M2.1 feature 1b0ed94 + reviewer polish bcaebe6,
   0d9db46, 2c84f26, e691b22 + close bookkeeping 0df6a76 + bf2a319 + the M2.2
   replan c579c43 ("specs: replan M2.2 as TTS-driven lip sync", owner
-  1a/2/3a/4a). Current branch: feature/whale-girl-m22-lipsync (created
-  2026-10-20 from main); the M2.2 spec trio is uncommitted in the working tree.
+  1a/2/3a/4a). Current branch: feature/whale-girl-m22-lipsync — M2.2 committed
+  as 8a68d2f (not pushed/merged); the 2026-10-21 review-round fixes are
+  uncommitted on top of it.
