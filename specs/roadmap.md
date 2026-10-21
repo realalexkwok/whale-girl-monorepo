@@ -76,6 +76,11 @@
       有什么会话还在跑？ / 有什么会话未处理？ (DSH-only, sorted by last
       finished time) / 停止会话一…十 → session.cancel; reply templates in
       ../docs/drafts/ai-agent-notifier/03-feature3-voice-commands.md
+- [ ] M5.4 context-menu notification history: right-clicking the whale girl
+      page opens a context menu whose 最近通知 item lists the recent
+      notifications (round-finished announcements + progress lines the whale
+      has spoken; newest first, capped); fed by the hub notification log that
+      M5.1/M5.2 write — cap/retention policy decided at its planning round
 
 ## V2 — Directional vision (P1; replanned after V1 exits)
 - multi-model support (model hot-swap at runtime)
