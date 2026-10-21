@@ -14,7 +14,7 @@
 - Branch rules: feature/whale-girl-<item>; close = merge into main → push → delete
   local branch. Agents never git commit / git push without the owner's instruction.
 
-## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20)
+## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20); M2.2 CLOSED (2026-10-21)
 - M1: server (express :3000 + ws proxy :3001), frontend (PixiJS 7.4.3 + cubism4,
   transparent canvas, placeholder fallback), mock driver (30 FPS blink/talk/gaze/sway),
   probes and docs. Evidence: motion probe PASS at 30.0 fps (twice), role rejection
@@ -29,6 +29,16 @@
   specs/features/2026-10-20-m2.1-model-integration/validation.md.
 - M2.1's manual pass (browser ?debug=1, console hooks, failure path, OBS Browser
   source) also covers the M1 manual acceptance, which was never separately recorded.
+- M2.2: TTS-driven lip sync — driver edge-tts (zh-CN-XiaoyiNeural, WordBoundary
+  timestamps) + macOS say fallback in a short-lived helper (scripts/tts_synth.py,
+  45 s timeout), say frames over the existing WS, /audio static mount, frontend
+  Web Audio playback + word/amplitude mouth envelope + say priority rule, and
+  scripts/say_probe.js. Evidence: say probe PASS 12/12 in both engine passes
+  (in-word 100%, latency mean 18 ms / max 32 ms), real headed Chrome pill path
+  (suspended -> click -> running), ws_probe 30.0 fps, role probe close 1008,
+  RSS node 54,720 KB / driver 22,320 KB, ports released. Manual half
+  owner-confirmed 2026-10-21. Full detail:
+  specs/features/2026-10-20-m2.2-lipsync/validation.md.
 - Agent skills installed in .agents/skills/ (2026-10-20): /spec-plan opens the
   grouped planning round for any roadmap item (use "/spec-plan M2.1");
   /spec-close runs the automatic half + bookkeeping at an item's close;
@@ -68,23 +78,11 @@
     Design drafts: docs/drafts/ai-agent-notifier/.
 
 ## 4. In-flight / next
-- M2.2 (TTS-driven lip sync) IMPLEMENTED on branch feature/whale-girl-m22-lipsync
-  (2026-10-20, owner 1a/2a/3a): spec trio at
-  specs/features/2026-10-20-m2.2-lipsync/; driver TTS (edge-tts 7.3.1 + macOS
-  say fallback + say frames + audio pruning), server /audio mount, frontend
-  Web Audio playback + word/amplitude mouth envelope + priority rule, and
-  scripts/say_probe.js + scripts/tts_synth.py (edge-tts runs in a short-lived
-  child so the driver stays under 30 MB — the owner's manual run caught
-  32,160 KB before the fix; now 15.9 MB in the probe passes). Automatic half
-  GREEN: say probe PASS 12/12 in both engine passes (latency mean 17 ms /
-  max 31 ms), ws_probe 30.0 fps, role probe close 1008, node --check, RSS
-  within budgets, ports released.
-- Committed on feature/whale-girl-m22-lipsync: 8a68d2f (M2.2 feature) and
-  d684afa (2026-10-21 review round: edge-tts child timeout, say generation
-  guard, ws_probe say-frame ignore, docs). NEXT: the owner's manual half
-  (first-time-user pass in
-  specs/features/2026-10-20-m2.2-lipsync/validation.md), then the close
-  bookkeeping (roadmap tick + history archive) on the owner's instruction.
+- NOTHING is in flight. M2.2 is fully closed (2026-10-21): merged into main and
+  pushed; its local feature branch was deleted. NEXT: M3.1 (DSH interaction)
+  planning via /spec-plan, carrying the M2.2 handoff — real DSH text → say
+  commands (the canned-phrase picker and WHALE_SAY_TEXT are the seam; the
+  frontend say path is text-agnostic).
 - M2.1 is fully closed: merged into main and pushed (2026-10-20); its local
   feature branch was deleted.
 
@@ -96,6 +94,9 @@
 - CDN URLs pinned in tech-stack.md, all verified 200 on 2026-10-19.
 - Live2D asset installed at whale-girl-frontend/model/ (4.3 MB, gitignored;
   DS鲸鱼娘, moc3 v4); gate it with node scripts/validate_model.js.
+- edge-tts 7.3.1 in whale-girl-server/.venv; TTS audio in
+  whale-girl-server/audio/ (gitignored, pruned after 1 h);
+  scripts/tts_synth.py is the synthesis helper (45 s timeout, JSON words back).
 
 ## 6. How to run (quick recap)
     # Terminal 1

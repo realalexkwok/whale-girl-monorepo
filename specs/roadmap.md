@@ -1,6 +1,6 @@
 # Whale Girl — Roadmap
 
-> **Status: M1 complete (2026-10-19); M2.1 closed (2026-10-20).** V1 (M1–M5) is the
+> **Status: M1 complete (2026-10-19); M2.1 closed (2026-10-20); M2.2 closed (2026-10-21).** V1 (M1–M5) is the
 > commitment; V2/V3 are directional vision. Order is strict — execute items
 > top-to-bottom; no skipping or reordering without owner approval. One branch per item
 > (or small item group). Completed-item detail lives in
@@ -42,13 +42,7 @@
 
 ### M2 — 模型与口型同步 (model + lip sync)
 - [x] M2.1 real Live2D model integration: DS whale girl drop-in, asset validation + clear load errors, playback hooks — closed 2026-10-20; [detail](history_roadmap.md#m21-real-live2d-model-integration)
-- [ ] M2.2 TTS-driven lip sync (2026-10-20 replan, owner 1a/2/3a/4a): the brain
-      speaks explicitly specified words — TTS synthesizes the speech (edge-tts
-      primary: free neural voices + word timestamps; macOS "say" as the fallback
-      engine if edge-tts fails), the frontend plays the audio via Web Audio (OBS
-      hears it) and animates the mouth from the word timeline (word-level envelope
-      + amplitude fallback); the mock talk envelope stays as the no-audio fallback;
-      the loopback-RMS draft is retired
+- [x] M2.2 TTS-driven lip sync (2026-10-20 replan, owner 1a/2/3a/4a): edge-tts (Xiaoyi) + macOS say fallback word-timeline mouth, say protocol, Web Audio playback in the browser — closed 2026-10-21; [detail](history_roadmap.md#m22-tts-driven-lip-sync)
 
 ### M3 — DSH 互动大脑 (interaction)
 - [ ] M3.1 DSH interaction: real AI-driven parameter commands replacing mock

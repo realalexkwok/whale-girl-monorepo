@@ -1,9 +1,8 @@
 # M2.2 — TTS-Driven Lip Sync — Validation
 
-> Criteria confirmed by the owner (2026-10-20, ask round 3a). Status:
-> planning complete — results to be filled at the close. Automatic half
-> executed by the agent on the Mac; the manual half is the owner's acceptance
-> step.
+> Criteria confirmed by the owner (2026-10-20, ask round 3a). Status: CLOSED
+> 2026-10-21. Automatic half executed by the agent on the Mac; the manual half
+> (first-time-user pass) was owner-confirmed 2026-10-21.
 
 ## Automatic verification results (measured 2026-10-20)
 | Check | Command | Result |
@@ -18,6 +17,12 @@
 | Python dep | .venv/bin/pip show edge-tts | edge-tts 7.3.1 (Python 3.9.10) |
 | Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | node server.js 29–63 MB across runs (noisy — page-cache/GC dependent; peaks occasionally ~1 MB over the 60 MB line) / driver 21–28 MB — driver within the 30 MB budget; server headroom is thin and noisy, see the review note (M4.1 owns the OBS re-measure) |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released |
+
+> Close re-run (2026-10-21, fresh processes): ws_probe PASS 30.0 fps over 2.00 s
+> (61 frames); ws_role_probe close 1008 + reason; curl :3000 → 200; inline
+> script 27,153 B node --check PASS; RSS node server.js 54,720 KB / driver
+> 22,320 KB (within the 60/30 MB budgets); ports 3000/3001 released after
+> SIGTERM; no stray processes.
 
 ## Say-path behaviour (browser engine, measured 2026-10-20 with headless Chrome CDP)
 | Check | Measured result |
@@ -67,7 +72,7 @@
 > not a defect. Both probe passes auto-boot server + Chrome + driver; the
 > probe is deterministic via WHALE_SAY_TEXT (exactly one scripted utterance).
 
-## Manual verification (owner, first-time-user pass — run at the close)
+## Manual verification (owner, first-time-user pass — PASSED 2026-10-21)
 1. Server: terminal → `cd whale-girl-server` → `npm start` — log shows
    `http=:3000 ws=:3001`.
 2. Driver: second terminal → `cd whale-girl-server` →
@@ -86,13 +91,15 @@
    audio starts suspended a small "click to enable audio" pill appears —
    click it once (OBS Interact), it auto-hides.
 
+Owner confirmation: all five steps passed (2026-10-21).
+
 ### Already verified, do NOT re-run
 | Item | What it covered | Verified by |
 | --- | --- | --- |
 | Frontend inline script syntax | node --check on the extracted script | agent, 2026-10-20 |
 | Say probe, edge-tts pass | words timeline, gaps, latency, decode, RSS | agent, 2026-10-20 |
 | Say probe, say fallback pass | .m4a decode, amplitude envelope | agent, 2026-10-20 |
-| Real-browser pill path + mouth match | headed Chrome 155 via CDP :9222 (owner-authorized): fresh tab → say arrives with ctxState=suspended + pill visible → click → ctxState=running, pill hidden; 9 words, in-word 53/53; latency this run mean 17 ms / max 27 ms — spread across all runs so far: mean ~13–21 ms / max 27–62 ms (single samples are not a bound; the earliest implementation run measured 21/62, current-code runs 17–18/27–37, the reviewer's runs max 36–37 ms); audio played audibly in the window (~4.4 s). OBS-side pill (Interact) still pending. | agent, 2026-10-21 |
+| Real-browser pill path + mouth match | headed Chrome 155 via CDP :9222 (owner-authorized): fresh tab → say arrives with ctxState=suspended + pill visible → click → ctxState=running, pill hidden; 9 words, in-word 53/53; latency this run mean 17 ms / max 27 ms — spread across all runs so far: mean ~13–21 ms / max 27–62 ms (single samples are not a bound; the earliest implementation run measured 21/62, current-code runs 17–18/27–37, the reviewer's runs max 36–37 ms); audio played audibly in the window (~4.4 s); the OBS-side pill (Interact) was verified by the owner at the close (2026-10-21). | agent, 2026-10-21 |
 | WS probes | 30.0 fps with increasing f; close 1008 | agent, 2026-10-20 |
 | Memory + shutdown | RSS within budgets, ports released | agent, 2026-10-20 |
 | Asset validator (M2.1) | unchanged by M2.2 (no asset changes) | agent (M2.1 close) |

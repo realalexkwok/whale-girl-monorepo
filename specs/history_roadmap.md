@@ -100,3 +100,54 @@
   M3.1 owns wire-protocol trigger commands for the hooks; M3.2 owns text/emotion
   → expression presets; M4.1 owns the <100 MB OBS gate re-measured with the real
   model.
+
+## M2.2 TTS-driven lip sync
+- Closed 2026-10-21. The brain speaks explicitly specified words: the driver
+  synthesizes speech with edge-tts (free Microsoft neural voice
+  zh-CN-XiaoyiNeural, WordBoundary word timestamps) and falls back to macOS
+  "say" (.m4a, no timestamps) on failure. Audio is written to
+  whale-girl-server/audio/ (gitignored, pruned after 1 h) and served by the
+  server at /audio/; the browser plays it via Web Audio (AudioBufferSourceNode
+  -> destination, so OBS captures it) and animates ParamMouthOpenY from the word
+  timeline (attack 20 ms / release 120 ms) or from an amplitude envelope (RMS per
+  50 ms, linearly normalized) when the words list is empty. A say command wins
+  over the mock mouth; the mock talk envelope remains the no-say fallback. New
+  wire command (specced 2026-10-20): {"type":"say","audio":"/audio/<id>.mp3",
+  "words":[[t0,t1,"word"],...]}.
+- edge-tts runs in a short-lived helper process (whale-girl-server/scripts/
+  tts_synth.py, one JSON line back with the words timeline) so the long-running
+  driver stays under its 30 MB RSS budget: an owner manual run caught 32,160 KB
+  with in-process imports; the driver now measures 15.7-23 MB across the probe
+  passes. The helper is wrapped in a 45 s asyncio.wait_for — a hung synthesis is
+  killed and the macOS say fallback fires.
+- Frontend speech module: latest-wins playback guarded by a generation counter
+  (a newer say wins even if an older decode resolves later); lazy AudioContext
+  resumed by the user's first gesture; a small auto-hiding "click to enable
+  audio" pill when the autoplay policy suspends the context; window.whaleSpeech
+  console/probe hooks; ?debug=1 shows "say: <word> | mouth <value> | <engine>";
+  zero per-frame allocations (one envelope number + a preallocated probe ring).
+- Evidence (2026-10-20/21): say_probe.js (headless Chrome CDP, deterministic via
+  WHALE_SAY_TEXT) PASS 12/12 in both engine passes — edge-tts (Xiaoyi): 9 words,
+  in-word 54/54 (100%) >= 0.4, gap max 0.079 <= 0.15, word-onset latency
+  mean 18 ms / max 32 ms, decoded 847,872 B / 4.42 s; say fallback: 0 words,
+  mouth max 0.99, loud-window mean 0.87, decoded 759,116 B / 3.95 s. Real headed
+  Chrome 155 via CDP :9222 (owner-authorized): suspended -> pill click ->
+  running, in-word 53/53, latency 17/27 ms, audio audibly played. Close re-run:
+  ws_probe 30.0 fps over 2.00 s (61 frames), role probe close 1008, curl 200,
+  node --check PASS (27,153 B inline script), RSS node 54,720 KB / driver
+  22,320 KB, ports released.
+- Review rounds (2026-10-21): edge-tts child timeout + say fallback; say
+  generation guard; ws_probe ignores say frames; server RSS headroom recorded as
+  noisy (29-63 MB across runs, page-cache/GC dependent; M4.1 owns the
+  OBS-gate multi-sample re-measure); latency recorded as a spread (mean ~13-21 ms
+  / max 27-62 ms across runs, single samples are not a bound).
+- Commits on feature/whale-girl-m22-lipsync: 8a68d2f (feature), d684afa (review
+  round), 9c6cd93 + d3a1523 (doc corrections). Spec trio:
+  specs/features/2026-10-20-m2.2-lipsync/.
+- Manual half owner-confirmed 2026-10-21: browser speech + mouth match,
+  WHALE_ENGINE=say fallback, mock-envelope fallback between utterances, OBS
+  Browser source audio + pill via Interact.
+- Handoffs: M3.1 owns real DSH text -> say commands (the canned-phrase picker and
+  WHALE_SAY_TEXT are the seam; the frontend say path is text-agnostic); M4.1 owns
+  the OBS browser-source memory re-measure with audio playback active, OBS
+  audio-policy hardening, and the server RSS headroom at the OBS gate.
