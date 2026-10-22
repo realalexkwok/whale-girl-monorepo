@@ -491,11 +491,9 @@ async def run_driver(ws):
     expr_tag = ""
     expr_at = 0.0
     expr_deadline = 0.0
-    # A too-long neutral preset (WHALE_EXPR_TAGS) must never build an oversized
-    # frame: fall back to the reset frame.
-    expr_neutral = EXPR_NEUTRAL if len(EXPR_NEUTRAL) <= MAX_CMD_NAME else ""
-    if EXPR_NEUTRAL and not expr_neutral:
-        log_bad_cmd("WHALE_EXPR_TAGS neutral preset too long; using reset")
+    # expr_tags.load_tags() guarantees the neutral tag is the reset (""); the
+    # fallback below is therefore a constant, not an env-dependent preset.
+    expr_neutral = EXPR_NEUTRAL
 
     async def forward(frame):
         """Send a v1 frame to the frontend over the python connection."""

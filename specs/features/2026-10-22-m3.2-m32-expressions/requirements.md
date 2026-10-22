@@ -3,7 +3,7 @@
 > Confirmed by the owner (2026-10-22, grouped ask round: requirements / plan /
 > validation; answers: hybrid routing table / driver table + CLI + new probe /
 > per-tag probe + full gate). Status: implemented on
-> feature/whale-girl-m32-expressions (review rounds 1–3 fixes applied); the
+> feature/whale-girl-m32-expressions (review rounds 1–4 fixes applied); the
 > manual half is owed by the owner at the close.
 
 ## Scope
@@ -60,9 +60,11 @@
   speaking); commanded motions keep playing.
 - Table: `whale-girl-server/expr_tags.py` (data-only, shared by the driver and
   the CLI); `WHALE_EXPR_TAGS` (compact JSON) merges over the defaults, so an
-  owner override may add or replace tags. Set the variable in BOTH the driver
-  and the CLI environment — they load it independently, and a tag known to only
-  one side is either rejected by the CLI or treated as unknown by the driver.
+  owner override may add or replace tags — except `neutral`, which always
+  resets (a non-empty neutral override is ignored with a warning). Set the
+  variable in BOTH the driver and the CLI environment — they load it
+  independently, and a tag known to only one side is either rejected by the CLI
+  or treated as unknown by the driver.
 
 ## Context
 - Handoffs honoured (all implemented here):

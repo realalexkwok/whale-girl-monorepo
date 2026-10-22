@@ -11,7 +11,9 @@ own environments): a tag known to the driver only is rejected by the CLI
     WHALE_EXPR_TAGS='{"happy":"爱心眼","proud":"双手比耶"}'
 
 (compact JSON merged over the defaults; invalid JSON/non-object falls back to
-the defaults with a warning). An empty preset name means "reset the face".
+the defaults with a warning). An empty preset name means "reset the face"; the
+neutral tag always resets, so a non-empty neutral override is ignored with a
+warning.
 """
 
 import json

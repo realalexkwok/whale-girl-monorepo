@@ -1,6 +1,6 @@
 # M3.2 — LLM-Driven Expressions: Emotion Tag -> Preset Routing — Validation
 
-> Status: IMPLEMENTED on feature/whale-girl-m32-expressions (review rounds 1–3
+> Status: IMPLEMENTED on feature/whale-girl-m32-expressions (review rounds 1–4
 > fixes applied and the automatic half re-run on that tree) — the manual half is
 > owed by the owner at the close. Roadmap tick + history archive happen only on
 > the owner's close instruction.
@@ -12,12 +12,12 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | --- | --- | --- |
 | expr_probe (per-tag routing) | node scripts/expr_probe.js | PASS — 22/22 checks (breakdown below) |
 | M3.1 command gate | node scripts/cmd_probe.js | PASS — 61/61 checks (regression) |
-| M2.2 say regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 52/52 (100%), gap max 0.108, latency mean 20 ms / max 34 ms, decoded 847,872 B / 4.42 s |
+| M2.2 say regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 53/53 (100%), gap max 0.083, latency mean 18 ms / max 36 ms, decoded 847,872 B / 4.42 s |
 | Motion probe | node scripts/ws_probe.js | PASS — 30.0 fps over 2.00 s, 61 frames |
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | HTTP static host | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ | 200 PASS |
 | Frontend inline JS | node --check (extracted script) | PASS — 38,285 B at /tmp/m32-inline.js |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Steady state at 60 s: server 45,232 KB / driver 16,560 KB; expr_probe post-warm-up max 57,184 KB / 29,328 KB (boot 58,528 / 29,248 KB informational), cmd_probe max 51,248 KB / 20,064 KB — within the steady-state 60/30 MB budgets |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Steady state at 60 s: server 58,032 KB / driver 20,800 KB; expr_probe gates the END sample 27,104 KB / 15,744 KB (boot 53,984 / 29,456 and tag-phase 54,112 / 29,600 KB informational); cmd_probe every-sample max 54,096 KB / 20,736 KB — within the steady-state 60/30 MB budgets |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released, no stray processes |
 
 ### expr_probe.js breakdown (PASS 22/22)
@@ -38,11 +38,11 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | a name passthrough also idle-resets | exprN 14 → 15 |
 | a real mode flip resets the expression | exprN 16 → 17 |
 | idle returns the face to neutral | after ~8 s (probe env), exprN 19 → 20 |
-| server / driver RSS (post-warm-up) | 57,184 KB / 29,328 KB max (samples 57,184/34,064 and 29,328/16,240); boot 58,528 KB / 29,248 KB informational |
+| RSS steady state (end sample) | server 27,104 KB; driver 15,744 KB — boot 53,984 / 29,456 KB and tag-phase 54,112 / 29,600 KB are informational (warm-up) |
 | ports released | :3000 and :3001 free |
 
 Implementation notes:
-- **Review rounds 1–3**: the CLI is the strict ingress (exit 2 + the tag list,
+- **Review rounds 1–4**: the CLI is the strict ingress (exit 2 + the tag list,
   nothing sent) while the driver's raw-frame fallback neutralizes; cooldown skips
   and name passthroughs refresh the idle deadline; tagless/overlong tags fall
   back to neutral (bypassing the cooldown); a non-empty neutral override is
@@ -61,8 +61,9 @@ Implementation notes:
   limiter so a skip is observable); the defaults are 4 s / 30 s.
 - The probe captures the driver's stdout (skip notices), asserts the CLI's
   stderr tag list, guards the model manifest (every default preset must exist),
-  and samples RSS at boot (informational), after the tag phase and at the end
-  (the post-warm-up samples are the gate).
+  and samples RSS at boot, after the tag phase and at the end; only the end
+  sample is the steady-state gate (the first two are warm-up, reported for
+  context).
 - The wait before the first CLI command covers the driver's connect announce (a
   CLI command sent before the python writer connects gets a 4002 close).
 

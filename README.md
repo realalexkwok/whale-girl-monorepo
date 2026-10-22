@@ -156,7 +156,8 @@ driver-side and not shown; during a say the line shows the current word).
   WHALE_CMD_WS overrides the CLI endpoint (needed when WS_PORT is not 3001);
   WHALE_MODEL_MANIFEST points the CLI's motion-name validation at another
   manifest (split deployments).
-- Expression knobs: WHALE_EXPR_TAGS (JSON tag -> preset merge),
+- Expression knobs: WHALE_EXPR_TAGS (JSON tag -> preset merge; the neutral tag
+  always resets, so a non-empty neutral override is ignored with a warning),
   WHALE_EXPR_COOLDOWN (default 4 s), WHALE_EXPR_IDLE (default 30 s).
 
 ## Troubleshooting

@@ -105,7 +105,8 @@
 - Expressions (M3.2): the model classifies the text inline and calls
   `scripts/whale_cmd.py express <tag> [text...]` with happy / sad / angry /
   surprised / confused / love / neutral; the driver maps the tag through
-  expr_tags.py (WHALE_EXPR_TAGS JSON override) to a preset. The CLI validates
+  expr_tags.py (WHALE_EXPR_TAGS JSON override; neutral always resets — a
+  non-empty neutral override is ignored with a warning) to a preset. The CLI validates
   the tag first (exit 2 + the tag list); a raw unknown tag reaching the driver
   falls back to neutral. Set WHALE_EXPR_TAGS in BOTH the driver and the CLI
   environment. Same-tag repeats inside WHALE_EXPR_COOLDOWN (default 4 s) are

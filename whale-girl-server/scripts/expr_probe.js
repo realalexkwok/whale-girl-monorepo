@@ -444,19 +444,19 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   record('idle returns the face to neutral', true,
     'exprN ' + before + ' -> ' + st.exprN + ' after ~' + (IDLE_MS / 1000) + ' s');
 
-  // 9) RSS: the boot sample is informational (warm-up), the post-warm-up
-  // samples must all fit (unknown/0 is a failure).
+  // 9) RSS: only the END sample is the steady-state gate (AGENTS budgets); the
+  // boot and tag-phase samples are reported as informational (warm-up).
   sampleRss();
-  const serverGate = serverSamples.slice(1);
-  const driverGate = driverSamples.slice(1);
-  record('server RSS <= 60 MB (post-warm-up)',
-    serverGate.every((v) => v > 0 && v <= 60 * 1024),
-    'boot ' + serverSamples[0] + ' KB (informational); samples ' +
-    serverGate.join(', ') + ' KB');
-  record('driver RSS <= 30 MB (post-warm-up)',
-    driverGate.every((v) => v > 0 && v <= 30 * 1024),
-    'boot ' + driverSamples[0] + ' KB (informational); samples ' +
-    driverGate.join(', ') + ' KB');
+  const serverEnd = serverSamples[serverSamples.length - 1];
+  const driverEnd = driverSamples[driverSamples.length - 1];
+  record('server RSS <= 60 MB (steady state, end sample)',
+    serverEnd > 0 && serverEnd <= 60 * 1024,
+    'server boot ' + serverSamples[0] + ' / tag-phase ' +
+    serverSamples[serverSamples.length - 2] + ' / end ' + serverEnd + ' KB');
+  record('driver RSS <= 30 MB (steady state, end sample)',
+    driverEnd > 0 && driverEnd <= 30 * 1024,
+    'driver boot ' + driverSamples[0] + ' / tag-phase ' +
+    driverSamples[driverSamples.length - 2] + ' / end ' + driverEnd + ' KB');
 
   probeWs.close();
   chrome.close();

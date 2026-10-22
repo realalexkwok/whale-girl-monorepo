@@ -116,7 +116,8 @@
   resets the face. The CLI validates the tag first (exit 2 + the list, nothing
   sent); a raw unknown tag reaching the driver falls back to neutral with a 1 Hz
   log. Set WHALE_EXPR_TAGS in BOTH the driver and the CLI environment — they
-  load it independently. Expressions drive the face (ParamMouthForm) and
+  load it independently. The neutral tag always resets; a non-empty neutral
+  override is ignored with a warning. Expressions drive the face (ParamMouthForm) and
   coexist with speech; they do not change the mouth ladder.
 - Relay hardening: the command relay is capped at 100 commands per fixed 1 s
   window (up to ~200 can pass across a boundary) and drops when the python
