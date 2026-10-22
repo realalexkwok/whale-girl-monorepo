@@ -2,8 +2,9 @@
 
 > Confirmed by the owner (2026-10-22, grouped ask round: requirements / plan /
 > validation; answers: hybrid routing table / driver table + CLI + new probe /
-> per-tag probe + full gate). Status: planning complete — implementation in
-> progress on feature/whale-girl-m32-expressions.
+> per-tag probe + full gate). Status: implemented on
+> feature/whale-girl-m32-expressions (review round 1 fixes applied); the manual
+> half is owed by the owner at the close.
 
 ## Scope
 - DSH sessions steer the whale's face: the model classifies the text inline and
@@ -14,6 +15,13 @@
   presets (owner picks; candidates from the 44 names): happy -> 开心兴奋,
   sad -> 悲伤, angry -> 生气, surprised -> 感叹号, confused -> 问号,
   love -> 爱心眼, neutral -> reset (the frontend calls resetExpression()).
+- CLI strictness: `whale_cmd.py express` validates the tag against the shared
+  table and exits 2 WITHOUT sending for an unknown tag (a DSH typo never
+  reaches the face); the driver's neutral fallback applies to raw wire frames
+  (an MCP wrapper may skip the CLI).
+- Audio-enable UX fix (found during the manual pass; decision 4): any pointer /
+  key gesture now creates/resumes the AudioContext, so the first say after a
+  page refresh plays without the pill; the pill remains the OBS fallback.
 - Zero new dependencies; the classifier is the external LLM + a plain data
   table; fully offline after the table.
 
@@ -26,13 +34,21 @@
    `scripts/expr_probe.js`.
 3. **Per-tag probe + full gate**: every tag asserted end to end, plus the
    existing cmd_probe / say_probe / ws_probe gates.
+4. **Audio-enable fix (2026-10-22, in-pass)**: the owner could not find the
+   pill after a refresh because the AudioContext is created lazily by the first
+   say; any pointer/key gesture now arms it, so a refresh + one click + say
+   plays (the pill stays as the OBS fallback). The T3 scope is extended
+   accordingly and the manual pass covers it.
 
 ## Semantics (binding)
 - Inbound `{"type":"expression","tag":"happy","text":"...（optional）"}`
   (a tag variant of the existing expression frame — **no new frame type**): the
   driver resolves the tag and forwards `{"type":"expression","name":"<preset>"}`.
   The M3.1 direct `name` passthrough keeps working; `name:""` means reset.
-- Unknown/missing tag -> neutral reset + a 1 Hz log listing the valid tags.
+- Unknown tag: the CLI rejects it (exit 2, valid tag list on stderr, nothing
+  sent); an unknown tag that reaches the driver as a raw wire frame -> neutral
+  reset + a 1 Hz log listing the valid tags. A frame with neither a tag nor a
+  name is treated like an unknown tag (neutral).
 - Cooldown (`WHALE_EXPR_COOLDOWN`, default 4 s): the **same** tag within the
   cooldown is skipped; a **different** tag applies immediately (hysteresis on
   repeats only) — chat noise must not flicker the face.
@@ -44,7 +60,9 @@
   speaking); commanded motions keep playing.
 - Table: `whale-girl-server/expr_tags.py` (data-only, shared by the driver and
   the CLI); `WHALE_EXPR_TAGS` (compact JSON) merges over the defaults, so an
-  owner override may add or replace tags.
+  owner override may add or replace tags. Set the variable in BOTH the driver
+  and the CLI environment — they load it independently, and a tag known to only
+  one side is either rejected by the CLI or treated as unknown by the driver.
 
 ## Context
 - Handoffs honoured (all implemented here):
@@ -69,5 +87,7 @@
   cmd_probe 61/61, say_probe 12/12, ws_probe 20–40 fps, role probe close 1008,
   curl 200, node --check on the inline script.
 - Manual (owner, at the close): a DSH session says emotional lines -> OBS shows
-  the matching expression; ?debug=1 shows tag -> preset; the default preset
-  choices are confirmed; an unknown tag shows neutral.
+  the matching expression; ?debug=1 shows `expression: <preset>`; the default
+  preset choices are confirmed; an unknown tag is rejected by the CLI (exit 2 +
+  the tag list; the raw-frame neutral fallback is covered by expr_probe); after
+  a refresh + one click a say plays without the pill.

@@ -73,9 +73,12 @@
       node scripts/say_probe.js              # edge-tts pass
       node scripts/say_probe.js --engine=say # macOS say / amplitude pass
 
-- OBS: the Browser source plays the page audio through OBS. If the audio starts
-  suspended (autoplay policy), a small "click to enable audio" pill appears —
-  click it once via OBS Interact; it hides when audio runs.
+- OBS: the Browser source plays the page audio through OBS. Any click on the
+  page arms the audio (the AudioContext is created/resumed inside the gesture),
+  so a refresh + one click + a say plays without the pill. If autoplay still
+  blocks it (e.g. OBS with no interaction), a small "click to enable audio" pill
+  appears bottom-right — click it once via OBS Interact; it hides when audio
+  runs.
 
 ## DSH command surface (M3.1)
 - A DSH session (Web or TUI) calls the native tool
@@ -102,9 +105,12 @@
 - Expressions (M3.2): the model classifies the text inline and calls
   `scripts/whale_cmd.py express <tag> [text...]` with happy / sad / angry /
   surprised / confused / love / neutral; the driver maps the tag through
-  expr_tags.py (WHALE_EXPR_TAGS JSON override) to a preset. Same-tag repeats
-  inside WHALE_EXPR_COOLDOWN (default 4 s) are skipped; with no express command
-  for WHALE_EXPR_IDLE (default 30 s) the face returns to neutral.
+  expr_tags.py (WHALE_EXPR_TAGS JSON override) to a preset. The CLI validates
+  the tag first (exit 2 + the tag list); a raw unknown tag reaching the driver
+  falls back to neutral. Set WHALE_EXPR_TAGS in BOTH the driver and the CLI
+  environment. Same-tag repeats inside WHALE_EXPR_COOLDOWN (default 4 s) are
+  skipped; with no express command for WHALE_EXPR_IDLE (default 30 s) the face
+  returns to neutral.
 - Mock vs live: WHALE_MODE=mock (default) keeps the canned talk bursts; live
   pauses them and hands the mouth to explicit commands. Commands work in both
   modes; a mode command flips at runtime (an idempotent one does nothing) and a

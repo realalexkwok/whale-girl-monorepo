@@ -1,8 +1,9 @@
 # M3.2 — LLM-Driven Expressions: Emotion Tag -> Preset Routing — Plan
 
 > Confirmed by the owner (2026-10-22) before implementation; the approved
-> plan-mode plan is the source of truth here. Status: implementation in progress
-> on feature/whale-girl-m32-expressions (agents never git commit / push —
+> plan-mode plan is the source of truth here. Status: implemented on
+> feature/whale-girl-m32-expressions (review round 1 fixes applied); the
+> owner's manual half is owed at the close (agents never git commit / push —
 > owner rule).
 
 ## Task groups
@@ -15,8 +16,11 @@
    (WHALE_EXPR_IDLE), the mode-flip clear + reset frame, and 1 Hz notices.
    Check: py_compile; the driver boots on websockets 15.0.1 / Python 3.9.
 2. T3 — frontend (whale-girl-frontend/index.html): the expression branch maps
-   `name:""` to `resetExpression()`, and `cmdState.exprN` counts applied
-   expressions (probe evidence). Check: node --check on the inline script.
+   `name:""` to `resetExpression()`; `cmdState.exprN` counts applied
+   expressions (probe evidence); and the audio-enable fix (any pointer/key
+   gesture creates/resumes the AudioContext, so the first say after a refresh
+   plays without the pill — the pill remains the OBS fallback). Check:
+   node --check on the inline script.
 3. T4 — CLI (whale-girl-server/scripts/whale_cmd.py): the `express` subcommand
    (`express <tag> [text...]`), validating the tag against the shared table
    (exit 2 with the tag list), sending the tag frame; exit codes unchanged.

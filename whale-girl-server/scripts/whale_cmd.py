@@ -136,7 +136,8 @@ def build_parser():
     express = sub.add_parser("express",
                              help="show the preset for an emotion tag (M3.2)")
     express.add_argument(
-        "tag", help="emotion tag (happy / sad / angry / surprised / confused / love / neutral)"
+        "tag",
+        help="emotion tag (one of: %s)" % ", ".join(sorted(load_tags())),
     )
     express.add_argument("text", nargs="*", help="optional source text (logged)")
     return parser

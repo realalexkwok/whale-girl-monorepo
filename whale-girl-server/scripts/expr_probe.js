@@ -45,6 +45,28 @@ if (!TAGS || !TAGS.happy || TAGS.neutral === undefined) {
   process.exit(1);
 }
 
+// Every default preset must exist in the installed model (actionable failure
+// instead of a 30 s CDP timeout when the DS model is missing).
+const MANIFEST = path.join(ROOT, '..', 'whale-girl-frontend', 'model', 'whale.model3.json');
+let EXPRESSIONS = [];
+try {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
+  const refs = manifest.FileReferences || {};
+  EXPRESSIONS = (refs.Expressions || []).map((e) => e && e.Name).filter(Boolean);
+} catch (err) {
+  console.error('probe: cannot read the model manifest ' + MANIFEST +
+    ' (' + err.message + ') — install the DS model first');
+  process.exit(1);
+}
+const missingPresets = Object.keys(TAGS)
+  .map((k) => TAGS[k])
+  .filter((name) => name && EXPRESSIONS.indexOf(name) === -1);
+if (missingPresets.length) {
+  console.error('probe: the model has no expression(s) ' + missingPresets.join(', ') +
+    ' — fix the expr_tags table');
+  process.exit(1);
+}
+
 const children = [];
 let chromeProfile = null;
 function track(child) {
@@ -111,10 +133,12 @@ function rssKb(pid) {
 }
 
 function cliEnv() {
-  return Object.assign({}, process.env, {
+  const env = Object.assign({}, process.env, {
     WHALE_CMD_WS: 'ws://localhost:' + WS_PORT + '?role=web',
-    WHALE_MODEL_MANIFEST: path.join(ROOT, '..', 'whale-girl-frontend', 'model', 'whale.model3.json'),
+    WHALE_MODEL_MANIFEST: MANIFEST,
   });
+  delete env.WHALE_EXPR_TAGS; // the probe's tags are the defaults
+  return env;
 }
 
 async function startServer() {
@@ -132,12 +156,13 @@ async function startServer() {
   return child;
 }
 
+let driverLog = '';
 function startDriver() {
   const env = Object.assign({}, process.env, {
     WHALE_MODE: 'live',
     WHALE_WS: 'ws://localhost:' + WS_PORT + '?role=python',
-    WHALE_EXPR_COOLDOWN: '1',
-    WHALE_EXPR_IDLE: '6',
+    WHALE_EXPR_COOLDOWN: String(COOLDOWN_MS / 1000),
+    WHALE_EXPR_IDLE: String(IDLE_MS / 1000),
   });
   // The probe owns the run: never inherit a developer's scripted/override env.
   delete env.WHALE_SAY_TEXT;
@@ -150,7 +175,11 @@ function startDriver() {
     stdio: ['ignore', 'pipe', 'pipe'],
   }));
   child.on('error', (err) => fail(err));
-  child.stdout.on('data', (d) => { if (process.env.PROBE_DEBUG) process.stdout.write('[driver] ' + d); });
+  child.stdout.on('data', (d) => {
+    driverLog += d.toString();
+    if (driverLog.length > 8192) driverLog = driverLog.slice(-4096);
+    if (process.env.PROBE_DEBUG) process.stdout.write('[driver] ' + d);
+  });
   child.stderr.on('data', (d) => { if (process.env.PROBE_DEBUG) process.stderr.write('[driver] ' + d); });
   return child;
 }
@@ -247,6 +276,22 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
 
 (async () => {
   console.log('probe: tags=' + Object.keys(TAGS).sort().join(','));
+  // 0) the documented WHALE_EXPR_TAGS merge (offline; both processes read it).
+  let overrideTags = null;
+  try {
+    overrideTags = JSON.parse(execFileSync(PYTHON, [
+      '-c', 'import json, expr_tags; print(json.dumps(expr_tags.load_tags()))',
+    ], {
+      cwd: ROOT,
+      env: Object.assign({}, process.env, {
+        WHALE_EXPR_TAGS: '{"happy":"爱心眼","proud":"双手比耶"}',
+      }),
+    }).toString());
+  } catch (err) { overrideTags = null; }
+  record('WHALE_EXPR_TAGS override merges',
+    !!overrideTags && overrideTags.happy === '爱心眼' && overrideTags.proud === '双手比耶',
+    'happy -> ' + (overrideTags && overrideTags.happy) +
+    ', proud -> ' + (overrideTags && overrideTags.proud));
   if (await portOpen(PORT)) throw new Error('port ' + PORT + ' already in use — stop the running server first');
   if (await portOpen(WS_PORT)) throw new Error('port ' + WS_PORT + ' already in use — stop the running server first');
 
@@ -263,6 +308,12 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   probeWs.on('message', collect);
   probeWs.on('error', (err) => fail(err));
   const driver = startDriver();
+  const serverSamples = [];
+  const driverSamples = [];
+  function sampleRss() {
+    serverSamples.push(rssKb(server.pid));
+    driverSamples.push(rssKb(driver.pid));
+  }
   // The driver announces the mode on connect: wait for it so the CLI's first
   // command has a python writer (otherwise the server answers 4002).
   await waitFor(() => modeFrames.length > 0, 8000, 'driver connected (mode announce)');
@@ -291,7 +342,9 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   record('happy -> ' + TAGS.happy + ' (CLI)', true, 'exprN=' + cliExprN);
   const cliBad = spawnSync(PYTHON, [CLI, 'express', 'banana'],
     { cwd: ROOT, timeout: 15000, env: cliEnv() });
-  record('CLI rejects an unknown tag', cliBad.status === 2, 'exit ' + cliBad.status);
+  const badListed = String(cliBad.stderr || '').indexOf('Valid tags') !== -1;
+  record('CLI rejects an unknown tag', cliBad.status === 2 && badListed,
+    'exit ' + cliBad.status + (badListed ? ' with the valid tag list' : ' (no list on stderr)'));
 
   // 2) every remaining default tag resolves through the table.
   for (const tag of ['sad', 'angry', 'surprised', 'confused', 'love']) {
@@ -303,12 +356,19 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
     record(tag + ' -> ' + TAGS[tag], true, 'exprN ' + before + ' -> ' + st.exprN);
   }
 
+  sampleRss();
   // 3) unknown tag -> neutral reset.
   let before = (await cmdState()).exprN;
   tagFrame('banana');
   st = await waitState(
     (s) => s.last === 'expression: reset' && s.exprN > before, 8000, 'unknown tag');
   record('unknown tag -> neutral reset', true, 'exprN ' + before + ' -> ' + st.exprN);
+  // 3b) a frame without a tag or name behaves like an unknown tag.
+  before = (await cmdState()).exprN;
+  probeWs.send(JSON.stringify({ type: 'expression' }));
+  st = await waitState(
+    (s) => s.last === 'expression: reset' && s.exprN > before, 8000, 'tagless frame');
+  record('a tagless expression frame resets', true, 'exprN ' + before + ' -> ' + st.exprN);
 
   // 4) the neutral tag resets too.
   tagFrame('happy');
@@ -326,8 +386,11 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   tagFrame('happy'); // immediately: must be skipped
   await sleep(COOLDOWN_MS / 2);
   st = await cmdState();
-  record('same tag inside the cooldown is skipped', st.exprN === before + 1,
-    'exprN=' + st.exprN + ' (expected ' + (before + 1) + ')');
+  const cooldownLogged = driverLog.indexOf('within the cooldown, skipped') !== -1;
+  record('same tag inside the cooldown is skipped',
+    st.exprN === before + 1 && cooldownLogged,
+    'exprN=' + st.exprN + ' (expected ' + (before + 1) + ')' +
+    (cooldownLogged ? ', the driver logged the skip' : ', NO skip log'));
   await sleep(COOLDOWN_MS + 300);
   tagFrame('happy');
   st = await waitState((s) => s.exprN > before + 1, 8000, 'happy after the cooldown');
@@ -339,6 +402,12 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   st = await waitState(
     (s) => s.last === 'expression: 脸红' && s.exprN > before, 8000, 'name passthrough');
   record('M3.1 name passthrough still works', true, 'exprN ' + before + ' -> ' + st.exprN);
+  // 6b) a name passthrough also arms the idle deadline.
+  before = (await cmdState()).exprN;
+  st = await waitState(
+    (s) => s.last === 'expression: reset' && s.exprN > before, 15000,
+    'name passthrough idle reset');
+  record('a name passthrough also idle-resets', true, 'exprN ' + before + ' -> ' + st.exprN);
 
   // 7) a real mode flip resets the face.
   tagFrame('love');
@@ -362,11 +431,14 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   record('idle returns the face to neutral', true,
     'exprN ' + before + ' -> ' + st.exprN + ' after ~' + (IDLE_MS / 1000) + ' s');
 
-  // 9) RSS (every steady-state sample) + shutdown.
-  const serverRss = rssKb(server.pid);
-  const driverRss = rssKb(driver.pid);
-  record('server RSS <= 60 MB', serverRss > 0 && serverRss <= 60 * 1024, serverRss + ' KB');
-  record('driver RSS <= 30 MB', driverRss > 0 && driverRss <= 30 * 1024, driverRss + ' KB');
+  // 9) RSS: every sample must fit (unknown/0 is a failure).
+  sampleRss();
+  record('server RSS <= 60 MB (every sample)',
+    serverSamples.every((v) => v > 0 && v <= 60 * 1024),
+    'samples ' + serverSamples.join(', ') + ' KB');
+  record('driver RSS <= 30 MB (every sample)',
+    driverSamples.every((v) => v > 0 && v <= 30 * 1024),
+    'samples ' + driverSamples.join(', ') + ' KB');
 
   probeWs.close();
   chrome.close();

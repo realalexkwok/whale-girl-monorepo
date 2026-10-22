@@ -87,7 +87,8 @@ whale-girl-server/scripts/whale_cmd.py (run it with the venv python):
 WHALE_MODE=mock|live sets the boot mode (default mock). In live mode the mock
 talk bursts and canned phrases pause while the idle blink/gaze/sway keep going;
 the mouth priority is say > motion-frame mouth > mock envelope (commanded
-motions never pause the mock). `express <tag>` routes a coarse emotion tag
+motions never pause the mock; expressions drive the face and coexist with
+speech). `express <tag>` routes a coarse emotion tag
 (happy/sad/angry/surprised/confused/love/neutral) through expr_tags.py to a
 preset; same-tag repeats inside the cooldown are skipped and the face returns to
 neutral after the idle window. Motion names are validated
@@ -129,7 +130,8 @@ driver-side and not shown; during a say the line shows the current word).
   server never parses frames):
 
       {"type":"motion","group":"Hammer","index":0}
-      {"type":"expression","name":"爱心眼"}
+      {"type":"expression","name":"爱心眼"}            (name:"" = reset the face)
+      {"type":"expression","tag":"happy","text":"..."}  (M3.2: the driver resolves it)
       {"type":"say","text":"..."}
       {"type":"pose","p":{"ParamEyeBallX":0.8}}     ({} clears the overlay)
       {"type":"mode","mock":true|false}
@@ -169,9 +171,10 @@ driver-side and not shown; during a say the line shows the current word).
   three scripts locally (future milestone).
 - Python 3.9 note: websockets resolves to 15.x (16+ needs Python 3.10+,
   17+ needs 3.11+). Newer Python recommended long-term: brew install python@3.12.
-- Whale silent but moving: check the driver log for "say:" lines; if the page
-  shows a "click to enable audio" pill, click it once (OBS Interact).
-  WHALE_ENGINE=say forces the macOS fallback engine.
+- Whale silent but moving: check the driver log for "say:" lines; any click on
+  the page arms the audio (the "click to enable audio" pill, bottom-right, is the
+  fallback — click it once, in OBS via Interact). WHALE_ENGINE=say forces the
+  macOS fallback engine.
 - Page shows `ws disconnected (1008)`: the page's host does not match the
   WebSocket host (origin guard). Serve the page and the WS from the same
   hostname (localhost and 127.0.0.1 are both accepted), or point `?ws=` at the

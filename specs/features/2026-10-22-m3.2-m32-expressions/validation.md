@@ -1,9 +1,9 @@
 # M3.2 — LLM-Driven Expressions: Emotion Tag -> Preset Routing — Validation
 
-> Status: IMPLEMENTED on feature/whale-girl-m32-expressions — **automatic half
-> PASS (2026-10-22, expr_probe 18/18 + the M3.1/M2.2 regressions)**; the manual
-> half is owed by the owner at the close. Roadmap tick + history archive happen
-> only on the owner's close instruction.
+> Status: IMPLEMENTED on feature/whale-girl-m32-expressions (review round 1
+> fixes applied) — automatic half re-run results below; the manual half is owed
+> by the owner at the close. Roadmap tick + history archive happen only on the
+> owner's close instruction.
 
 ## Automatic verification results (measured 2026-10-22, macOS)
 All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-server.
@@ -53,17 +53,23 @@ passes).
 1. Terminal 1 — `cd whale-girl-server && npm start`.
 2. Terminal 2 — `cd whale-girl-server && .venv/bin/python control_whale.py`.
 3. Browser — `http://localhost:3000/?debug=1`; the whale idles.
-4. From a DSH session, send emotional lines with the new tool:
-   `whale-girl-server/.venv/bin/python whale-girl-server/scripts/whale_cmd.py express happy 我今天特别开心`
+4. Still in whale-girl-server, from a DSH session send emotional lines:
+   `.venv/bin/python scripts/whale_cmd.py express happy 我今天特别开心`
    — the face shows 开心兴奋; ?debug=1 shows `expression: 开心兴奋`.
    Repeat with sad (悲伤), angry (生气), surprised (感叹号), confused (问号),
-   love (爱心眼); an unknown tag (`express banana`) shows neutral and the CLI
-   lists the valid tags.
+   love (爱心眼). An unknown tag (`express banana`) is rejected by the CLI
+   (exit 2, the valid tags on stderr) and the face keeps its expression — the
+   driver's neutral fallback applies only to raw wire frames (covered by
+   expr_probe).
 5. Rapid repeats: two `express happy` calls within ~4 s show the face once
    (the cooldown); after ~30 s without commands the face returns to neutral.
-6. OBS — the Browser source shows the same expressions; ?debug=1 reports
+6. Audio (the in-pass fix): reload the page, click anywhere on it once, then
+   `.venv/bin/python scripts/whale_cmd.py say 你好，我是鲸鱼娘` — the line
+   plays without the pill; the pill (bottom-right) is only the fallback when the
+   browser blocks audio and no gesture is possible (OBS).
+7. OBS — the Browser source shows the same expressions; ?debug=1 reports
    `ws connected` (not 1008).
-7. Report any failure with the exact command, the ?debug=1 line and the console
+8. Report any failure with the exact command, the ?debug=1 line and the console
    output.
 
 ## Handoff to dependant milestones

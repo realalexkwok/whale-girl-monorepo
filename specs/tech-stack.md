@@ -113,7 +113,11 @@
   (the frontend calls resetExpression). Same-tag repeats inside
   WHALE_EXPR_COOLDOWN (default 4 s) are skipped; a tag change applies at once;
   no express command for WHALE_EXPR_IDLE (default 30 s) or a real mode flip
-  resets the face. Unknown tags fall back to neutral with a 1 Hz log.
+  resets the face. The CLI validates the tag first (exit 2 + the list, nothing
+  sent); a raw unknown tag reaching the driver falls back to neutral with a 1 Hz
+  log. Set WHALE_EXPR_TAGS in BOTH the driver and the CLI environment — they
+  load it independently. Expressions drive the face (ParamMouthForm) and
+  coexist with speech; they do not change the mouth ladder.
 - Relay hardening: the command relay is capped at 100 commands per fixed 1 s
   window (up to ~200 can pass across a boundary) and drops when the python
   writer's buffer exceeds 256 KB; with no python writer connected the

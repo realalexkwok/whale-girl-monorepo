@@ -55,10 +55,20 @@ SAY_HOLD_UNTIL = 0.0
 # noise cannot flicker the face. With no express command for EXPR_IDLE seconds
 # the face returns to neutral (an empty-name expression frame = reset).
 def _env_seconds(name, default):
-    try:
-        return max(0.0, float(os.environ.get(name, "") or default))
-    except ValueError:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
         return default
+    try:
+        value = float(raw)
+    except ValueError:
+        print("[whale-girl] %s=%r is not a number; using %.1f"
+              % (name, raw, default), flush=True)
+        return default
+    if not math.isfinite(value) or value < 0:
+        print("[whale-girl] %s=%r is invalid; using %.1f"
+              % (name, raw, default), flush=True)
+        return default
+    return value
 
 
 EXPR_TAGS = load_tags()
@@ -526,12 +536,18 @@ async def run_driver(ws):
                     return
                 now = time.monotonic()
                 preset = EXPR_TAGS.get(tag)
+                if preset is not None and len(preset) > MAX_CMD_NAME:
+                    log_bad_cmd("expression preset too long (%d chars) for %r"
+                                % (len(preset), tag[:32]))
+                    preset = None
                 if preset is None:
                     log_bad_cmd("unknown expression tag %r (valid: %s)"
                                 % (tag[:32], ", ".join(sorted(EXPR_TAGS))))
                     tag = "neutral"
                     preset = EXPR_NEUTRAL
                 elif tag == expr_tag and now - expr_at < EXPR_COOLDOWN:
+                    # A repeat still counts as activity: keep the face alive.
+                    expr_deadline = now + EXPR_IDLE
                     log_notice("express %r within the cooldown, skipped"
                                % (tag,))
                     return
@@ -547,10 +563,19 @@ async def run_driver(ws):
                 return
             name = event.get("name")
             if not isinstance(name, str) or not name:
+                # Neither a tag nor a name: behave like an unknown tag.
+                log_bad_cmd("expression frame without a tag or name "
+                            "(valid tags: %s)"
+                            % ", ".join(sorted(EXPR_TAGS)))
+                expr_tag = "neutral"
+                expr_at = time.monotonic()
+                expr_deadline = expr_at + EXPR_IDLE
+                await forward({"type": "expression", "name": EXPR_NEUTRAL})
                 return
             if len(name) > MAX_CMD_NAME:
                 log_bad_cmd("expression name too long (%d chars)" % len(name))
                 return
+            expr_deadline = time.monotonic() + EXPR_IDLE
             await forward({"type": "expression", "name": name})
         elif kind == "say":
             text = event.get("text")
