@@ -37,7 +37,16 @@
    mode frames.
 3. Validation — **cmd_probe.js + full gate** (automatic) + the owner's
    manual pass from a real DSH session in OBS.
-4. Fix round 2026-10-21 (owner answer "A"): a mock (canned) line must never
+4. Hardening recorded after review rounds 2–4 (2026-10-22): the command relay
+   is rate-capped (100/s) and drops when the python buffer is full; with no
+   python writer the server closes the sender with 4002 (the CLI exits 1); the
+   web socket has a best-effort same-origin guard (1008, loopback aliases
+   treated as one host); pose ids must match [A-Za-z0-9_]{1,64} and a pose is
+   rejected when its escaped frame would exceed the 8 KB cap; motion group /
+   expression name ≤ 128 chars and index ≤ 9999; the CLI mirrors those caps and
+   reports close codes; the RSS gate measures steady-state samples (the boot
+   transient is recorded, not gated).
+5. Fix round 2026-10-21 (owner answer "A"): a mock (canned) line must never
    interrupt a playing line — say frames gain an additive
    "src":"mock"|"cmd" field, the driver suppresses canned triggers until a
    line ends and queues one commanded say behind an in-flight synthesis, and

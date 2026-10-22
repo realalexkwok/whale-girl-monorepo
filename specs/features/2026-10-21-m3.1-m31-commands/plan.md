@@ -103,9 +103,9 @@
 ## Memory & quality gates
 - No new dependencies (CLI: the venv's websockets; probe: the pinned ws).
 - Budgets server ≤ 60 MB / driver ≤ 30 MB RSS; commands are event-driven,
-  so the driver's per-frame cost is unchanged; the pose overlay mutates a
-  pre-allocated dict in synth(); no per-frame logging; node --check on the
-  inline script; CDN pins untouched.
+  so the driver's per-frame cost is unchanged; the pose overlay is written once
+  by set_pose() and the loop only re-applies the synth-overlap keys; no
+  per-frame logging; node --check on the inline script; CDN pins untouched.
 - The say frame schema must stay compatible (additive src only): say_probe.js
   is re-run as a regression, not modified.
 
@@ -126,6 +126,24 @@
   rejection, live flip silence, page-after-driver mode, CLI paths, every-sample
   RSS), say_probe 12/12, ws_probe 30.0 fps, role probe 1008, curl 200,
   node --check 33,463 B, ports released.
+
+## Implementation notes (2026-10-22, review rounds 2–4)
+- Relay hardening: the server tags commands ({"relay":...}), caps them at
+  100/s, drops when the python writer's buffer is full and closes the sender
+  with 4002 when no writer is connected (the CLI maps that to exit 1).
+- Origin guard: best-effort same-origin check (1008) with loopback aliases
+  treated as one host; nginx must pass the page Host for the Ubuntu split.
+- Pose surface: ids must match [A-Za-z0-9_]{1,64} (ASCII keeps json escaping
+  bounded), ≤ 32 keys, finite values; the driver rejects a pose whose escaped
+  motion frame would exceed the 8 KB proxy cap; set_pose() writes the values
+  once and the 30 FPS loop only re-applies the synth-overlap keys.
+- Say ownership: an in-flight mock is dropped when the mode goes live, and the
+  frontend's decode-time guard stops a mock that was decoding during the flip.
+- CLI: mirrors the caps (say ≤ 300 chars, pose grammar/count, group ≤ 128,
+  index ≤ 9999), reports close codes, and exits 2 on validation errors.
+- Probe: 46 checks including the CLI paths, the 4002/1008 paths, malformed
+  frames (invalid JSON, non-object, oversize multibyte), the decode-time race,
+  and every-sample steady-state RSS (the boot transient is recorded only).
 
 ## Validation plan
 - Automatic: cmd_probe.js per-frame-type assertions, say byte-compat,

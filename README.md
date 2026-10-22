@@ -65,9 +65,9 @@ a say frame; the browser plays it via Web Audio (OBS captures it) and animates
 the mouth from the words, while the mock talk envelope remains the no-audio
 fallback. In mock mode a random canned Chinese phrase is spoken at each talk
 burst; in live mode a DSH session supplies the text (see Commands below). A
-line plays to its end: canned mock lines never interrupt a playing line, while
-an explicit command say still does (latest-wins). See specs/dev-environment.md
-for the env knobs and the say probe.
+line plays to its end: the mock never interrupts it, while a newer command line
+replaces it (latest-wins). See specs/dev-environment.md for the env knobs and
+the say probe.
 
 ## Commands (M3.1 DSH interaction)
 
@@ -129,9 +129,9 @@ driver-side and not shown; during a say the line shows the current word).
       {"type":"mode","mock":true|false}
 
   The driver executes say (TTS), pose (driver-side overlay, max 32 keys with
-  ids ≤ 64 chars; values arrive inside normal motion frames), mode (mock/live
-  flag) and forwards motion/expression to the browser, which runs them on the
-  M2.1 hooks. A mode frame is sent on connect/reconnect and on real flips; the
+  ids matching [A-Za-z0-9_]{1,64}; values arrive inside normal motion frames),
+  mode (mock/live flag) and forwards motion/expression to the browser, which
+  runs them on the M2.1 hooks. A mode frame is sent on connect/reconnect and on real flips; the
   frontend resets the pose only when the mode actually changes. A pose {} also
   restores the dropped parameters to their defaults in the model.
 
@@ -145,7 +145,7 @@ driver-side and not shown; during a say the line shows the current word).
   (see specs/dev-environment.md).
 - WHALE_MODE=mock|live (default mock): commands work in both modes, live only
   pauses the mock talk bursts/canned speech; a mode command flips it at runtime.
-  WHALE_CMD_WS overrides the CLI endpoint (WS_PORT is not 3001).
+  WHALE_CMD_WS overrides the CLI endpoint (needed when WS_PORT is not 3001).
 
 ## Troubleshooting
 

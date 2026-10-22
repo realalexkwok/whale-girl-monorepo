@@ -45,7 +45,9 @@ MANIFEST = os.environ.get("WHALE_MODEL_MANIFEST", DEFAULT_MANIFEST)
 MAX_FRAME_BYTES = 8 * 1024   # the server's soft cap for relayed frames
 MAX_POSE_KEYS = 32           # keep the 30 FPS frame well under that cap
 MAX_SAY_CHARS = 300          # longest say line the driver accepts
-POSE_ID_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")  # Live2D parameter-id grammar
+POSE_ID_RE = re.compile(r"[A-Za-z0-9_]{1,64}")  # Live2D parameter-id grammar
+MAX_CMD_NAME = 128     # motion group / expression name cap (mirrors the driver)
+MAX_MOTION_INDEX = 9999  # driver-side motion index cap
 
 
 def motion_groups(path):
@@ -126,7 +128,7 @@ def build_parser():
 def check_pose(overrides):
     """Return an error message for a bad pose object, else None."""
     for key, value in overrides.items():
-        if not isinstance(key, str) or not POSE_ID_RE.match(key):
+        if not isinstance(key, str) or not POSE_ID_RE.fullmatch(key):
             return ("pose keys must be Live2D parameter ids "
                     "([A-Za-z0-9_]{1,64}); got %r" % (str(key)[:32],))
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -150,6 +152,11 @@ def main(argv):
     groups = None
 
     if args.cmd == "motion":
+        if len(args.group) > MAX_CMD_NAME:
+            return fail("motion group is %d chars; at most %d are accepted"
+                        % (len(args.group), MAX_CMD_NAME))
+        if args.index is not None and args.index > MAX_MOTION_INDEX:
+            return fail("motion index must be <= %d" % MAX_MOTION_INDEX)
         try:
             groups = motion_groups(MANIFEST)
         except (OSError, ValueError, TypeError) as exc:
@@ -193,7 +200,7 @@ def main(argv):
     elif args.cmd == "pose":
         try:
             overrides = json.loads(args.p)
-        except ValueError as exc:
+        except (ValueError, RecursionError) as exc:
             return fail(
                 "pose expects a JSON object, e.g. "
                 "'{\"ParamEyeLOpen\":0,\"ParamEyeROpen\":0}' (%s)" % exc

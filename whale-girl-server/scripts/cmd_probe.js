@@ -278,6 +278,8 @@ async function cmdState(chrome) {
   if (await portOpen(WS_PORT)) throw new Error('port ' + WS_PORT + ' already in use — stop the running server first');
 
   const server = await startServer();
+  record('server boot RSS (informational)', rssKb(server.pid) > 0,
+    rssKb(server.pid) + ' KB right after spawn — the steady-state gate starts after the settle');
 
   // The server must refuse commands with no brain and reject foreign origins.
   const noBrainCode = await new Promise((resolve) => {
@@ -323,6 +325,7 @@ async function cmdState(chrome) {
   }
 
   // 1) WHALE_MODE=live boot: the mock talk bursts stay silent.
+  await waitFor(() => motionCount > 0, 5000, 'driver streaming before the silence check');
   await sleep(SILENCE_MS);
   record('live boot: mock speech paused', sayFrames.length === 0,
     sayFrames.length + ' say frames in ' + (SILENCE_MS / 1000) + ' s (expected 0)');
@@ -367,6 +370,19 @@ async function cmdState(chrome) {
   const cliManyPose = spawnSync(PYTHON, [CLI, 'pose', JSON.stringify(manyKeysCli)],
     { cwd: ROOT, timeout: 15000, env: cliEnv() });
   record('CLI rejects an oversized pose', cliManyPose.status === 2, 'exit ' + cliManyPose.status);
+  // 'mode live' is idempotent here (the driver boots live), so this CLI call
+  // must not flip the driver before the mode tests below.
+  const cliMode = spawnSync(PYTHON, [CLI, 'mode', 'live'],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  record('CLI mode exits 0', cliMode.status === 0, 'exit ' + cliMode.status);
+  const cliWrongRole = spawnSync(PYTHON, [CLI, 'mode', 'mock'], {
+    cwd: ROOT, timeout: 15000,
+    env: Object.assign({}, process.env, {
+      WHALE_CMD_WS: 'ws://localhost:' + WS_PORT + '?role=cmd',
+    }),
+  });
+  record('CLI reports a rejected role (1008)', cliWrongRole.status === 1,
+    'exit ' + cliWrongRole.status);
 
   // 3) expression on the same transport.
   probeWs.send(JSON.stringify({ type: 'expression', name: EXPRESSION }));
@@ -403,8 +419,8 @@ async function cmdState(chrome) {
     'var i=c.getParameterIndex("ParamBrowLY"); if (i < 0) return null;' +
     'return {v:c.getParameterValueById("ParamBrowLY"), d:c.getParameterDefaultValue(i)};})()'
   );
-  record('pose {} restores the model default', brow === null || Math.abs(brow.v - brow.d) < 0.25,
-    brow === null ? 'n/a — ParamBrowLY is not in this model' :
+  record('pose {} restores the model default', !!brow && Math.abs(brow.v - brow.d) < 0.05,
+    brow === null ? 'FAIL — ParamBrowLY is not in this model' :
       'ParamBrowLY=' + brow.v + ' (default ' + brow.d + ')');
   // A new pose replaces the overlay: keys it omits disappear from the frames.
   probeWs.send(JSON.stringify({ type: 'pose', p: { ParamBrowLY: 0.5, ParamBrowRY: 0.25 } }));
@@ -555,11 +571,15 @@ async function cmdState(chrome) {
   const unicodeKeys = {};
   for (let i = 0; i < 32; i++) unicodeKeys['参数' + i] = 1;  // CJK ids: 6x escaped
   const badFrames = [
+    'not json at all',                                              // invalid JSON
+    '[]',                                                           // non-object
+    'null',                                                         // non-object
     '{"type":"pose","p":{"ParamBrowLY":1e999}}',                    // non-finite
     '{"type":"pose","p":{"ParamBrowLY":' + '9'.repeat(400) + '}}',  // int overflow
     '{"type":"pose","p":{"' + bigKey + '":1}}',                     // key too long
     '{"type":"pose","p":' + JSON.stringify(manyKeys) + '}',         // too many keys
     '{"type":"pose","p":' + JSON.stringify(unicodeKeys) + '}',      // non-ASCII ids
+    '{"type":"motion","group":"' + '語'.repeat(5000) + '"}',        // > 8 KB UTF-8: relay cap
     '{"type":"web_connected","count":0}',                           // spoofed event
     '{"type":"motion","group":' + '['.repeat(1500) + ']'.repeat(1500) + '}'  // deep nesting
   ];
@@ -581,9 +601,10 @@ async function cmdState(chrome) {
   await sleep(400);
   const mcAfter = motionCount;
   record('malformed frames are ignored safely', mcAfter - mcBefore > 10,
-    badFrames.length + ' bad frames (non-finite, huge int, long key, 33 keys, ' +
-    'spoofed web_connected, deep nesting); the expression applied and the motion ' +
-    'stream kept flowing (' + (mcAfter - mcBefore) + ' frames)');
+    badFrames.length + ' bad frames (invalid JSON, non-object, non-finite, huge int, ' +
+    'long key, 33 keys, CJK keys, >8 KB multibyte, spoofed web_connected, deep ' +
+    'nesting); the expression applied and the motion stream kept flowing (' +
+    (mcAfter - mcBefore) + ' frames)');
   sampleRss();
 
   // 9) a live flip during mock activity silences the canned lines at once.
@@ -619,8 +640,25 @@ async function cmdState(chrome) {
   record('live stays silent after the flip',
     !!stayedOff && stayedOff.active === false,
     'active=' + (stayedOff && stayedOff.active));
-  await sleep(SILENCE_MS - 2000);
-  const leaked = sayFrames.length - liveFlipBase;
+
+  // Decode-time race: a mock say still decoding when the flip lands must not start.
+  const raceMockBase = modeFrames.length;
+  probeWs.send(JSON.stringify({ type: 'mode', mock: true }));
+  await waitModeAfter(true, raceMockBase, 5000);
+  await sleep(300);
+  await chrome.evaluate('window.whaleSpeech.testSay(' + JSON.stringify({
+    type: 'say', audio: canned3.audio, words: canned3.words || [], src: 'mock',
+  }) + ')');
+  const raceLiveBase = modeFrames.length;
+  probeWs.send(JSON.stringify({ type: 'mode', mock: false }));
+  await waitModeAfter(false, raceLiveBase, 5000);
+  await sleep(1200);
+  const raceState = await chrome.evaluate('window.whaleSpeech.state()');
+  record('a mock say decoding during the live flip does not start',
+    !!raceState && raceState.active === false, 'active=' + (raceState && raceState.active));
+  const silenceBase = sayFrames.length;
+  await sleep(SILENCE_MS);
+  const leaked = sayFrames.length - silenceBase;
   record('live flip silences canned speech', leaked === 0,
     leaked + ' say frames in ' + (SILENCE_MS / 1000) + ' s after the flip');
 

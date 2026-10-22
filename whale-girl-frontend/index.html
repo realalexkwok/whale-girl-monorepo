@@ -130,7 +130,7 @@
       // restore its default so a cleared pose really leaves the model too.
       // Allocation-free: one shared callback, a Map forEach and no objects.
       function resetGoneParam(value, id) {
-        if (!frameP || (id in frameP)) return;
+        if (!frameP || Object.prototype.hasOwnProperty.call(frameP, id)) return;
         if (id === 'ParamMouthOpenY' && sayActive) return;
         lastParams.delete(id);
         if (!frameCore

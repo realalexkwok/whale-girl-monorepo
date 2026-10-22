@@ -94,10 +94,12 @@
   can stop the 30 FPS stream by spoofing the count. Malformed frames
   (non-finite numbers, huge ints, deep nesting, oversized poses) are rejected
   with a rate-limited log and never kill the command reader.
-- Pose: max 32 keys, key ids ≤ 64 chars, finite numbers only; a new pose
-  replaces the overlay and every key the overlay no longer sets is deleted from
-  the frame dict (no stale parameters, no unbounded frame growth). {} clears;
-  the frontend restores dropped keys to their default values.
+- Pose: max 32 keys, key ids must match [A-Za-z0-9_]{1,64} (ASCII keeps the
+  json escaping bounded), finite numbers only; a pose whose escaped motion frame
+  would exceed the 8 KB cap is rejected; a new pose replaces the overlay and
+  every key the overlay no longer sets is deleted from the frame dict (no stale
+  parameters, no unbounded frame growth). {} clears; the frontend restores
+  dropped keys to their default values.
 - Say: text ≤ 300 chars; the serialized say frame is size-checked (8 KB) before
   send, so an oversized line is logged and dropped instead of silently lost.
 - Mode: a mode frame is emitted on driver connect and on every web_connected
@@ -126,8 +128,8 @@
 - Env knobs: PORT, WS_PORT, WHALE_WS (python endpoint), WHALE_DEBUG=1 (per-frame
   driver logs, off by default), WHALE_MODE=mock|live (default mock),
   WHALE_CMD_WS (CLI endpoint), WHALE_MODEL_MANIFEST (CLI motion-name validation),
-  ?ws=ws://host:port (frontend endpoint override — the only change needed for
-  the Ubuntu split).
+  ?ws=ws://host:port (frontend endpoint override — for the Ubuntu split the nginx
+  proxy must also pass the page Host, see dev-environment.md).
 - See dev-environment.md for the full runbook and the deployment patterns (M4.2).
 
 ## Testing & verification (two-sided)
