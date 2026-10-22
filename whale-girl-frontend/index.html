@@ -187,8 +187,8 @@
         return err;
       }
 
-      // Playback hooks: frontend API only for now; M3.1 will call these from
-      // protocol commands instead of adding a second animation path.
+      // Playback hooks: the v1 command surface (M3.1) calls these from
+      // protocol commands; they are also available from the console.
       // pixi-live2d-display 0.4.0 exposes expressions through
       // internalModel.motionManager.expressionManager (not internalModel).
       function installHooks(m) {
@@ -547,7 +547,7 @@
         return amp;
       }
 
-      function handleSay(msg) {
+      function handleSay(msg, delayMs) {
         var url = msg && msg.audio;
         if (typeof url !== 'string') return;
         // M3.1: a mock (canned) line never interrupts a playing line and is
@@ -562,15 +562,19 @@
         try {
           ctx = ensureAudio();
         } catch (err) {
+          pendingCmdSay = false;
           sayAsyncError('audio unavailable: ' + (err && err.message ? err.message : err));
           return;
         }
-        fetch(url).then(function (res) {
-          if (!res.ok) throw new Error('audio HTTP ' + res.status);
-          return res.arrayBuffer();
-        }).then(function (buf) {
-          return ctx.decodeAudioData(buf);
-        }).then(function (buffer) {
+        // The fetch/decode chain is a function so the probe can delay it and
+        // prove the decode-time guard (delayMs is test-only; frames never pass it).
+        var play = function () {
+          fetch(url).then(function (res) {
+            if (!res.ok) throw new Error('audio HTTP ' + res.status);
+            return res.arrayBuffer();
+          }).then(function (buf) {
+            return ctx.decodeAudioData(buf);
+          }).then(function (buffer) {
           // Latest-wins guard: a newer say arrived while this one decoded, so
           // drop this (now stale) buffer instead of replacing the new say.
           if (gen !== sayGen) return;
@@ -614,10 +618,16 @@
             showPill();
             if (DEBUG) setStatus(statusLine('audio: suspended — click the pill to enable'));
           }
-        }).catch(function (err) {
-          if (gen === sayGen) pendingCmdSay = false;
-          sayAsyncError('decode failed: ' + (err && err.message ? err.message : err));
-        });
+          }).catch(function (err) {
+            if (gen === sayGen) pendingCmdSay = false;
+            sayAsyncError('decode failed: ' + (err && err.message ? err.message : err));
+          });
+        };
+        if (delayMs > 0) {
+          setTimeout(play, delayMs);
+        } else {
+          play();
+        }
       }
 
       // Called once per motion frame while a say is active: word envelope (or
@@ -666,7 +676,7 @@
       // Console hooks (same style as window.whaleModel). testSay injects a
       // say frame locally so the probe can assert the mock-ignore rule.
       window.whaleSpeech = {
-        testSay: function (msg) { handleSay(msg); },
+        testSay: function (msg, delayMs) { handleSay(msg, delayMs); },
         state: function () {
           return {
             active: !!sayActive,
@@ -783,6 +793,7 @@
       }
 
       function runModeCommand(msg) {
+        if (typeof msg.mock !== 'boolean') return; // never guess a mode
         var next = msg.mock ? 'mock' : 'live';
         // A repeated mode (e.g. an idempotent 'mode live' from an AI) must not
         // wipe a held pose; only a real switch resets the model.

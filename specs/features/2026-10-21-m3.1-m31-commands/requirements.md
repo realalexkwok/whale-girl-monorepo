@@ -112,4 +112,4 @@
   `whale_cmd.py pose '{"ParamEyeLOpen":0,"ParamEyeROpen":0}'`,
   `whale_cmd.py mode live`
   (mock talking stops), `whale_cmd.py mode mock` (resumes); ?debug=1 shows
-  the last command + mode; OBS reflects every step.
+  the mode and the last motion/expression/mode command; OBS reflects every step.

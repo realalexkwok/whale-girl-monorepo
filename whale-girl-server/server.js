@@ -82,12 +82,15 @@ let cmdWindowCount = 0;
 
 function relayCommandToPython(ws, data, isBinary) {
   if (isBinary) { framesDropped++; return; }
-  const text = data.toString();
-  if (Buffer.byteLength(text, 'utf8') > MAX_FRAME_BYTES) { framesDropped++; return; }
+  // Count every web text frame in the flood window and reject oversized ones
+  // BEFORE decoding them: Buffer#length is the byte count, so no string is
+  // materialised for a frame that will be dropped.
   const now = performance.now(); // monotonic: a wall-clock step cannot stall the limiter
   if (now - cmdWindowStart >= 1000) { cmdWindowStart = now; cmdWindowCount = 0; }
-  if (++cmdWindowCount > MAX_CMDS_PER_SEC) { framesDropped++; return; } // hello floods count too
-  if (text.trim() === '{"type":"hello"}') return; // page handshake: web-only, not a command
+  if (++cmdWindowCount > MAX_CMDS_PER_SEC) { framesDropped++; return; }
+  if (data.length > MAX_FRAME_BYTES) { framesDropped++; return; }
+  const text = data.toString();
+  if (text === '{"type":"hello"}') return; // page handshake: web-only, not a command
   if (!pythonClient || pythonClient.readyState !== WebSocket.OPEN) {
     framesDropped++;
     // Tell the sender instead of pretending the command was delivered.

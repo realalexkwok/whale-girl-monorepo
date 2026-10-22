@@ -356,7 +356,8 @@ async function cmdState(chrome) {
   }, 8000, 'frontend applied motion ' + MOTION);
   record('motion applied on the frontend', true,
     'cmdState.last="motion: ' + MOTION + '", ok=true (after the hook resolved)');
-  const cliBad = spawnSync(PYTHON, [CLI, 'motion', 'Nope'], { cwd: ROOT, timeout: 15000 });
+  const cliBad = spawnSync(PYTHON, [CLI, 'motion', 'Nope'],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
   record('CLI rejects an unknown motion group', cliBad.status === 2,
     'exit ' + cliBad.status);
   const cliBadIndex = spawnSync(PYTHON, [CLI, 'motion', MOTION, '999'],
@@ -536,6 +537,24 @@ async function cmdState(chrome) {
     (pageSay && pageSay.duration ? pageSay.duration.toFixed(2) : '?') + ' s');
   sampleRss(); // audio active
 
+  // Two commanded lines in quick succession: the second is queued behind the
+  // in-flight synthesis (one slot) and both eventually send, in order.
+  const queueBase = sayFrames.length;
+  probeWs.send(JSON.stringify({ type: 'say', text: sayText }));
+  probeWs.send(JSON.stringify({ type: 'say', text: '第二句测试' }));
+  await waitFor(() => sayFrames.slice(queueBase).filter((m) => m.src === 'cmd').length >= 2,
+    90000, 'two commanded say frames');
+  const queued = sayFrames.slice(queueBase).filter((m) => m.src === 'cmd');
+  record('two rapid commands both send (one-slot queue)',
+    queued[0].audio !== queued[1].audio,
+    'audio ' + queued[0].audio + ' then ' + queued[1].audio);
+  await waitFor(async () => {
+    const say = await chrome.evaluate('window.whaleSpeech.probeStats().say');
+    return !!say && say.audio === queued[1].audio;
+  }, 30000, 'the second commanded line plays');
+  record('the queued command plays last (latest)', true,
+    'page plays ' + queued[1].audio);
+
   // 7) mock mode must never cut a commanded line (M3.1 fix: src + hold).
   const modeMockBase2 = modeFrames.length;
   probeWs.send(JSON.stringify({ type: 'mode', mock: true }));
@@ -574,11 +593,11 @@ async function cmdState(chrome) {
   record('driver hold suppresses mock lines during the command',
     midMockFrames === 0, midMockFrames + ' mock frames after the commanded frame');
   // The frontend rule: a mock say must not replace a playing commanded line.
+  const startsBeforeInject = (await chrome.evaluate('window.whaleSpeech.state()')).starts;
   await chrome.evaluate('window.whaleSpeech.testSay(' + JSON.stringify({
     type: 'say', audio: canned2.audio, words: canned2.words || [], src: 'mock',
   }) + ')');
   await sleep(400);
-  const startsBeforeInject = (await chrome.evaluate('window.whaleSpeech.state()')).starts;
   const afterInject = await chrome.evaluate('window.whaleSpeech.state()');
   const afterInjectSay = await chrome.evaluate('window.whaleSpeech.probeStats().say');
   record('frontend ignores a mock say while a line plays',
@@ -625,8 +644,9 @@ async function cmdState(chrome) {
     && !('ParamP0' in lastP) && !('参数0' in lastP);
   record('bad pose frames are rejected', badKeysAbsent,
     'non-finite / 400-digit / long-key / 33-key / CJK-key poses left the frames clean');
-  record('motion frames stay under the 8 KB proxy cap',
-    maxMotionBytes > 0 && maxMotionBytes < 8192, 'max ' + maxMotionBytes + ' bytes');
+  record('observed motion frame stays under the 8 KB cap',
+    maxMotionBytes > 0 && maxMotionBytes < 8192,
+    'max observed ' + maxMotionBytes + ' bytes (the server drops larger frames first)');
   probeWs.send(JSON.stringify({ type: 'expression', name: EXPRESSION }));
   await waitFor(async () => {
     const st = await cmdState(chrome);
@@ -695,9 +715,11 @@ async function cmdState(chrome) {
   await waitModeAfter(true, raceMockBase, 5000);
   await sleep(300);
   const startsBeforeRace = (await chrome.evaluate('window.whaleSpeech.state()')).starts;
+  // A 600 ms decode delay makes the race deterministic: the flip always lands
+  // while the mock line is still "pending" (test-only parameter).
   await chrome.evaluate('window.whaleSpeech.testSay(' + JSON.stringify({
     type: 'say', audio: dshSay.audio, words: dshSay.words || [], src: 'mock',
-  }) + ')');
+  }) + ', 600)');
   const raceLiveBase = modeFrames.length;
   probeWs.send(JSON.stringify({ type: 'mode', mock: false }));
   await waitModeAfter(false, raceLiveBase, 5000);
@@ -756,7 +778,8 @@ async function cmdState(chrome) {
 
   // CLI with no driver: the server answers 4002 and the tool exits 1.
   driver.kill('SIGTERM');
-  await sleep(1000);
+  await waitFor(() => serverLogTail.indexOf('python disconnected') !== -1, 8000,
+    'the server sees the driver disconnect');
   const cliNoBrain = spawnSync(PYTHON, [CLI, 'motion', MOTION],
     { cwd: ROOT, timeout: 15000, env: cliEnv() });
   record('CLI exits 1 with no driver', cliNoBrain.status === 1,

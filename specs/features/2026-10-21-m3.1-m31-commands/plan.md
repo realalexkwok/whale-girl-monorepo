@@ -125,7 +125,7 @@
   cuts a commanded line, pose key clearing + replacement, malformed-frame
   rejection, live flip silence, page-after-driver mode, CLI paths, every-sample
   RSS), say_probe 12/12, ws_probe 30.0 fps, role probe 1008, curl 200,
-  node --check 33,981 B, ports released.
+  node --check 34,444 B, ports released.
 
 ## Implementation notes (2026-10-22, review rounds 2–4)
 - Relay hardening: the server tags commands ({"relay":...}), caps them at

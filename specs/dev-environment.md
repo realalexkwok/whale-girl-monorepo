@@ -60,8 +60,10 @@
       WHALE_ENGINE=say   force the fallback engine   (probe / manual test)
       WHALE_SAY_TEXT     speak this text once at startup, then keep the mock cadence
 
-- In mock mode the driver speaks a random canned Chinese phrase at each talk
-  burst; a DSH session supplies real text via whale_cmd.py say (M3.1). A say
+- In mock mode the driver speaks a random canned Chinese phrase at most once
+  per talk burst (the hold window and the in-flight drop may skip a burst, and
+  it never plays over a line); a DSH session supplies real text via
+  whale_cmd.py say (M3.1). A say
   frame wins over the mock mouth (priority rule); without a say the mock talk
   envelope animates as before.
 - Verify (each pass boots server + Chrome + driver itself — stop the running
@@ -98,7 +100,8 @@
 - Mock vs live: WHALE_MODE=mock (default) keeps the canned talk bursts; live
   pauses them and hands the mouth to explicit commands. Commands work in both
   modes; a mode command flips at runtime (an idempotent one does nothing) and a
-  real flip clears the pose overlay. ?debug=1 shows the last command + mode.
+  real flip clears the pose overlay. ?debug=1 shows the mode and the last
+  motion/expression/mode command (say and pose do not set it).
 - Limits: the CLI pre-checks its own frame at 8 KB (exit 2); the server drops
   web frames over 8 KB; the driver enforces semantic caps — say text ≤ 300
   chars, pose ≤ 32 keys with ids matching [A-Za-z0-9_]{1,64} and finite numbers,

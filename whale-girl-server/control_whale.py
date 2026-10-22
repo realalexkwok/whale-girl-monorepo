@@ -123,7 +123,8 @@ POSE_OVERLAP = []  # overlay keys synth() rewrites (re-applied after synth)
 POSE_LIMIT = 32    # max overlay entries per command
 MAX_SAY_CHARS = 300  # longest accepted say line (TTS + word timeline)
 MAX_FRAME_BYTES = 8 * 1024  # the proxy's soft cap for relayed frames
-BAD_CMD_AT = 0.0  # rate limit for rejected-frame logging
+BAD_CMD_AT = 0.0    # rate limit for rejected-frame logging
+NOTICE_AT = 0.0     # rate limit for say queue/busy notices
 
 
 def dump_json(obj):
@@ -138,6 +139,15 @@ def log_bad_cmd(detail):
     if now - BAD_CMD_AT >= 1.0:
         BAD_CMD_AT = now
         print("[whale-girl] bad command ignored: %s" % detail, flush=True)
+
+
+def log_notice(detail):
+    """Rate-limited (1 Hz) informational log for command handling."""
+    global NOTICE_AT
+    now = time.monotonic()
+    if now - NOTICE_AT >= 1.0:
+        NOTICE_AT = now
+        print("[whale-girl] %s" % detail, flush=True)
 
 
 def clear_pose():
@@ -625,9 +635,9 @@ async def run_driver(ws):
                 # An explicit command must not be lost while a synthesis runs
                 # (the mock's canned line is the usual in-flight one).
                 pending_say = (text, src)
-                print("[whale-girl] say queued: %s" % text[:40], flush=True)
+                log_notice("say queued: %s" % text[:40])
             else:
-                print("[whale-girl] say busy, dropped: %s" % text[:40], flush=True)
+                log_notice("say busy, dropped: %s" % text[:40])
             return
         start_say(text, src)
 

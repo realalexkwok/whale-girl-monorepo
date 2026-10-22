@@ -171,3 +171,10 @@
   baselines are: (1) same-machine localhost (default), (2) cloud server via git pull
   + install-ubuntu.sh + systemd + nginx TLS (no SSH knowledge needed); direct TCP
   remains a documented option.
+- 2026-10-22 (M3.1 review rounds; recorded here for the owner's confirmation at
+  the close): the server/driver RSS budgets are steady-state budgets — the
+  ~60 MB server boot transient decays within a minute and is not part of the
+  gate. M3.1 also adds the relay hardening recorded in the v1 protocol section
+  (100 commands per fixed 1 s window, a 4002 close when no python writer is
+  connected, a best-effort same-origin guard, and the pose id grammar +
+  frame-size guard) — see requirements.md decision 4.

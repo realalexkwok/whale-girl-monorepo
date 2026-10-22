@@ -1,7 +1,7 @@
 # M3.1 — DSH Interaction: AI-Driven Command Surface — Validation
 
 > Status: IMPLEMENTED on feature/whale-girl-m31-commands — **automatic half
-> PASS (2026-10-22, 50/50 command checks + the M2.2 regression)**; the manual
+> PASS (2026-10-22, 52/52 command checks + the M2.2 regression)**; the manual
 > half is owed by the owner at the close. Roadmap tick + history archive happen
 > only on the owner's close instruction.
 
@@ -10,20 +10,20 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 
 | Check | Command | Result |
 | --- | --- | --- |
-| cmd_probe (v1 frame types end to end) | node scripts/cmd_probe.js | PASS — 50/50 checks (breakdown below), incl. the review-round checks |
-| Say schema regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 54/54 (100%), gap max 0.108, latency mean 21 ms / max 57 ms, decoded 847,872 B / 4.42 s |
+| cmd_probe (v1 frame types end to end) | node scripts/cmd_probe.js | PASS — 52/52 checks (breakdown below), incl. the review-round checks |
+| Say schema regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 54/54 (100%), gap max 0.083, latency mean 14 ms / max 30 ms, decoded 847,872 B / 4.42 s |
 | CLI validation paths | whale_cmd.py motion Nope / no server | PASS — unknown group exits 2 with the 8 groups listed; connection refused exits 1 with an actionable message |
 | Motion probe | node scripts/ws_probe.js | PASS — 30.0 fps over 2.00 s, 61 frames |
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | HTTP static host | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ | 200 PASS |
-| Frontend inline JS | node --check (extracted script) | PASS — 33,981 B at /tmp/m31-inline.js |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Steady-state gate: every probe sample fits — server 34,304 / 30,480 / 26,784 / 23,232 KB (max 34,304), driver 15,712 / 17,920 / 17,904 / 15,568 KB (max 17,920). The boot transient is recorded, not gated: 61,600 KB ~1 s after spawn (informational record), settling to 48,320 KB at t=60 s on a quiet stack — the ≤ 60 MB budget is a steady-state budget, and M4.1 owns the OBS-gate re-measure with audio active |
+| Frontend inline JS | node --check (extracted script) | PASS — 34,444 B at /tmp/m31-inline.js |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Steady-state gate: every probe sample fits — server 49,296 / 51,872 / 47,936 / 49,168 KB (max 51,872), driver 15,664 / 20,272 / 18,240 / 16,976 KB (max 20,272). The boot transient is recorded, not gated: 61,296 KB ~1 s after spawn (informational record), settling to 48,320 KB at t=60 s on a quiet stack — the ≤ 60 MB budget is a steady-state budget, and M4.1 owns the OBS-gate re-measure with audio active |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released (stray processes were checked separately during the smoke runs) |
 
-### cmd_probe.js breakdown (PASS 50/50; a few records are folded into one row)
+### cmd_probe.js breakdown (PASS 52/52; a few records are folded into one row)
 | Check | Measured |
 | --- | --- |
-| server boot RSS (informational) | 61,600 KB ~1 s after spawn (startup transient, not gated) |
+| server boot RSS (informational) | 61,296 KB ~1 s after spawn (startup transient, not gated) |
 | command without a driver is refused | close code 4002 |
 | foreign origin is rejected | close code 1008 |
 | live boot: mock speech paused | 0 say frames in 10 s (WHALE_MODE=live) |
@@ -49,6 +49,8 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | say command frame | /audio/say-<id>.mp3, words=4 — schema == M2.2 |
 | say audio served | HTTP 200, content-type audio/mpeg |
 | page played the commanded say | engine=edge-tts, decoded 442,368 B, 2.30 s |
+| two rapid commands both send | the one-slot queue: two cmd frames, in order, distinct audio |
+| the queued command plays last | the page ends on the second commanded line (latest) |
 | say frames carry src | canned src="mock", commanded src="cmd" |
 | mock never cuts a commanded line | in mock mode, sampled 1 s into the line: active=true, audio = the commanded file |
 | commanded line plays to its end | after the line: last say is still the commanded file |
@@ -58,7 +60,7 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | idempotent mode keeps a held pose | no mode frame, ParamBrowLY=1 stays |
 | a real flip clears the pose | ParamBrowLY gone after mode live |
 | mock say after a live flip is ignored | injected src:"mock" — active=false, no new start |
-| a mock say decoding during the live flip does not start | starts 5 → 5 (no playback start) |
+| a mock say decoding during the live flip does not start | delay-forced race: starts unchanged (no playback start) |
 | command flood is rate-capped | dropped 1 → 52 after a 150-frame burst |
 | frontend ignores a mock say while a line plays | injected src:"mock" — the page kept the commanded audio |
 | driver hold suppresses mock lines | 0 mock frames after the commanded frame |
@@ -67,10 +69,10 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | live flip stops a playing canned line | active=false |
 | live flip silences canned speech | 0 say frames in 10 s after the flip |
 | page joining after the driver | a NEW document (timeOrigin changed) has cmdState.mode="live" |
-| motion frames under the 8 KB cap | max 313 bytes |
+| observed motion frame under the 8 KB cap | max observed 312 bytes (larger frames are dropped first) |
 | malformed frames: stream continued | 36 motion frames while the bad frames arrived |
 | motion stream | 30.0 fps over 2.00 s |
-| server / driver RSS (every sample) | server 34,304 / 30,480 / 26,784 / 23,232 KB; driver 15,712 / 17,920 / 17,904 / 15,568 KB |
+| server / driver RSS (every sample) | server 49,296 / 51,872 / 47,936 / 49,168 KB; driver 15,664 / 20,272 / 18,240 / 16,976 KB |
 | ports released | :3000 and :3001 free |
 
 Representative driver log lines from the smoke run (copied here — /tmp is
@@ -93,9 +95,9 @@ renders and motion/expression commands cannot be judged.
 ### Already verified, do NOT re-run
 | Item | What it covered | Verified by |
 | --- | --- | --- |
-| cmd_probe, 50 checks | every v1 frame type, say schema, pose-key clearing/replacement, mock/live flips, page-after-driver mode (new document), malformed safety, flood cap, CLI paths, every-sample steady-state RSS | agent, 2026-10-22 |
+| cmd_probe, 52 checks | every v1 frame type, say schema + one-slot queue, pose-key clearing/replacement, mock/live flips, page-after-driver mode (new document), malformed safety, flood cap, CLI paths, every-sample steady-state RSS | agent, 2026-10-22 |
 | say_probe, 12 checks | M2.2 speech regression (word timeline, latency, amplitude-free) | agent, 2026-10-22 |
-| ws_probe / role probe / curl / node --check | 30.0 fps, close 1008, 200, inline JS syntax (33,981 B) | agent, 2026-10-22 |
+| ws_probe / role probe / curl / node --check | 30.0 fps, close 1008, 200, inline JS syntax (34,444 B) | agent, 2026-10-22 |
 
 1. Terminal 1 — `cd whale-girl-server && npm start` (the log starts with
    `serving … on http://localhost:3000` and `websocket proxy on
@@ -120,7 +122,9 @@ renders and motion/expression commands cannot be judged.
    - `.venv/bin/python scripts/whale_cmd.py mode live` — the mock mouth/talk
      bursts stop (idle blink/gaze/sway continue); `mode mock` resumes the
      canned speech.
-5. OBS — the Browser source shows the same behavior and hears the speech.
+5. OBS — the Browser source shows the same behavior and hears the speech. With
+   ?debug=1 in the OBS page (Interact), the status line must read `ws connected`
+   (not `ws disconnected (1008)`) and the mode must match the browser tab.
 6. Report any failure with the exact command, the ?debug=1 line and the
    console output.
 

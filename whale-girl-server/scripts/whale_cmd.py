@@ -21,7 +21,8 @@ Usage (the venv holds websockets; the system Python does not):
     .venv/bin/python scripts/whale_cmd.py mode live       # pause mock talk
     .venv/bin/python scripts/whale_cmd.py mode mock
 
-Exit codes: 0 sent, 1 connection error OR reachable with no driver (4002),
+Exit codes: 0 sent (not acknowledged — the server may still drop the frame on
+its python-buffer cap), 1 connection error OR reachable with no driver (4002),
 2 validation error.
 Env: WHALE_CMD_WS (default ws://localhost:3001?role=web),
      WHALE_MODEL_MANIFEST (default ../whale-girl-frontend/model/whale.model3.json).
