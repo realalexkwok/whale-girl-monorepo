@@ -151,3 +151,46 @@
   WHALE_SAY_TEXT are the seam; the frontend say path is text-agnostic); M4.1 owns
   the OBS browser-source memory re-measure with audio playback active, OBS
   audio-policy hardening, and the server RSS headroom at the OBS gate.
+
+## M3.1 DSH command surface
+- Closed 2026-10-22. Real DSH sessions drive the whale through a v1 command
+  surface: the server relays web-role command frames to the python writer tagged
+  as {"relay":"<frame>"} (string concatenation — still no JSON.parse), the driver
+  executes say (TTS) / pose (driver-side overlay) / mode (mock|live flag) and
+  forwards motion/expression frames, and the frontend runs them on the M2.1
+  hooks. New frames: {"type":"motion","group","index"},
+  {"type":"expression","name"}, {"type":"say","text"}, {"type":"pose","p":{...}}
+  (ids [A-Za-z0-9_]{1,64}, <=32 keys, finite, escaped-frame-size guarded),
+  {"type":"mode","mock":bool} (sent on connect / web_connected and on real
+  flips). The say frame keeps the M2.2 shape plus an additive "src":"mock"|"cmd":
+  canned lines never cut a playing line, a commanded line still does
+  (latest-wins), and one commanded say queues behind an in-flight synthesis.
+- Native tool: whale-girl-server/scripts/whale_cmd.py (motion|say|pose|mode;
+  manifest-validated motion names; exit 0 sent / 1 unreachable or no driver
+  (4002) / 2 validation). Gate: whale-girl-server/scripts/cmd_probe.js — 61
+  checks (every frame type, CLI paths, 4002/1008, flood cap, malformed frames,
+  say queue, decode-time live race, page-after-driver mode, every-sample
+  steady-state RSS). say_probe.js remains the M2.2 regression.
+- Relay hardening: 100 commands per fixed 1 s window counted before decoding,
+  the 8 KB byte cap rejected before toString, the 256 KB python-buffer drop, a
+  4002 close when no writer is connected, a best-effort same-origin guard (1008;
+  loopback aliases 127.0.0.1 / [::1] / 0.0.0.0 accepted). The first mode
+  announcement does not reset the pose; an idempotent mode command is a no-op.
+- Evidence (close re-run 2026-10-22): cmd_probe PASS 61/61 (max motion frame 311
+  B; flood dropped 1 -> 52; decode race starts unchanged; the reloaded page
+  learned the live mode; RSS server max 47,936 KB / driver max 20,048 KB),
+  say_probe PASS 12/12 (54/54 in-word, gap max 0.108, latency 15/35 ms),
+  ws_probe 30.0 fps (60 frames), role probe close 1008, curl 200, settled stack
+  54,976 / 22,576 KB, ports released, no strays, inline script 36,361 B.
+- Review rounds: ten independent subagent reviews plus the owner's review round
+  surfaced ~150 findings (BLOCKERs: stale pose-overlay keys; a pose frame-size
+  overflow) — all fixed. Commits on feature/whale-girl-m31-commands: 953f184
+  (feature), 0945472, a672daf, 0533c5d, c5db3c1, 22238a7, 0e19dce, 89be70e,
+  57a44f6, 21cf0b6, 1c94f66, e1028cd, 42d7727 (say_probe hermetic endpoints;
+  WHALE_SAY_TEXT one-shot per process). Spec trio:
+  specs/features/2026-10-21-m3.1-m31-commands/.
+- Handoffs: M3.2 owns text/emotion -> expression presets plus an optional
+  whale_expression CLI / MCP wrapper; M4.1 owns the OBS browser-source memory
+  re-measure with audio and live commands active and the server RSS headroom at
+  the OBS gate (the steady-state interpretation is recorded in tech-stack.md);
+  M5.1/M5.2 own whale_say as the announcement seam.

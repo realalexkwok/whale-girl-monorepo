@@ -14,7 +14,7 @@
 - Branch rules: feature/whale-girl-<item>; close = merge into main → push → delete
   local branch. Agents never git commit / git push without the owner's instruction.
 
-## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20); M2.2 CLOSED (2026-10-21)
+## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20); M2.2 CLOSED (2026-10-21); M3.1 CLOSED (2026-10-22)
 - M1: server (express :3000 + ws proxy :3001), frontend (PixiJS 7.4.3 + cubism4,
   transparent canvas, placeholder fallback), mock driver (30 FPS blink/talk/gaze/sway),
   probes and docs. Evidence: motion probe PASS at 30.0 fps (twice), role rejection
@@ -29,6 +29,14 @@
   specs/features/2026-10-20-m2.1-model-integration/validation.md.
 - M2.1's manual pass (browser ?debug=1, console hooks, failure path, OBS Browser
   source) also covers the M1 manual acceptance, which was never separately recorded.
+- M3.1: DSH command surface — v1 frames (motion/expression/say/pose/mode) relayed
+  as {"relay":...} to the driver, which executes say/pose/mode and forwards
+  motion/expression; whale_cmd.py (motion|say|pose|mode) is the DSH tool; the
+  say frame gains "src":"mock"|"cmd" (mock never cuts a line, commands keep
+  latest-wins, one command queues behind a synthesis). Evidence: cmd_probe
+  61/61, say_probe 12/12, ws_probe 30.0 fps, role 1008, curl 200, settled RSS
+  54,976 / 22,576 KB, ports released. Full detail:
+  specs/features/2026-10-21-m3.1-m31-commands/validation.md.
 - M2.2: TTS-driven lip sync — driver edge-tts (zh-CN-XiaoyiNeural, WordBoundary
   timestamps) + macOS say fallback in a short-lived helper (scripts/tts_synth.py,
   45 s timeout), say frames over the existing WS, /audio static mount, frontend
@@ -80,11 +88,12 @@
     Design drafts: docs/drafts/ai-agent-notifier/.
 
 ## 4. In-flight / next
-- M3.1 (DSH interaction) is IN FLIGHT on feature/whale-girl-m31-commands:
-  implemented (v1 command surface, whale_cmd.py, cmd_probe.js), automatic half
-  green (cmd_probe 61/61, say_probe 12/12) and in the review/fix loop; the
-  owner's manual half is still owed. Close (roadmap tick, history archive,
-  merge, push) only on the owner's instruction.
+- NOTHING is in flight. M3.1 is fully closed (2026-10-22): merged into main and
+  pushed; its local feature branch was deleted. NEXT: M3.2 (LLM-driven
+  expressions) planning via /spec-plan, carrying the M3.1 handoff — the
+  expression frame + frontend execution already ship; the text/emotion ->
+  preset mapping and an optional whale_expression CLI/MCP wrapper are the new
+  work.
 - M2.2 is fully closed (2026-10-21): merged into main and pushed; its local
   feature branch was deleted.
 - M2.1 is fully closed: merged into main and pushed (2026-10-20); its local

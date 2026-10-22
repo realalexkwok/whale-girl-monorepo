@@ -1,9 +1,13 @@
 # M3.1 — DSH Interaction: AI-Driven Command Surface — Validation
 
-> Status: IMPLEMENTED on feature/whale-girl-m31-commands — **automatic half
-> PASS (2026-10-22, 61/61 command checks + the M2.2 regression)**; the manual
-> half is owed by the owner at the close. Roadmap tick + history archive happen
-> only on the owner's close instruction.
+> Status: **CLOSED 2026-10-22.** Automatic half re-run at the close: cmd_probe
+> 61/61, say_probe 12/12, ws_probe 30.0 fps (60 frames), role probe close 1008,
+> curl 200, settled stack RSS 54,976 / 22,576 KB, ports released, no stray
+> processes, inline script 36,361 B. The owner exercised the manual pass in the
+> browser and OBS during the review rounds (2026-10-21/22); the two issues it
+> surfaced — the pose test being too subtle and the mock cutting commanded
+> speech — were fixed and are covered by the automatic gate. Owner instructed
+> the close on 2026-10-22.
 
 ## Automatic verification results (measured 2026-10-22, macOS)
 All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-server.
@@ -11,14 +15,14 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | Check | Command | Result |
 | --- | --- | --- |
 | cmd_probe (v1 frame types end to end) | node scripts/cmd_probe.js | PASS — 61/61 checks (breakdown below), incl. the review-round checks |
-| Say schema regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 53/53 (100%), gap max 0.108, latency mean 18 ms / max 32 ms, decoded 847,872 B / 4.42 s |
+| Say schema regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 54/54 (100%), gap max 0.108, latency mean 15 ms / max 35 ms, decoded 847,872 B / 4.42 s |
 | CLI validation paths | whale_cmd.py motion Nope / no server | PASS — unknown group exits 2 with the 8 groups listed; connection refused exits 1 with an actionable message |
-| Motion probe | node scripts/ws_probe.js | PASS — 30.0 fps over 2.00 s, 61 frames |
+| Motion probe | node scripts/ws_probe.js | PASS — 30.0 fps over 1.97 s, 60 frames |
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | HTTP static host | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ | 200 PASS |
 | Frontend inline JS | node --check (extracted script) | PASS — 36,361 B at /tmp/m31-inline.js |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Steady-state gate: every probe sample fits — server 49,296 / 51,872 / 47,936 / 49,168 KB (max 51,872), driver 15,664 / 20,272 / 18,240 / 16,976 KB (max 20,272). The boot transient is recorded, not gated: 61,296 KB ~1 s after spawn (informational record), settling to 48,320 KB at t=60 s on a quiet stack — the ≤ 60 MB budget is a steady-state budget, and M4.1 owns the OBS-gate re-measure with audio active |
-| Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released (stray processes were checked separately during the smoke runs) |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Close re-run: settled stack server 54,976 KB / driver 22,576 KB; probes max server 47,936 KB (cmd_probe) and 51,808 KB (say_probe), driver max 22,528 KB — within the steady-state 60/30 MB budgets. The boot transient (≈61 MB at spawn, decaying within a minute) is recorded but not gated; M4.1 owns the OBS-gate re-measure with audio active |
+| Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released, no stray processes |
 
 ### cmd_probe.js breakdown (PASS 61/61; a few records are folded into one row)
 | Check | Measured |
@@ -94,7 +98,7 @@ ephemeral):
 The server log shows the aggregate line "http=:3000 ws=:3001 web=N python=1
 relayed=N cmds=N dropped=N".
 
-## Manual verification (owner, first-time-user pass — PENDING)
+## Manual verification (owner, first-time-user pass — PASSED 2026-10-21/22)
 Preconditions: the README quick start (npm install + the venv from
 requirements.txt) and the DS鲸鱼娘 model dropped into whale-girl-frontend/model/
 (`node scripts/validate_model.js` passes) — without the model the placeholder
@@ -135,6 +139,12 @@ renders and motion/expression commands cannot be judged.
    (not `ws disconnected (1008)`) and the mode must match the browser tab.
 6. Report any failure with the exact command, the ?debug=1 line and the
    console output.
+
+Owner record: the pass surfaced two issues — the pose test was too subtle
+(switched to eyes-closed / head-tilt) and the mock cut commanded speech at a
+frantic pace (fixed with the say hold + src guard). Both fixes are covered by
+cmd_probe (pose-key clearing, mock-never-cuts, decode race). Owner instruction:
+"Close M3.1" (2026-10-22).
 
 ## Handoff to dependant milestones
 - M3.2 owns: text/emotion → expression presets via the expression frame +
