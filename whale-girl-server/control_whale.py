@@ -82,7 +82,10 @@ SYNTH_KEYS = frozenset((
 
 # Live2D parameter-id grammar: ASCII identifiers only. CJK/emoji ids would be
 # escaped 6x by json.dumps and could push the 30 FPS frame past the proxy cap.
-POSE_ID_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+# fullmatch (not match) so a trailing newline can never slip through.
+POSE_ID_RE = re.compile(r"[A-Za-z0-9_]{1,64}")
+MAX_CMD_NAME = 128    # motion group / expression name cap (bounds the frame)
+MAX_MOTION_INDEX = 9999
 
 # Blink timing (seconds).
 BLINK_INTERVAL = (2.5, 5.5)
@@ -118,7 +121,6 @@ MOTION = {
 POSE_OVERRIDES = {}
 POSE_OVERLAP = []  # overlay keys synth() rewrites (re-applied after synth)
 POSE_LIMIT = 32    # max overlay entries per command
-MAX_POSE_KEY = 64  # longest accepted parameter id (bounds the frame size)
 MAX_SAY_CHARS = 300  # longest accepted say line (TTS + word timeline)
 MAX_FRAME_BYTES = 8 * 1024  # the proxy's soft cap for relayed frames
 BAD_CMD_AT = 0.0  # rate limit for rejected-frame logging
@@ -452,17 +454,28 @@ async def run_driver(ws):
         kind = event.get("type")
         if kind == "motion":
             group = event.get("group")
-            if isinstance(group, str) and group:
-                frame = {"type": "motion", "group": group}
-                index = event.get("index")
-                if (isinstance(index, int) and not isinstance(index, bool)
-                        and index >= 0):
-                    frame["index"] = index
-                await forward(frame)
+            if not isinstance(group, str) or not group:
+                return
+            if len(group) > MAX_CMD_NAME:
+                log_bad_cmd("motion group too long (%d chars)" % len(group))
+                return
+            frame = {"type": "motion", "group": group}
+            index = event.get("index")
+            if (isinstance(index, int) and not isinstance(index, bool)
+                    and 0 <= index <= MAX_MOTION_INDEX):
+                frame["index"] = index
+            elif index is not None:
+                log_bad_cmd("motion index out of range: %r" % (index,))
+                return
+            await forward(frame)
         elif kind == "expression":
             name = event.get("name")
-            if isinstance(name, str) and name:
-                await forward({"type": "expression", "name": name})
+            if not isinstance(name, str) or not name:
+                return
+            if len(name) > MAX_CMD_NAME:
+                log_bad_cmd("expression name too long (%d chars)" % len(name))
+                return
+            await forward({"type": "expression", "name": name})
         elif kind == "say":
             text = event.get("text")
             if isinstance(text, str) and text.strip():
@@ -483,7 +496,7 @@ async def run_driver(ws):
                         or not isinstance(value, (int, float))):
                     log_bad_cmd("bad pose value for %r" % (str(pid)[:32],))
                     return
-                if not POSE_ID_RE.match(pid):
+                if not POSE_ID_RE.fullmatch(pid):
                     log_bad_cmd("invalid pose id %r" % (pid[:32],))
                     return
                 try:

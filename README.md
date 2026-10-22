@@ -30,7 +30,7 @@ Terminal 1 — server:
     npm install
     npm start
 
-Terminal 2 — driver (mock mode by default; WHALE_MODE=live takes commands):
+Terminal 2 — driver (commands work in both modes; WHALE_MODE=live pauses the mock speech):
 
     cd whale-girl-server
     python3 -m venv .venv
@@ -96,7 +96,8 @@ driver-side and not shown; during a say the line shows the current word).
 - Browser and the CLI tool connect to ws://localhost:3001?role=web (many
   allowed); the server relays their command frames to the python writer raw.
   Browser pages are accepted only when the page origin host matches the
-  WebSocket host, so a visited website cannot command the whale.
+  WebSocket host — a best-effort same-origin guard (DNS rebinding and
+  non-browser clients are not covered; auth is V3 work).
 - Python → server → browser:
 
       {"type":"motion","f":12345,"p":{"ParamMouthOpenY":0.42,"ParamEyeBallX":-0.1}}

@@ -85,6 +85,11 @@ def send(payload):
                         "— command dropped", 1
                     )
                 raise
+    except ConnectionClosed as exc:
+        return fail(
+            "the server closed the connection (%s %s) — check WHALE_CMD_WS "
+            "and the ?role=web suffix" % (exc.code, exc.reason), 1
+        )
     except (OSError, WebSocketException) as exc:
         return fail(
             "cannot reach the server at %s (%s). Is 'npm start' running?"

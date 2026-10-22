@@ -59,8 +59,14 @@ function killAll() {
     try { child.kill('SIGTERM'); } catch (err) { /* already gone */ }
   }
 }
-process.on('exit', killAll);
-process.on('SIGINT', () => { killAll(); process.exit(1); });
+function cleanupProfile() {
+  if (chromeProfile) {
+    try { fs.rmSync(chromeProfile, { recursive: true, force: true }); } catch (err) { /* ignore */ }
+    chromeProfile = null;
+  }
+}
+process.on('exit', () => { killAll(); cleanupProfile(); });
+process.on('SIGINT', () => { killAll(); cleanupProfile(); process.exit(1); });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -101,9 +107,9 @@ function record(name, ok, detail) {
 function rssKb(pid) {
   try {
     const out = execFileSync('ps', ['-p', String(pid), '-o', 'rss=']).toString().trim();
-    return out ? parseInt(out, 10) : 0;
+    return out ? parseInt(out, 10) : -1;
   } catch (err) {
-    return 0;
+    return -1; // unknown: the gate treats <= 0 as a failure
   }
 }
 
@@ -113,6 +119,7 @@ async function startServer() {
     env: Object.assign({}, process.env, { PORT: String(PORT), WS_PORT: String(WS_PORT) }),
     stdio: ['ignore', 'pipe', 'pipe'],
   }));
+  child.on('error', (err) => fail(err));
   child.stdout.on('data', (d) => { if (process.env.PROBE_DEBUG) process.stdout.write('[server] ' + d); });
   child.stderr.on('data', (d) => { if (process.env.PROBE_DEBUG) process.stderr.write('[server] ' + d); });
   await waitFor(async () => {
@@ -136,6 +143,7 @@ function startDriver() {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
   }));
+  child.on('error', (err) => fail(err));
   child.stdout.on('data', (d) => { if (process.env.PROBE_DEBUG) process.stdout.write('[driver] ' + d); });
   child.stderr.on('data', (d) => { if (process.env.PROBE_DEBUG) process.stderr.write('[driver] ' + d); });
   return child;
@@ -146,6 +154,12 @@ function openWeb() {
     const ws = new WebSocket('ws://localhost:' + WS_PORT + '?role=web');
     ws.on('open', () => resolve(ws));
     ws.on('error', reject);
+  });
+}
+
+function cliEnv() {
+  return Object.assign({}, process.env, {
+    WHALE_CMD_WS: 'ws://localhost:' + WS_PORT + '?role=web',
   });
 }
 
@@ -295,6 +309,7 @@ async function cmdState(chrome) {
 
   const probeWs = await openWeb();
   probeWs.on('message', collect);
+  probeWs.on('error', (err) => fail(err));
 
   // Start the driver only after both web clients are connected so every
   // frame (say/mode/motion) is delivered to the probe and to the page.
@@ -315,10 +330,7 @@ async function cmdState(chrome) {
 
   // 2) motion through the CLI tool end to end.
   let cli = spawnSync(PYTHON, [CLI, 'motion', MOTION], {
-    cwd: ROOT, timeout: 15000,
-    env: Object.assign({}, process.env, {
-      WHALE_CMD_WS: 'ws://localhost:' + WS_PORT + '?role=web',
-    }),
+    cwd: ROOT, timeout: 15000, env: cliEnv(),
   });
   record('CLI motion exits 0', cli.status === 0,
     'status=' + cli.status + ' out=' + String(cli.stdout || '').trim());
@@ -337,6 +349,24 @@ async function cmdState(chrome) {
   });
   record('CLI reports an unreachable server', cliNoServer.status === 1,
     'exit ' + cliNoServer.status);
+  const cliPose = spawnSync(PYTHON, [CLI, 'pose', '{"ParamBrowLY":1}'],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  record('CLI pose exits 0', cliPose.status === 0, 'exit ' + cliPose.status);
+  await waitFor(() => lastMotion && lastMotion.p.ParamBrowLY === 1, 5000, 'CLI pose applied');
+  const cliPoseClear = spawnSync(PYTHON, [CLI, 'pose', '{}'],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  await waitFor(() => lastMotion && !('ParamBrowLY' in lastMotion.p), 5000, 'CLI pose cleared');
+  record('CLI pose applied and cleared', cliPoseClear.status === 0,
+    'pose {} exit ' + cliPoseClear.status);
+  const longText = 'x'.repeat(301);
+  const cliLongSay = spawnSync(PYTHON, [CLI, 'say', longText],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  record('CLI rejects an over-long say', cliLongSay.status === 2, 'exit ' + cliLongSay.status);
+  const manyKeysCli = {};
+  for (let i = 0; i < 33; i++) manyKeysCli['ParamP' + i] = 1;
+  const cliManyPose = spawnSync(PYTHON, [CLI, 'pose', JSON.stringify(manyKeysCli)],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  record('CLI rejects an oversized pose', cliManyPose.status === 2, 'exit ' + cliManyPose.status);
 
   // 3) expression on the same transport.
   probeWs.send(JSON.stringify({ type: 'expression', name: EXPRESSION }));
@@ -370,22 +400,44 @@ async function cmdState(chrome) {
   await sleep(250);
   const brow = await chrome.evaluate(
     '(function(){var c=window.whaleModel.model.internalModel.coreModel;' +
-    'var i=c.getParameterIndex("ParamBrowLY");' +
+    'var i=c.getParameterIndex("ParamBrowLY"); if (i < 0) return null;' +
     'return {v:c.getParameterValueById("ParamBrowLY"), d:c.getParameterDefaultValue(i)};})()'
   );
-  record('pose {} restores the model default', !!brow && Math.abs(brow.v - brow.d) < 0.25,
-    'ParamBrowLY=' + (brow && brow.v) + ' (default ' + (brow && brow.d) + ')');
+  record('pose {} restores the model default', brow === null || Math.abs(brow.v - brow.d) < 0.25,
+    brow === null ? 'n/a — ParamBrowLY is not in this model' :
+      'ParamBrowLY=' + brow.v + ' (default ' + brow.d + ')');
+  // A new pose replaces the overlay: keys it omits disappear from the frames.
+  probeWs.send(JSON.stringify({ type: 'pose', p: { ParamBrowLY: 0.5, ParamBrowRY: 0.25 } }));
+  await waitFor(() => lastMotion && lastMotion.p.ParamBrowLY === 0.5
+    && lastMotion.p.ParamBrowRY === 0.25, 5000, 'two-key pose');
+  probeWs.send(JSON.stringify({ type: 'pose', p: { ParamBrowLY: 0.25 } }));
+  await waitFor(() => lastMotion && lastMotion.p.ParamBrowLY === 0.25
+    && !('ParamBrowRY' in lastMotion.p), 5000, 'pose replacement');
+  record('pose replaces the previous overlay', true,
+    'ParamBrowRY dropped when the next pose omits it');
+  probeWs.send(JSON.stringify({ type: 'pose', p: {} }));
 
-  // 5) mode mock: the flip frame arrives and the canned speech resumes.
+  // 5) mode commands: an idempotent one is a no-op; a real flip clears the pose.
+  probeWs.send(JSON.stringify({ type: 'pose', p: { ParamBrowLY: 1 } }));
+  await waitFor(() => lastMotion && lastMotion.p.ParamBrowLY === 1, 5000,
+    'pose held for the mode test');
+  const modeHeldBase = modeFrames.length;
+  probeWs.send(JSON.stringify({ type: 'mode', mock: false })); // already live
+  await sleep(500);
+  record('idempotent mode keeps a held pose',
+    !!lastMotion && lastMotion.p.ParamBrowLY === 1 && modeFrames.length === modeHeldBase,
+    'no mode frame and ParamBrowLY=' + (lastMotion && lastMotion.p.ParamBrowLY));
   const modeMockBase = modeFrames.length;
-  probeWs.send(JSON.stringify({ type: 'mode', mock: true }));
+  probeWs.send(JSON.stringify({ type: 'mode', mock: true })); // real flip
   await waitModeAfter(true, modeMockBase, 5000);
+  await waitFor(() => lastMotion && !('ParamBrowLY' in lastMotion.p), 5000,
+    'flip clears the pose overlay');
   await waitFor(async () => {
     const st = await cmdState(chrome);
     return st && st.mode === 'mock';
   }, 5000, 'frontend cmdState mode mock');
-  record('mode mock: flip frame + frontend state', true,
-    'mode frame {"mock":true}, cmdState.mode="mock"');
+  record('mode mock: flip frame + frontend state + pose cleared', true,
+    'mode frame {"mock":true}, cmdState.mode="mock", ParamBrowLY gone');
   const cannedSay = await waitSay((m) => typeof m.audio === 'string', 25000, 'canned say frame (mock resumed)');
   const cannedOk = typeof cannedSay.audio === 'string'
     && cannedSay.audio.indexOf('/audio/') === 0
@@ -511,6 +563,7 @@ async function cmdState(chrome) {
     '{"type":"web_connected","count":0}',                           // spoofed event
     '{"type":"motion","group":' + '['.repeat(1500) + ']'.repeat(1500) + '}'  // deep nesting
   ];
+  const mcBefore = motionCount;
   for (const frame of badFrames) probeWs.send(frame);
   await sleep(700);
   const lastP = lastMotion ? lastMotion.p : {};
@@ -525,23 +578,48 @@ async function cmdState(chrome) {
     const st = await cmdState(chrome);
     return st && st.last === 'expression: ' + EXPRESSION;
   }, 8000, 'pipeline alive after malformed frames');
-  record('malformed frames are ignored safely', true,
+  await sleep(400);
+  const mcAfter = motionCount;
+  record('malformed frames are ignored safely', mcAfter - mcBefore > 10,
     badFrames.length + ' bad frames (non-finite, huge int, long key, 33 keys, ' +
-    'spoofed web_connected, deep nesting), expression still applied');
+    'spoofed web_connected, deep nesting); the expression applied and the motion ' +
+    'stream kept flowing (' + (mcAfter - mcBefore) + ' frames)');
+  sampleRss();
 
   // 9) a live flip during mock activity silences the canned lines at once.
   const canned3Base = sayFrames.length;
   await waitFor(() => sayFrames.some((m, i) => i >= canned3Base && m.src === 'mock'),
     25000, 'canned say before the live flip');
+  const canned3 = sayFrames.filter((m, i) => i >= canned3Base && m.src === 'mock').pop();
+  // The page must actually be PLAYING that line before the flip (M2 fix).
+  await waitFor(async () => {
+    const st = await chrome.evaluate('window.whaleSpeech.state()');
+    const say = await chrome.evaluate('window.whaleSpeech.probeStats().say');
+    return !!st && st.active === true && !!say && say.audio === canned3.audio;
+  }, 15000, 'canned line playing before the flip');
   const liveFlipBase = sayFrames.length;
   const liveFlipModeBase = modeFrames.length;
   probeWs.send(JSON.stringify({ type: 'mode', mock: false }));
   await waitModeAfter(false, liveFlipModeBase, 5000);
-  await sleep(250);
+  await sleep(150);
   const flipped = await chrome.evaluate('window.whaleSpeech.state()');
   record('live flip stops a playing canned line', !!flipped && flipped.active === false,
     'active=' + (flipped && flipped.active));
-  await sleep(SILENCE_MS);
+  // A mock say arriving after the flip must not start (decode-time guard).
+  await chrome.evaluate('window.whaleSpeech.testSay(' + JSON.stringify({
+    type: 'say', audio: canned3.audio, words: canned3.words || [], src: 'mock',
+  }) + ')');
+  await sleep(800);
+  const afterFlipInject = await chrome.evaluate('window.whaleSpeech.state()');
+  record('mock say after a live flip is ignored',
+    !!afterFlipInject && afterFlipInject.active === false,
+    'injected src:"mock" — active=' + (afterFlipInject && afterFlipInject.active));
+  await sleep(2000);
+  const stayedOff = await chrome.evaluate('window.whaleSpeech.state()');
+  record('live stays silent after the flip',
+    !!stayedOff && stayedOff.active === false,
+    'active=' + (stayedOff && stayedOff.active));
+  await sleep(SILENCE_MS - 2000);
   const leaked = sayFrames.length - liveFlipBase;
   record('live flip silences canned speech', leaked === 0,
     leaked + ' say frames in ' + (SILENCE_MS / 1000) + ' s after the flip');
@@ -567,18 +645,22 @@ async function cmdState(chrome) {
   const rate = (motionCount - beforeCount) / ((Date.now() - beforeAt) / 1000);
   record('motion stream 25-35 fps', rate >= 25 && rate <= 35, rate.toFixed(1) + ' fps over 2.00 s');
 
-  // 12) RSS budgets: multi-sample over the run (boot, streaming, audio, end).
+  // 12) RSS budgets: EVERY sample must fit (unknown/0 is a failure).
   sampleRss();
-  const srvSorted = serverSamples.slice().sort((a, b) => a - b);
-  const drvSorted = driverSamples.slice().sort((a, b) => a - b);
-  const srvMed = srvSorted[Math.floor(srvSorted.length / 2)];
-  const drvMed = drvSorted[Math.floor(drvSorted.length / 2)];
-  const srvMax = srvSorted[srvSorted.length - 1];
-  const drvMax = drvSorted[drvSorted.length - 1];
-  record('server RSS <= 60 MB (median)', srvMed <= 60 * 1024,
-    'samples ' + serverSamples.join(', ') + ' KB — median ' + srvMed + ', max ' + srvMax);
-  record('driver RSS <= 30 MB (median)', drvMed <= 30 * 1024,
-    'samples ' + driverSamples.join(', ') + ' KB — median ' + drvMed + ', max ' + drvMax);
+  const srvMax = Math.max.apply(null, serverSamples);
+  const drvMax = Math.max.apply(null, driverSamples);
+  record('server RSS <= 60 MB (every sample)', srvMax > 0 && srvMax <= 60 * 1024,
+    'samples ' + serverSamples.join(', ') + ' KB — max ' + srvMax);
+  record('driver RSS <= 30 MB (every sample)', drvMax > 0 && drvMax <= 30 * 1024,
+    'samples ' + driverSamples.join(', ') + ' KB — max ' + drvMax);
+
+  // CLI with no driver: the server answers 4002 and the tool exits 1.
+  driver.kill('SIGTERM');
+  await sleep(1000);
+  const cliNoBrain = spawnSync(PYTHON, [CLI, 'motion', MOTION],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  record('CLI exits 1 with no driver', cliNoBrain.status === 1,
+    'exit ' + cliNoBrain.status);
 
   probeWs.close();
   chrome.close();

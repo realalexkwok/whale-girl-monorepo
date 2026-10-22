@@ -110,6 +110,12 @@
 
 ## Deployment patterns (M4.2 consumes this — config only, no code rewrite)
 
+> Origin note: the WS origin guard compares the page's Origin host with the WS
+> host, so a split-host setup (the page served from one hostname and ?ws=
+> pointing at another) is rejected with 1008. Keep them on the same hostname, or
+> make the nginx proxy pass the page's Host (proxy_set_header Host $host).
+
+
 ### Pattern 1 — same machine (DEFAULT for normal users; zero SSH)
 The dev loop above IS the deployment: npm start + driver + browser/OBS, all on
 localhost. Nothing else to configure.

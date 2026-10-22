@@ -107,8 +107,10 @@
   the python writer's buffer exceeds 256 KB; with no python writer connected the
   server closes the sender with 4002 and whale_cmd.py exits 1 with a message.
 - Browser-origin guard: a page whose Origin host differs from the WebSocket host
-  is closed with 1008 (a visited website cannot command the whale). Non-browser
-  clients (CLI/probes) send no Origin and are unaffected.
+  is closed with 1008 — a best-effort same-origin guard (loopback aliases are
+  treated as one host; DNS rebinding and non-browser clients that omit Origin are
+  not covered, and auth remains V3 work). Non-browser clients (CLI/probes) are
+  unaffected.
 - Driver semantics: WHALE_MODE=mock|live (default mock). Live pauses the mock
   talk bursts + canned phrases and zeroes the mock mouth; idle blink/gaze/sway
   continue; a mode flip clears the pose overlay and the frontend resets poses.

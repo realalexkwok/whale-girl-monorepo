@@ -1,7 +1,7 @@
 # M3.1 — DSH Interaction: AI-Driven Command Surface — Validation
 
 > Status: IMPLEMENTED on feature/whale-girl-m31-commands — **automatic half
-> PASS (2026-10-22, 33/33 command checks + the M2.2 regression)**; the manual
+> PASS (2026-10-22, 42/42 command checks + the M2.2 regression)**; the manual
 > half is owed by the owner at the close. Roadmap tick + history archive happen
 > only on the owner's close instruction.
 
@@ -10,17 +10,17 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 
 | Check | Command | Result |
 | --- | --- | --- |
-| cmd_probe (v1 frame types end to end) | node scripts/cmd_probe.js | PASS — 33/33 checks (breakdown below), incl. the review-round checks |
+| cmd_probe (v1 frame types end to end) | node scripts/cmd_probe.js | PASS — 42/42 checks (breakdown below), incl. the review-round checks |
 | Say schema regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 54/54 (100%), gap max 0.083, latency mean 14 ms / max 30 ms, decoded 847,872 B / 4.42 s |
 | CLI validation paths | whale_cmd.py motion Nope / no server | PASS — unknown group exits 2 with the 8 groups listed; connection refused exits 1 with an actionable message |
 | Motion probe | node scripts/ws_probe.js | PASS — 30.0 fps over 2.00 s, 61 frames |
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | HTTP static host | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ | 200 PASS |
-| Frontend inline JS | node --check (extracted script) | PASS — 33,108 B at /tmp/m31-inline.js |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | cmd_probe multi-samples server 47,040 / 48,576 / 50,064 KB (median 48,576, max 50,064) and driver 15,856 / 19,616 / 17,536 KB (median 17,536, max 19,616) — within budget. The restarted standalone stack measured 62,160 / 29,680 KB: the server sample is over the 60 MB budget (the known 29–63 MB noise). This is flagged for the owner's close decision — either an explicit tech-stack.md amendment or the M4.1 OBS-gate multi-sample re-measure — not silently accepted |
+| Frontend inline JS | node --check (extracted script) | PASS — 33,463 B at /tmp/m31-inline.js |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Probe asserts EVERY sample: server 30,784 / 32,176 / 31,312 / 32,304 KB (max 32,304), driver 15,776 / 20,144 / 20,304 / 16,944 KB (max 20,304) — within budget. A quiet standalone stack (server + driver, no page) settles to server 48,848 KB at t=30 s and 48,320 KB at t=60 s (driver 18,336 / 20,528 KB) — also within budget. The earlier 62,160 KB samples were the server's startup transient (60,336 KB at t=3 s), not steady state — no amendment needed; M4.1 still owns the OBS-gate re-measure with audio active |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released, no stray processes |
 
-### cmd_probe.js breakdown (PASS 33/33)
+### cmd_probe.js breakdown (PASS 42/42)
 | Check | Measured |
 | --- | --- |
 | command without a driver is refused | close code 4002 |
@@ -29,6 +29,10 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | CLI motion exits 0 | status 0 — sent {"type":"motion","group":"Idle"} (the manifest's first group) |
 | CLI rejects an unknown group | exit 2 |
 | CLI reports an unreachable server | exit 1 |
+| CLI pose applied and cleared | pose exits 0, ParamBrowLY held then gone |
+| CLI rejects an over-long say | exit 2 (301 chars) |
+| CLI rejects an oversized pose | exit 2 (33 keys) |
+| CLI exits 1 with no driver | exit 1 (4002 path) |
 | motion applied on the frontend | cmdState.last="motion: Idle", ok=true (after the hook resolved) |
 | expression applied | cmdState.last="expression: 脸红" (the manifest's first expression), ok=true |
 | pose overlay held | ParamEyeBallX=0.900 in motion frames (commanded 0.9) |
@@ -44,6 +48,10 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | commanded line plays to its end | after the line: last say is still the commanded file |
 | pose clears non-synthesized keys | ParamBrowLY present while held, absent from the frames after {} |
 | pose {} restores the model default | ParamBrowLY=0 (default 0) via coreModel |
+| pose replaces the previous overlay | ParamBrowRY dropped when the next pose omits it |
+| idempotent mode keeps a held pose | no mode frame, ParamBrowLY=1 stays |
+| a real flip clears the pose | ParamBrowLY gone after mode live |
+| mock say after a live flip is ignored | injected src:"mock" — active=false |
 | frontend ignores a mock say while a line plays | injected src:"mock" — the page kept the commanded audio |
 | driver hold suppresses mock lines | 0 mock frames after the commanded frame |
 | bad pose frames are rejected | non-finite / 400-digit / long-key / 33-key poses left the frames clean |
@@ -52,8 +60,9 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | live flip silences canned speech | 0 say frames in 10 s after the flip |
 | page joining after the driver | the reloaded page learned cmdState.mode="live" |
 | motion frames under the 8 KB cap | max 313 bytes |
+| malformed frames: stream continued | 36 motion frames while the bad frames arrived |
 | motion stream | 30.0 fps over 2.00 s |
-| server / driver RSS (multi-sample) | server 47,040 / 48,576 / 50,064 KB; driver 15,856 / 19,616 / 17,536 KB |
+| server / driver RSS (every sample) | server 30,784 / 32,176 / 31,312 / 32,304 KB; driver 15,776 / 20,144 / 20,304 / 16,944 KB |
 | ports released | :3000 and :3001 free |
 
 Representative driver log lines from the smoke run (copied here — /tmp is
@@ -92,7 +101,8 @@ renders and motion/expression commands cannot be judged.
      (`motion Nope`) prints the 8 groups and exits 2.
    - `.venv/bin/python scripts/whale_cmd.py say 你好，我是鲸鱼娘` — the whale
      speaks with lip sync; the mock is muted while the line plays (canned lines
-     never cut it; a new command still may).
+     never cut it; a new command still may). Send a second say right after: the
+     newest line replaces the first (latest-wins), and no line is cut by the mock.
    - `.venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeLOpen":0,"ParamEyeROpen":0}'` —
      the eyes stay shut while held (an unmistakable check; ParamEyeBallX is too
      subtle to judge); `pose '{}'` reopens them. `pose '{"ParamAngleZ":15}'`

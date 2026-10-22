@@ -83,7 +83,7 @@ let cmdWindowCount = 0;
 function relayCommandToPython(ws, data, isBinary) {
   if (isBinary) { framesDropped++; return; }
   const text = data.toString();
-  if (text.length > MAX_FRAME_BYTES) { framesDropped++; return; }
+  if (Buffer.byteLength(text, 'utf8') > MAX_FRAME_BYTES) { framesDropped++; return; }
   if (text === '{"type":"hello"}') return; // page handshake: web-only, not a command
   const now = performance.now(); // monotonic: a wall-clock step cannot stall the limiter
   if (now - cmdWindowStart >= 1000) { cmdWindowStart = now; cmdWindowCount = 0; }
@@ -150,6 +150,7 @@ wss.on('connection', (ws, req) => {
   if (origin) {
     const requestHost = hostnameOf('http://' + (req.headers.host || ''));
     if (!originAllowed(origin, requestHost)) {
+      ws.on('error', () => {}); // a close racing a socket error must not throw
       ws.close(1008, 'origin not allowed (use the local page)');
       return;
     }
@@ -182,7 +183,7 @@ wss.on('connection', (ws, req) => {
     ws.on('message', (data, isBinary) => {
       if (isBinary) { framesDropped++; return; }
       const text = data.toString();
-      if (text.length > MAX_FRAME_BYTES) { framesDropped++; return; }
+      if (Buffer.byteLength(text, 'utf8') > MAX_FRAME_BYTES) { framesDropped++; return; }
       broadcastToWeb(text);
       maybeLog(false);
     });
@@ -195,6 +196,7 @@ wss.on('connection', (ws, req) => {
     return;
   }
 
+  ws.on('error', () => {});
   ws.close(1008, 'unknown role (use ?role=web or ?role=python)');
 });
 

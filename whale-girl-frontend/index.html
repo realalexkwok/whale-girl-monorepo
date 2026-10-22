@@ -548,9 +548,9 @@
       function handleSay(msg) {
         var url = msg && msg.audio;
         if (typeof url !== 'string') return;
-        // M3.1: a mock (canned) line never interrupts a playing line; an
-        // explicit command say keeps latest-wins.
-        if (msg.src === 'mock' && sayActive) return;
+        // M3.1: a mock (canned) line never interrupts a playing line and is
+        // never allowed to start in live mode; a commanded say keeps latest-wins.
+        if (msg.src === 'mock' && (sayActive || cmdState.mode === 'live')) return;
         var words = Array.isArray(msg.words) ? msg.words : [];
         var engine = /\.m4a(\?|$)/i.test(url) ? 'say' : 'edge-tts';
         var gen = ++sayGen;
@@ -570,6 +570,8 @@
           // Latest-wins guard: a newer say arrived while this one decoded, so
           // drop this (now stale) buffer instead of replacing the new say.
           if (gen !== sayGen) return;
+          // A mock line that decoded after a live flip must not start either.
+          if (msg.src === 'mock' && cmdState.mode === 'live') return;
           stopSay(); // latest wins: a new say replaces the current playback
           sayActive = {
             words: words,
@@ -748,18 +750,22 @@
           return;
         }
         var res;
+        var expressionList = function () {
+          var list = [];
+          try { list = window.whaleModel.listExpressions(); } catch (e) { /* ignore */ }
+          return list.join(', ');
+        };
         try {
           res = window.whaleModel.playExpression(name);
         } catch (err) {
-          cmdFailed('expression ' + name, (err && err.message) || String(err));
+          cmdFailed('expression ' + name,
+            ((err && err.message) || String(err)) + ' — expressions: ' + expressionList());
           return;
         }
         Promise.resolve(res).then(function (ok) {
           cmdState.ok = !!ok;
           if (!ok) {
-            var list = [];
-            try { list = window.whaleModel.listExpressions(); } catch (e) { /* ignore */ }
-            cmdFailed('expression ' + name, 'not applied — expressions: ' + list.join(', '));
+            cmdFailed('expression ' + name, 'not applied — expressions: ' + expressionList());
           }
         }, function (err) {
           cmdFailed('expression ' + name, (err && err.message) || String(err));
