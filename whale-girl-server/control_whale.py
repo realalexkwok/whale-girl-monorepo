@@ -532,6 +532,8 @@ async def run_driver(ws):
                     clear_pose()
                     await forward({"type": "mode", "mock": MODE == "mock"})
                     print("[whale-girl] mode: %s" % MODE, flush=True)
+            else:
+                log_bad_cmd("mode command without a boolean 'mock'")
 
     async def read_events():
         """Server events + v1 command frames (rare events, never per-frame work)."""
@@ -556,6 +558,7 @@ async def run_driver(ws):
                         log_bad_cmd("invalid relayed frame")
                         continue
                     if not isinstance(command, dict):
+                        log_bad_cmd("non-object relayed frame")
                         continue
                     try:
                         await dispatch(command)

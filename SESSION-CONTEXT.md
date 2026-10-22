@@ -82,7 +82,7 @@
 ## 4. In-flight / next
 - M3.1 (DSH interaction) is IN FLIGHT on feature/whale-girl-m31-commands:
   implemented (v1 command surface, whale_cmd.py, cmd_probe.js), automatic half
-  green (cmd_probe 42/42, say_probe 12/12) and in the review/fix loop; the
+  green (cmd_probe 50/50, say_probe 12/12) and in the review/fix loop; the
   owner's manual half is still owed. Close (roadmap tick, history archive,
   merge, push) only on the owner's instruction.
 - M2.2 is fully closed (2026-10-21): merged into main and pushed; its local

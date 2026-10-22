@@ -452,6 +452,8 @@
       var lastSay = null;
       var sayErrorLogged = false;
       var sayGen = 0; // newest say wins even if an older decode resolves later
+      var sayStarts = 0; // playback starts (probe evidence for the decode guard)
+      var pendingCmdSay = false; // a commanded say is decoding (mock must wait)
 
       function sayAsyncError(message) {
         if (!sayErrorLogged) {
@@ -550,10 +552,12 @@
         if (typeof url !== 'string') return;
         // M3.1: a mock (canned) line never interrupts a playing line and is
         // never allowed to start in live mode; a commanded say keeps latest-wins.
-        if (msg.src === 'mock' && (sayActive || cmdState.mode === 'live')) return;
+        if (msg.src === 'mock'
+            && (sayActive || cmdState.mode === 'live' || pendingCmdSay)) return;
         var words = Array.isArray(msg.words) ? msg.words : [];
         var engine = /\.m4a(\?|$)/i.test(url) ? 'say' : 'edge-tts';
         var gen = ++sayGen;
+        pendingCmdSay = msg.src !== 'mock';
         var ctx;
         try {
           ctx = ensureAudio();
@@ -570,6 +574,7 @@
           // Latest-wins guard: a newer say arrived while this one decoded, so
           // drop this (now stale) buffer instead of replacing the new say.
           if (gen !== sayGen) return;
+          pendingCmdSay = false;
           // A mock line that decoded after a live flip must not start either.
           if (msg.src === 'mock' && cmdState.mode === 'live') return;
           stopSay(); // latest wins: a new say replaces the current playback
@@ -596,6 +601,7 @@
             if (saySource === src) saySource = null;
           };
           saySource = src;
+          sayStarts++;
           src.start(sayActive.startCtx);
           if (ctx.state === 'running') {
             hidePill();
@@ -609,6 +615,7 @@
             if (DEBUG) setStatus(statusLine('audio: suspended — click the pill to enable'));
           }
         }).catch(function (err) {
+          if (gen === sayGen) pendingCmdSay = false;
           sayAsyncError('decode failed: ' + (err && err.message ? err.message : err));
         });
       }
@@ -670,6 +677,7 @@
             duration: sayActive ? sayActive.duration : (lastSay ? lastSay.duration : 0),
             words: lastSay ? lastSay.words.length : 0,
             samples: probeN,
+            starts: sayStarts,
             ctxState: audioCtx ? audioCtx.state : 'none',
             wsState: ws ? ws.readyState : -1
           };
@@ -729,7 +737,8 @@
         try {
           res = window.whaleModel.playMotion(group, index);
         } catch (err) {
-          cmdFailed('motion ' + group, (err && err.message) || String(err));
+          cmdFailed('motion ' + group,
+            ((err && err.message) || String(err)) + ' — motions: ' + motionListText());
           return;
         }
         Promise.resolve(res).then(function (ok) {
@@ -768,7 +777,8 @@
             cmdFailed('expression ' + name, 'not applied — expressions: ' + expressionList());
           }
         }, function (err) {
-          cmdFailed('expression ' + name, (err && err.message) || String(err));
+          cmdFailed('expression ' + name,
+            ((err && err.message) || String(err)) + ' — expressions: ' + expressionList());
         });
       }
 

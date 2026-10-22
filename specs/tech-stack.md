@@ -18,7 +18,8 @@
   8 KB soft frame cap, 64 KB ws maxPayload, 256 KB per-client backpressure skip,
   30 s ping/pong keepalive, single-python-writer (replacement close code 4001),
   unknown roles close 1008.
-- Measured budget (2026-10-19): ~50 MB RSS while streaming.
+- Measured budget (2026-10-19): ~50 MB RSS while streaming (steady state; the
+  ~60 MB boot transient decays within a minute and is not part of the gate).
 
 ## Frontend (whale-girl-frontend/index.html)
 - ONE static HTML file, vanilla JS, no build step, no framework.
@@ -105,8 +106,9 @@
 - Mode: a mode frame is emitted on driver connect and on every web_connected
   (re-announce); only a real flip changes the mode, clears the pose overlay and
   echoes the frame — an idempotent mode command does not clear a held pose.
-- Relay hardening: the command relay is capped at 100 commands/s and drops when
-  the python writer's buffer exceeds 256 KB; with no python writer connected the
+- Relay hardening: the command relay is capped at 100 commands per fixed 1 s
+  window (up to ~200 can pass across a boundary) and drops when the python
+  writer's buffer exceeds 256 KB; with no python writer connected the
   server closes the sender with 4002 and whale_cmd.py exits 1 with a message.
 - Browser-origin guard: a page whose Origin host differs from the WebSocket host
   is closed with 1008 — a best-effort same-origin guard (loopback aliases are

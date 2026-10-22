@@ -99,9 +99,11 @@
   pauses them and hands the mouth to explicit commands. Commands work in both
   modes; a mode command flips at runtime (an idempotent one does nothing) and a
   real flip clears the pose overlay. ?debug=1 shows the last command + mode.
-- Limits: say text ≤ 300 chars; pose ≤ 32 keys with ids matching
-  [A-Za-z0-9_]{1,64} and finite numbers; motion group ≤ 128 chars, index ≤ 9999;
-  oversized commands are rejected with a rate-limited driver log.
+- Limits: the CLI pre-checks its own frame at 8 KB (exit 2); the server drops
+  web frames over 8 KB; the driver enforces semantic caps — say text ≤ 300
+  chars, pose ≤ 32 keys with ids matching [A-Za-z0-9_]{1,64} and finite numbers,
+  motion group ≤ 128 chars, index ≤ 9999 — and logs rejects at most once a
+  second.
   With no driver connected the server closes the command socket with 4002 and
   whale_cmd.py exits 1 ("no brain connected").
 - Verify (each pass boots server + Chrome + driver itself — stop the running

@@ -99,6 +99,15 @@ async function waitFor(fn, timeoutMs, label) {
 }
 
 const results = [];
+let serverLogTail = '';
+
+function parseServerCounter(name) {
+  const re = new RegExp(name + '=(\\d+)', 'g');
+  let last = -1;
+  let m;
+  while ((m = re.exec(serverLogTail)) !== null) last = Number(m[1]);
+  return last;
+}
 function record(name, ok, detail) {
   results.push({ name, ok });
   console.log((ok ? 'PASS ' : 'FAIL ') + name + ' — ' + detail);
@@ -120,7 +129,10 @@ async function startServer() {
     stdio: ['ignore', 'pipe', 'pipe'],
   }));
   child.on('error', (err) => fail(err));
-  child.stdout.on('data', (d) => { if (process.env.PROBE_DEBUG) process.stdout.write('[server] ' + d); });
+  child.stdout.on('data', (d) => {
+    serverLogTail = (serverLogTail + d.toString()).slice(-4096);
+    if (process.env.PROBE_DEBUG) process.stdout.write('[server] ' + d);
+  });
   child.stderr.on('data', (d) => { if (process.env.PROBE_DEBUG) process.stderr.write('[server] ' + d); });
   await waitFor(async () => {
     try { return (await fetch('http://localhost:' + PORT + '/')).ok; } catch (err) { return false; }
@@ -160,6 +172,7 @@ function openWeb() {
 function cliEnv() {
   return Object.assign({}, process.env, {
     WHALE_CMD_WS: 'ws://localhost:' + WS_PORT + '?role=web',
+    WHALE_MODEL_MANIFEST: MANIFEST, // never trust a developer's override
   });
 }
 
@@ -346,6 +359,22 @@ async function cmdState(chrome) {
   const cliBad = spawnSync(PYTHON, [CLI, 'motion', 'Nope'], { cwd: ROOT, timeout: 15000 });
   record('CLI rejects an unknown motion group', cliBad.status === 2,
     'exit ' + cliBad.status);
+  const cliBadIndex = spawnSync(PYTHON, [CLI, 'motion', MOTION, '999'],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  record('CLI rejects an out-of-range motion index', cliBadIndex.status === 2,
+    'exit ' + cliBadIndex.status);
+  const cliLongGroup = spawnSync(PYTHON, [CLI, 'motion', 'g'.repeat(129)],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  record('CLI rejects an over-long motion group', cliLongGroup.status === 2,
+    'exit ' + cliLongGroup.status);
+  // The v1 motion index field must reach the frontend too.
+  probeWs.send(JSON.stringify({ type: 'motion', group: MOTION, index: 0 }));
+  await waitFor(async () => {
+    const st = await cmdState(chrome);
+    return st && st.last === 'motion: ' + MOTION + '/0' && st.ok === true;
+  }, 8000, 'motion command with an index');
+  record('motion index is forwarded and applied', true,
+    'cmdState.last="motion: ' + MOTION + '/0"');
   const cliNoServer = spawnSync(PYTHON, [CLI, 'say', 'x'], {
     cwd: ROOT, timeout: 15000,
     env: Object.assign({}, process.env, { WHALE_CMD_WS: 'ws://localhost:1?role=web' }),
@@ -549,20 +578,25 @@ async function cmdState(chrome) {
     type: 'say', audio: canned2.audio, words: canned2.words || [], src: 'mock',
   }) + ')');
   await sleep(400);
+  const startsBeforeInject = (await chrome.evaluate('window.whaleSpeech.state()')).starts;
   const afterInject = await chrome.evaluate('window.whaleSpeech.state()');
   const afterInjectSay = await chrome.evaluate('window.whaleSpeech.probeStats().say');
   record('frontend ignores a mock say while a line plays',
     !!afterInject && afterInject.active === true && !!afterInjectSay &&
-      afterInjectSay.audio === cmd2.audio,
-    'injected src:"mock" — the page still plays ' + (afterInjectSay && afterInjectSay.audio));
+      afterInjectSay.audio === cmd2.audio && afterInject.starts === startsBeforeInject,
+    'injected src:"mock" — the page still plays ' + (afterInjectSay && afterInjectSay.audio) +
+    ', no new start (' + afterInject.starts + ')');
+  let endSnapshot = null;
   await waitFor(async () => {
-    const st = await chrome.evaluate('window.whaleSpeech.state()');
-    return !!st && st.active === false;
+    endSnapshot = await chrome.evaluate(
+      '(function(){var s=window.whaleSpeech.state(); var p=window.whaleSpeech.probeStats().say;' +
+      'return {active:s.active, audio:p?p.audio:null};})()'
+    );
+    return !!endSnapshot && endSnapshot.active === false;
   }, 20000, 'commanded line finished (mock mode)');
-  const endSay = await chrome.evaluate('window.whaleSpeech.probeStats().say');
   record('commanded line plays to its end',
-    !!endSay && endSay.audio === cmd2.audio,
-    'after the line: last say ' + (endSay && endSay.audio));
+    !!endSnapshot && endSnapshot.audio === cmd2.audio,
+    'after the line: last say ' + (endSnapshot && endSnapshot.audio));
 
   // 8) malformed frames must be rejected without killing the pipeline.
   const bigKey = 'k' + 'x'.repeat(300);                 // > the driver's 64-char cap
@@ -607,6 +641,17 @@ async function cmdState(chrome) {
     (mcAfter - mcBefore) + ' frames)');
   sampleRss();
 
+  // The relay's fixed-window cap: a 150-frame burst must be partially dropped.
+  const droppedBefore = parseServerCounter('dropped');
+  for (let i = 0; i < 150; i++) probeWs.send('{"type":"mode","mock":true}');
+  await sleep(5200);
+  probeWs.send('{"type":"mode","mock":true}'); // force a fresh aggregate log line
+  await sleep(600);
+  const droppedAfter = parseServerCounter('dropped');
+  record('command flood is rate-capped',
+    droppedBefore >= 0 && droppedAfter > droppedBefore,
+    'dropped ' + droppedBefore + ' -> ' + droppedAfter + ' after a 150-frame burst');
+
   // 9) a live flip during mock activity silences the canned lines at once.
   const canned3Base = sayFrames.length;
   await waitFor(() => sayFrames.some((m, i) => i >= canned3Base && m.src === 'mock'),
@@ -627,14 +672,17 @@ async function cmdState(chrome) {
   record('live flip stops a playing canned line', !!flipped && flipped.active === false,
     'active=' + (flipped && flipped.active));
   // A mock say arriving after the flip must not start (decode-time guard).
+  const startsBeforeFlipInject = (await chrome.evaluate('window.whaleSpeech.state()')).starts;
   await chrome.evaluate('window.whaleSpeech.testSay(' + JSON.stringify({
     type: 'say', audio: canned3.audio, words: canned3.words || [], src: 'mock',
   }) + ')');
   await sleep(800);
   const afterFlipInject = await chrome.evaluate('window.whaleSpeech.state()');
   record('mock say after a live flip is ignored',
-    !!afterFlipInject && afterFlipInject.active === false,
-    'injected src:"mock" — active=' + (afterFlipInject && afterFlipInject.active));
+    !!afterFlipInject && afterFlipInject.active === false
+      && afterFlipInject.starts === startsBeforeFlipInject,
+    'injected src:"mock" — active=' + (afterFlipInject && afterFlipInject.active) +
+    ', no new start');
   await sleep(2000);
   const stayedOff = await chrome.evaluate('window.whaleSpeech.state()');
   record('live stays silent after the flip',
@@ -646,16 +694,19 @@ async function cmdState(chrome) {
   probeWs.send(JSON.stringify({ type: 'mode', mock: true }));
   await waitModeAfter(true, raceMockBase, 5000);
   await sleep(300);
+  const startsBeforeRace = (await chrome.evaluate('window.whaleSpeech.state()')).starts;
   await chrome.evaluate('window.whaleSpeech.testSay(' + JSON.stringify({
-    type: 'say', audio: canned3.audio, words: canned3.words || [], src: 'mock',
+    type: 'say', audio: dshSay.audio, words: dshSay.words || [], src: 'mock',
   }) + ')');
   const raceLiveBase = modeFrames.length;
   probeWs.send(JSON.stringify({ type: 'mode', mock: false }));
   await waitModeAfter(false, raceLiveBase, 5000);
-  await sleep(1200);
+  await sleep(1500);
   const raceState = await chrome.evaluate('window.whaleSpeech.state()');
   record('a mock say decoding during the live flip does not start',
-    !!raceState && raceState.active === false, 'active=' + (raceState && raceState.active));
+    !!raceState && raceState.active === false && raceState.starts === startsBeforeRace,
+    'active=' + (raceState && raceState.active) + ', starts ' +
+    startsBeforeRace + ' -> ' + (raceState && raceState.starts));
   const silenceBase = sayFrames.length;
   await sleep(SILENCE_MS);
   const leaked = sayFrames.length - silenceBase;
@@ -663,7 +714,16 @@ async function cmdState(chrome) {
     leaked + ' say frames in ' + (SILENCE_MS / 1000) + ' s after the flip');
 
   // 10) a page that joins AFTER the driver must learn the current mode.
+  const oldOrigin = await chrome.evaluate('performance.timeOrigin');
   try { await chrome.evaluate('location.reload()'); } catch (err) { /* teardown */ }
+  await waitFor(async () => {
+    try {
+      const origin = await chrome.evaluate('performance.timeOrigin');
+      return typeof origin === 'number' && origin !== oldOrigin;
+    } catch (err) {
+      return false;
+    }
+  }, 20000, 'a new document after the reload');
   await waitFor(async () => {
     try {
       return (await chrome.evaluate(
@@ -672,9 +732,9 @@ async function cmdState(chrome) {
     } catch (err) {
       return false;
     }
-  }, 20000, 'reloaded page learns the live mode');
+  }, 20000, 'the NEW page learned the live mode');
   record('page joining after the driver learns the live mode', true,
-    'reloaded page cmdState.mode="live"');
+    'a new document (timeOrigin changed) has cmdState.mode="live"');
 
   // 11) the motion stream is still healthy at ~30 fps.
   const beforeCount = motionCount;
@@ -687,9 +747,11 @@ async function cmdState(chrome) {
   sampleRss();
   const srvMax = Math.max.apply(null, serverSamples);
   const drvMax = Math.max.apply(null, driverSamples);
-  record('server RSS <= 60 MB (every sample)', srvMax > 0 && srvMax <= 60 * 1024,
+  record('server RSS <= 60 MB (every sample)',
+    serverSamples.every((v) => v > 0 && v <= 60 * 1024),
     'samples ' + serverSamples.join(', ') + ' KB — max ' + srvMax);
-  record('driver RSS <= 30 MB (every sample)', drvMax > 0 && drvMax <= 30 * 1024,
+  record('driver RSS <= 30 MB (every sample)',
+    driverSamples.every((v) => v > 0 && v <= 30 * 1024),
     'samples ' + driverSamples.join(', ') + ' KB — max ' + drvMax);
 
   // CLI with no driver: the server answers 4002 and the tool exits 1.
