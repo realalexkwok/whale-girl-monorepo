@@ -104,7 +104,14 @@ async function startServer() {
 }
 
 function startDriver() {
-  const env = Object.assign({}, process.env, { WHALE_SAY_TEXT: SENTENCE });
+  // The probe owns the run: always talk to THIS probe's proxy and never inherit
+  // a developer's mode/engine (WHALE_SAY_TEXT is set here, overriding any).
+  const env = Object.assign({}, process.env, {
+    WHALE_SAY_TEXT: SENTENCE,
+    WHALE_WS: 'ws://localhost:' + WS_PORT + '?role=python',
+  });
+  delete env.WHALE_MODE;
+  delete env.WHALE_ENGINE;
   if (ENGINE) env.WHALE_ENGINE = ENGINE;
   const child = track(spawn(PYTHON, [DRIVER], {
     cwd: ROOT,
@@ -135,7 +142,8 @@ async function startChrome() {
     '--no-default-browser-check',
     '--disable-extensions',
     '--window-size=1280,900',
-    'http://localhost:' + PORT + '/?debug=1',
+    'http://localhost:' + PORT + '/?debug=1&ws=' +
+      encodeURIComponent('ws://localhost:' + WS_PORT),
   ];
   if (!VISIBLE) args.unshift('--headless=new');
   const child = track(spawn(CHROME, args, { stdio: 'ignore' }));

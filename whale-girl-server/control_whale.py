@@ -34,6 +34,9 @@ WHALE_VOICE = os.environ.get("WHALE_VOICE", "zh-CN-XiaoyiNeural")
 WHALE_SAY_VOICE = os.environ.get("WHALE_SAY_VOICE", "Tingting")
 SAY_ENGINE = os.environ.get("WHALE_ENGINE", "").strip().lower()
 SAY_TEXT = os.environ.get("WHALE_SAY_TEXT", "").strip()
+# WHALE_SAY_TEXT is a one-shot trigger per PROCESS (not per connection): a
+# driver reconnect must not re-synthesize the same scripted line over and over.
+SAY_TEXT_PENDING = bool(SAY_TEXT)
 # M3.1: mock synthesis stays the default. live mode pauses the mock talk bursts
 # and hands the mouth to explicit commands (say / pose); a mode frame flips it
 # at runtime. Anything other than an explicit "live" keeps mock behavior.
@@ -448,6 +451,7 @@ def synth(now, blink, talk, frame):
 
 async def run_driver(ws):
     """30 FPS drift-corrected send loop; idles while no web client is connected."""
+    global SAY_TEXT_PENDING
     loop = asyncio.get_running_loop()
     web_count = 1  # optimistic start; the server corrects this via events
 
@@ -608,7 +612,6 @@ async def run_driver(ws):
     next_t = start + FRAME_TIME
 
     say_task = None
-    say_text_pending = bool(SAY_TEXT)
     pending_say = None  # (text, src) queued behind an in-flight synthesis
 
     def start_say(text, src):
@@ -654,9 +657,10 @@ async def run_driver(ws):
         while True:
             if web_count > 0:
                 now = loop.time()
-                if say_text_pending and (say_task is None or say_task.done()):
-                    # WHALE_SAY_TEXT is a one-shot trigger (probe / manual test).
-                    say_text_pending = False
+                if SAY_TEXT_PENDING and (say_task is None or say_task.done()):
+                    # One-shot per process (probe / manual test): never re-fired
+                    # by a reconnect.
+                    SAY_TEXT_PENDING = False
                     trigger_say(SAY_TEXT, "cmd")
                 talking_before = talk.talking
                 synth(now, blink, talk, MOTION)
