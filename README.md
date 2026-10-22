@@ -166,6 +166,10 @@ driver-side and not shown; during a say the line shows the current word).
 - Whale silent but moving: check the driver log for "say:" lines; if the page
   shows a "click to enable audio" pill, click it once (OBS Interact).
   WHALE_ENGINE=say forces the macOS fallback engine.
+- Page shows `ws disconnected (1008)`: the page's host does not match the
+  WebSocket host (origin guard). Serve the page and the WS from the same
+  hostname (localhost and 127.0.0.1 are both accepted), or point `?ws=` at the
+  same host as the page.
 - Command has no effect: run the whale_cmd.py examples from whale-girl-server —
   "cannot reach the server" means npm start is not running; "unknown motion
   group" lists the available groups; ?debug=1 shows the last command + mode.

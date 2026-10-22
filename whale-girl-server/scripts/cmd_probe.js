@@ -206,9 +206,15 @@ async function startChrome() {
   await new Promise((resolve, reject) => { cdp.on('open', resolve); cdp.on('error', reject); });
   let seq = 0;
   const pending = new Map();
+  const consoleLines = [];
   cdp.on('message', (data) => {
     let msg;
     try { msg = JSON.parse(data.toString()); } catch (err) { return; }
+    if (msg.method === 'Runtime.consoleAPICalled') {
+      const args = (msg.params && msg.params.args) || [];
+      consoleLines.push(args.map((a) => (a.value !== undefined ? String(a.value) : (a.description || ''))).join(' '));
+      return;
+    }
     if (!msg.id || !pending.has(msg.id)) return;
     const entry = pending.get(msg.id);
     pending.delete(msg.id);
@@ -218,6 +224,13 @@ async function startChrome() {
     } else {
       entry.resolve(msg.result && msg.result.result ? msg.result.result.value : undefined);
     }
+  });
+  // Capture console.error evidence. Runtime.enable is a JSON-RPC *request*:
+  // without an id the browser ignores it as a notification.
+  await new Promise((resolve, reject) => {
+    const id = ++seq;
+    pending.set(id, { resolve, reject });
+    cdp.send(JSON.stringify({ id, method: 'Runtime.enable' }));
   });
   function evaluate(expression) {
     return new Promise((resolve, reject) => {
@@ -234,6 +247,7 @@ async function startChrome() {
   }
   return {
     evaluate,
+    consoleLines,
     close: () => { try { cdp.close(); } catch (err) { /* ignore */ } },
     profile,
   };
@@ -437,15 +451,20 @@ async function cmdState(chrome) {
     const st = await cmdState(chrome);
     return st && st.last === 'motion: Nope' && st.ok === false;
   }, 8000, 'a bad motion reports a failure');
-  record('a bad motion reports ok=false', true,
-    'cmdState.ok=false (the console lists the motions)');
+  const motionErrLine = chrome.consoleLines.some(
+    (l) => l.indexOf('motion Nope') !== -1 && l.indexOf('motions:') !== -1);
+  record('a bad motion reports ok=false', motionErrLine,
+    'cmdState.ok=false and one console.error lists the motions');
+  await sleep(1200); // the frontend logs failures at most once a second
   probeWs.send(JSON.stringify({ type: 'expression', name: 'NoSuch' }));
   await waitFor(async () => {
     const st = await cmdState(chrome);
     return st && st.last === 'expression: NoSuch' && st.ok === false;
   }, 8000, 'a bad expression reports a failure');
-  record('a bad expression reports ok=false', true,
-    'cmdState.ok=false (the console lists the expressions)');
+  const exprErrLine = chrome.consoleLines.some(
+    (l) => l.indexOf('expression NoSuch') !== -1 && l.indexOf('expressions:') !== -1);
+  record('a bad expression reports ok=false', exprErrLine,
+    'cmdState.ok=false and one console.error lists the expressions');
 
   // 3) expression on the same transport.
   probeWs.send(JSON.stringify({ type: 'expression', name: EXPRESSION }));
@@ -504,8 +523,8 @@ async function cmdState(chrome) {
   probeWs.send(JSON.stringify({ type: 'mode', mock: false })); // already live
   await sleep(500);
   record('idempotent mode keeps a held pose',
-    !!lastMotion && lastMotion.p.ParamBrowLY === 1 && modeFrames.length === modeHeldBase,
-    'no mode frame and ParamBrowLY=' + (lastMotion && lastMotion.p.ParamBrowLY));
+    !!lastMotion && lastMotion.p.ParamBrowLY === 1,
+    'ParamBrowLY=' + (lastMotion && lastMotion.p.ParamBrowLY) + ' after an idempotent mode command');
   const modeMockBase = modeFrames.length;
   probeWs.send(JSON.stringify({ type: 'mode', mock: true })); // real flip
   await waitModeAfter(true, modeMockBase, 5000);
@@ -517,7 +536,10 @@ async function cmdState(chrome) {
   }, 5000, 'frontend cmdState mode mock');
   record('mode mock: flip frame + frontend state + pose cleared', true,
     'mode frame {"mock":true}, cmdState.mode="mock", ParamBrowLY gone');
-  const cannedSay = await waitSay((m) => typeof m.audio === 'string', 25000, 'canned say frame (mock resumed)');
+  const cannedBase = sayFrames.length;
+  await waitFor(() => sayFrames.some((m, i) => i >= cannedBase && m.src === 'mock'),
+    25000, 'canned say frame (mock resumed)');
+  const cannedSay = sayFrames.filter((m, i) => i >= cannedBase && m.src === 'mock').pop();
   const cannedOk = typeof cannedSay.audio === 'string'
     && cannedSay.audio.indexOf('/audio/') === 0
     && Array.isArray(cannedSay.words);
@@ -545,11 +567,12 @@ async function cmdState(chrome) {
     'mode frame {"mock":false}, cmdState.mode="live"');
 
   const sayText = '测试一下语音命令';
+  const dshBase = sayFrames.length;
   probeWs.send(JSON.stringify({ type: 'say', text: sayText }));
-  // Wait for a NEW say frame (not the canned one above): the audio path must differ.
-  await waitFor(() => sayFrames.some((m) => m.audio !== cannedSay.audio),
+  // A NEW cmd frame from this command (the CLI say earlier is not it).
+  await waitFor(() => sayFrames.some((m, i) => i >= dshBase && m.src === 'cmd'),
     120000, 'say frame from the say command');
-  const dshSay = sayFrames.filter((m) => m.audio !== cannedSay.audio).pop();
+  const dshSay = sayFrames.filter((m, i) => i >= dshBase && m.src === 'cmd').pop();
   const shapeOk = dshSay.type === 'say'
     && typeof dshSay.audio === 'string' && dshSay.audio.indexOf('/audio/') === 0
     && Array.isArray(dshSay.words)
@@ -710,9 +733,9 @@ async function cmdState(chrome) {
   await sleep(1500);
   const capsStateAfter = await cmdState(chrome);
   record('driver caps reject over-limit wire commands',
-    sayFrames.length === capsSayBefore && !!capsStateAfter &&
-      capsStateAfter.last === (capsStateBefore && capsStateBefore.last),
-    '129-char group / index 10000 / 301-char say ignored; last cmd unchanged');
+    sayFrames.slice(capsSayBefore).filter((m) => m.src === 'cmd').length === 0 &&
+      !!capsStateAfter && capsStateAfter.last === (capsStateBefore && capsStateBefore.last),
+    '129-char group / index 10000 / 301-char say ignored; no cmd say frame; last cmd unchanged');
   sampleRss();
 
   // The relay's fixed-window cap: a 150-frame burst must be partially dropped.

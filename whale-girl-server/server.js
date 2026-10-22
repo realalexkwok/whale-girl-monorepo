@@ -189,9 +189,9 @@ wss.on('connection', (ws, req) => {
     ws.on('pong', () => { ws.isAlive = true; });
     ws.on('message', (data, isBinary) => {
       if (isBinary) { framesDropped++; return; }
-      const text = data.toString();
-      if (Buffer.byteLength(text, 'utf8') > MAX_FRAME_BYTES) { framesDropped++; return; }
-      broadcastToWeb(text);
+      // Buffer#length is the byte count: drop oversized frames before decoding.
+      if (data.length > MAX_FRAME_BYTES) { framesDropped++; return; }
+      broadcastToWeb(data.toString());
       maybeLog(false);
     });
     ws.on('error', () => {});

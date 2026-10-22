@@ -471,10 +471,15 @@ async def run_driver(ws):
                 return
             frame = {"type": "motion", "group": group}
             index = event.get("index")
-            if (isinstance(index, int) and not isinstance(index, bool)
-                    and 0 <= index <= MAX_MOTION_INDEX):
-                frame["index"] = index
-            elif index is not None:
+            if index is None:
+                pass
+            elif (isinstance(index, (int, float))
+                  and not isinstance(index, bool)
+                  and float(index).is_integer()
+                  and 0 <= int(index) <= MAX_MOTION_INDEX):
+                # Integral floats (1.0 from a float-typed MCP wrapper) are ints.
+                frame["index"] = int(index)
+            else:
                 log_bad_cmd("motion index out of range: %r" % (index,))
                 return
             await forward(frame)
