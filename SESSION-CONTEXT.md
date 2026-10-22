@@ -143,12 +143,11 @@
 ## 7. Git state
 - Remote: origin = git@github.com:realalexkwok/whale-girl-monorepo.git; main tracks
   origin/main.
-- main is at 499d75f (pushed 2026-10-22, 9eb69f7..499d75f): M1, M2.1, M2.2 and
-  M3.1 closed. The M3.1 series: 953f184 (feature), the review-round commits
-  (0945472, a672daf, 0533c5d, c5db3c1, 22238a7, 0e19dce, 89be70e, 57a44f6,
-  21cf0b6, 1c94f66, e1028cd), 42d7727 (human review round: hermetic say_probe,
-  one-shot WHALE_SAY_TEXT) and 499d75f (close bookkeeping). The ff merge
-  fast-forwarded main and the push published it; the local
-  feature/whale-girl-m31-commands branch was deleted; working tree clean; on
-  main. M2.2's history (main at 6261a9c, the 8a68d2f..d3a1523 series) is
-  preserved in specs/history_roadmap.md.
+- main is at 71e689a (pushed 2026-10-22, a821406..71e689a): M1, M2.1, M2.2, M3.1
+  and M3.2 closed. The M3.2 series: 880584d (feature), ef4f26d + ff3060f (review
+  round 1), 4acd951 + 75a1a01 (round 2), dbaec7a (round 3), 8950101 (round 4),
+  e61af13 (round 5), 1123a37 (round 6), 89eeff7 (round 7 status sync) and
+  71e689a (close bookkeeping). The ff merge fast-forwarded main and the push
+  published it; the local feature/whale-girl-m32-expressions branch was deleted;
+  working tree clean; on main. The earlier M3.1 history (main at 499d75f) and
+  M2.2 history (main at 6261a9c) are preserved in specs/history_roadmap.md.

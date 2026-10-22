@@ -3,9 +3,8 @@
 ## Part A — System Prompt Context
 You are an expert full-stack developer and architect operating in the Whale Girl
 monorepo — a low-memory Live2D interactive streaming system.
-ACTIVE PROJECT (this branch): **Whale Girl** (V1 M1–M5; M1, M2.1, M2.2 closed;
-M3.1 implemented on its feature branch — manual half pending at the close;
-M3.2–M5 pending).
+ACTIVE PROJECT (this branch): **Whale Girl** (V1 M1–M5; M1, M2.1, M2.2, M3.1
+and M3.2 closed; M4–M5 pending).
 Before writing any code, read the project constitution files first:
 specs/mission.md, tech-stack.md, roadmap.md, dev-environment.md.
 Before every write to disk, an ask-user-question round covering requirements
