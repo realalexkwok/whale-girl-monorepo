@@ -1,12 +1,20 @@
 # M3.2 — LLM-Driven Expressions: Emotion Tag -> Preset Routing — Validation
 
-> Status: IMPLEMENTED on feature/whale-girl-m32-expressions (review rounds 1–5
+> Status: IMPLEMENTED on feature/whale-girl-m32-expressions (review rounds 1–6
 > fixes applied and the automatic half re-run on that tree) — the manual half is
 > owed by the owner at the close. Roadmap tick + history archive happen only on
 > the owner's close instruction.
 
 ## Automatic verification results (measured 2026-10-22, macOS)
 All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-server.
+
+**Run provenance (2026-10-22):** the full automatic pass (cmd_probe, say_probe,
+ws_probe, role probe, curl, the 60 s RSS settle and the inline node --check)
+ran on the round-4 tree (committed as 8950101); the later commits only change
+probe labels/comments and specs, so those numbers remain valid. The expr_probe
+22/22 row and its RSS samples were re-run on the final tree (e61af13); the
+expr/cmd/say/ws numbers in the table are therefore from those two runs, not one
+single run.
 
 | Check | Command | Result |
 | --- | --- | --- |
