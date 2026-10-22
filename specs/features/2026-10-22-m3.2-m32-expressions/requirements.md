@@ -3,8 +3,8 @@
 > Confirmed by the owner (2026-10-22, grouped ask round: requirements / plan /
 > validation; answers: hybrid routing table / driver table + CLI + new probe /
 > per-tag probe + full gate). Status: implemented on
-> feature/whale-girl-m32-expressions (review round 1 fixes applied); the manual
-> half is owed by the owner at the close.
+> feature/whale-girl-m32-expressions (review rounds 1–3 fixes applied); the
+> manual half is owed by the owner at the close.
 
 ## Scope
 - DSH sessions steer the whale's face: the model classifies the text inline and

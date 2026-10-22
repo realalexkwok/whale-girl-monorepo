@@ -64,4 +64,13 @@ def load_tags(environ=None):
                 file=sys.stderr,
                 flush=True,
             )
+    # The neutral tag is the reset contract (an empty-name expression frame):
+    # a non-empty override would make idle/mode resets inconsistent, so ignore it.
+    if table.get("neutral"):
+        print(
+            "[whale] the neutral tag always resets; ignoring its non-empty preset",
+            file=sys.stderr,
+            flush=True,
+        )
+        table["neutral"] = ""
     return table

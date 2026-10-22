@@ -535,11 +535,13 @@ async def run_driver(ws):
             # name passthrough keeps working (old CLI/probe clients).
             tag = event.get("tag")
             if isinstance(tag, str) and tag:
+                forced = False  # malformed/unknown -> neutral, bypass the cooldown
                 if len(tag) > 32:
                     log_bad_cmd("expression tag too long (%d chars); using "
                                 "neutral (valid: %s)"
                                 % (len(tag), ", ".join(sorted(EXPR_TAGS))))
                     tag = "neutral"
+                    forced = True
                 now = time.monotonic()
                 preset = EXPR_TAGS.get(tag)
                 if preset is None:
@@ -547,12 +549,15 @@ async def run_driver(ws):
                                 % (tag[:32], ", ".join(sorted(EXPR_TAGS))))
                     tag = "neutral"
                     preset = expr_neutral
+                    forced = True
                 elif len(preset) > MAX_CMD_NAME:
                     log_bad_cmd("expression preset too long (%d chars) for %r"
                                 % (len(preset), tag[:32]))
                     tag = "neutral"
                     preset = expr_neutral
-                elif tag == expr_tag and now - expr_at < EXPR_COOLDOWN:
+                    forced = True
+                elif (not forced and tag == expr_tag
+                      and now - expr_at < EXPR_COOLDOWN):
                     # A repeat still counts as activity: keep the face alive.
                     expr_deadline = now + EXPR_IDLE
                     log_notice("express %r within the cooldown, skipped"

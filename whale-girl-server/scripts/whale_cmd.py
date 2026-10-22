@@ -58,6 +58,8 @@ MAX_SAY_CHARS = 300          # longest say line the driver accepts
 POSE_ID_RE = re.compile(r"[A-Za-z0-9_]{1,64}")  # Live2D parameter-id grammar
 MAX_CMD_NAME = 128     # motion group / expression name cap (mirrors the driver)
 MAX_MOTION_INDEX = 9999  # driver-side motion index cap
+# One table read for the help text + the express validation (warnings once).
+EXPR_TAGS = load_tags()
 
 
 def motion_groups(path):
@@ -137,7 +139,7 @@ def build_parser():
                              help="show the preset for an emotion tag (M3.2)")
     express.add_argument(
         "tag",
-        help="emotion tag (one of: %s)" % ", ".join(sorted(load_tags())),
+        help="emotion tag (one of: %s)" % ", ".join(sorted(EXPR_TAGS)),
     )
     express.add_argument("text", nargs="*", help="optional source text (logged)")
     return parser
@@ -236,10 +238,7 @@ def main(argv):
         tag = args.tag.strip()
         if not tag or len(tag) > 32:
             return fail("express tag must be 1-32 characters")
-        try:
-            tags = load_tags()
-        except Exception:  # a broken override must not block the command
-            tags = None
+        tags = EXPR_TAGS
         if tags is not None and tag not in tags:
             return fail("unknown emotion tag '%s'. Valid tags: %s"
                         % (tag, ", ".join(sorted(tags))))

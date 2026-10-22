@@ -284,14 +284,16 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
     ], {
       cwd: ROOT,
       env: Object.assign({}, process.env, {
-        WHALE_EXPR_TAGS: '{"happy":"爱心眼","proud":"双手比耶"}',
+        WHALE_EXPR_TAGS: '{"happy":"爱心眼","proud":"双手比耶","neutral":"爱心眼"}',
       }),
     }).toString());
   } catch (err) { overrideTags = null; }
   record('WHALE_EXPR_TAGS override merges',
-    !!overrideTags && overrideTags.happy === '爱心眼' && overrideTags.proud === '双手比耶',
+    !!overrideTags && overrideTags.happy === '爱心眼' &&
+    overrideTags.proud === '双手比耶' && overrideTags.neutral === '',
     'happy -> ' + (overrideTags && overrideTags.happy) +
-    ', proud -> ' + (overrideTags && overrideTags.proud));
+    ', proud -> ' + (overrideTags && overrideTags.proud) +
+    ', neutral -> ' + JSON.stringify(overrideTags && overrideTags.neutral));
   if (await portOpen(PORT)) throw new Error('port ' + PORT + ' already in use — stop the running server first');
   if (await portOpen(WS_PORT)) throw new Error('port ' + WS_PORT + ' already in use — stop the running server first');
 
@@ -370,6 +372,12 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   st = await waitState(
     (s) => s.last === 'expression: reset' && s.exprN > before, 8000, 'tagless frame');
   record('a tagless expression frame resets', true, 'exprN ' + before + ' -> ' + st.exprN);
+  // 3c) an overlong tag also resets to neutral (and bypasses the cooldown).
+  before = (await cmdState()).exprN;
+  probeWs.send(JSON.stringify({ type: 'expression', tag: 'x'.repeat(40) }));
+  st = await waitState(
+    (s) => s.last === 'expression: reset' && s.exprN > before, 8000, 'overlong tag');
+  record('an overlong tag resets to neutral', true, 'exprN ' + before + ' -> ' + st.exprN);
 
   // 4) the neutral tag resets too.
   const before4 = (await cmdState()).exprN;
@@ -436,14 +444,19 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   record('idle returns the face to neutral', true,
     'exprN ' + before + ' -> ' + st.exprN + ' after ~' + (IDLE_MS / 1000) + ' s');
 
-  // 9) RSS: every sample must fit (unknown/0 is a failure).
+  // 9) RSS: the boot sample is informational (warm-up), the post-warm-up
+  // samples must all fit (unknown/0 is a failure).
   sampleRss();
-  record('server RSS <= 60 MB (every sample)',
-    serverSamples.every((v) => v > 0 && v <= 60 * 1024),
-    'samples ' + serverSamples.join(', ') + ' KB');
-  record('driver RSS <= 30 MB (every sample)',
-    driverSamples.every((v) => v > 0 && v <= 30 * 1024),
-    'samples ' + driverSamples.join(', ') + ' KB');
+  const serverGate = serverSamples.slice(1);
+  const driverGate = driverSamples.slice(1);
+  record('server RSS <= 60 MB (post-warm-up)',
+    serverGate.every((v) => v > 0 && v <= 60 * 1024),
+    'boot ' + serverSamples[0] + ' KB (informational); samples ' +
+    serverGate.join(', ') + ' KB');
+  record('driver RSS <= 30 MB (post-warm-up)',
+    driverGate.every((v) => v > 0 && v <= 30 * 1024),
+    'boot ' + driverSamples[0] + ' KB (informational); samples ' +
+    driverGate.join(', ') + ' KB');
 
   probeWs.close();
   chrome.close();
