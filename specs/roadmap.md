@@ -7,7 +7,7 @@
 > [history_roadmap.md](history_roadmap.md).
 >
 > Session-model note: the session AI model was switched to **V4.1-Flash** after the
-> M1 close (2026-10-20); M2 work continues on it.
+> M1 close (2026-10-20); M2 work continued on it (the M3.1 close ran on it too).
 
 ## Branches
 - main holds the merged state of the active project.
@@ -25,7 +25,7 @@
 - [x] M1.4 control_whale.py: 30 FPS drift-corrected mock driver (blink/talk/gaze/sway, zero-alloc loop) — closed 2026-10-19; [detail](history_roadmap.md#m14-control_whalepy-mock-motion-driver)
 - [x] M1.5 end-to-end verification + run docs — closed 2026-10-19; [detail](history_roadmap.md#m15-end-to-end-verification-and-docs)
 
-## V1 (commitment: M1 closed + M2–M5 pending)
+## V1 (commitment: M1–M2 closed; M3–M5 pending)
 
 > **Replan 2026-10-20 (owner decision, advisor comparison + grouped ask round).**
 > The roadmap was restructured by merging the advisor's milestone plan (minus the

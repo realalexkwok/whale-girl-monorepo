@@ -103,7 +103,12 @@
 - Node v25.2.0, npm 10.5.2; whale-girl-server/node_modules installed.
 - Python 3.9.10; whale-girl-server/.venv with websockets 15.0.1 (newest supporting
   3.9; 16.0 needs 3.10+, 17.x needs 3.11+).
-- Ports 3000/3001 free at last check; env knobs PORT, WS_PORT, WHALE_WS.
+- Ports 3000/3001 free at last check (the close left the stack stopped); env
+  knobs PORT, WS_PORT, WHALE_WS, WHALE_MODE, WHALE_CMD_WS,
+  WHALE_MODEL_MANIFEST.
+- Scripts: ws_probe, ws_role_probe, say_probe (M2.2), cmd_probe (M3.1, 61
+  checks), validate_model; whale_cmd.py (DSH motion/say/pose/mode) and
+  tts_synth.py (edge-tts helper).
 - CDN URLs pinned in tech-stack.md, all verified 200 on 2026-10-19.
 - Live2D asset installed at whale-girl-frontend/model/ (4.3 MB, gitignored;
   DS鲸鱼娘, moc3 v4); gate it with node scripts/validate_model.js.
@@ -125,9 +130,12 @@
 ## 7. Git state
 - Remote: origin = git@github.com:realalexkwok/whale-girl-monorepo.git; main tracks
   origin/main.
-- main is at 6261a9c (pushed 2026-10-21): M1, M2.1 and M2.2 closed. The M2.2
-  series: 8a68d2f (feature), d684afa (review round), 9c6cd93 + d3a1523 (doc
-  corrections), 6261a9c (close bookkeeping); the owner's fcdb6d8 (M5 promo)
-  rode along and the previously local replan c579c43 was published by the same
-  push (bf2a319..6261a9c). The local feature/whale-girl-m22-lipsync branch was
-  deleted after the ff merge; working tree clean; on main.
+- main is at 499d75f (pushed 2026-10-22, 9eb69f7..499d75f): M1, M2.1, M2.2 and
+  M3.1 closed. The M3.1 series: 953f184 (feature), the review-round commits
+  (0945472, a672daf, 0533c5d, c5db3c1, 22238a7, 0e19dce, 89be70e, 57a44f6,
+  21cf0b6, 1c94f66, e1028cd), 42d7727 (human review round: hermetic say_probe,
+  one-shot WHALE_SAY_TEXT) and 499d75f (close bookkeeping). The ff merge
+  fast-forwarded main and the push published it; the local
+  feature/whale-girl-m31-commands branch was deleted; working tree clean; on
+  main. M2.2's history (main at 6261a9c, the 8a68d2f..d3a1523 series) is
+  preserved in specs/history_roadmap.md.
