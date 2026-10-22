@@ -53,6 +53,9 @@ must be answered by the user.
   safety, say byte-compat — prints its check count) and node scripts/say_probe.js
   (M2.2 regression). DSH commands: scripts/whale_cmd.py motion|say|pose|mode
   (venv python); WHALE_MODE=mock|live selects the boot mode.
+- M3.2 gate: node scripts/expr_probe.js (per-tag expression routing, cooldown,
+  neutral fallback, idle/mode reset — needs the DS model) plus the CLI
+  `scripts/whale_cmd.py express <tag> [text]`.
 - Smoke: curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ → 200.
 - Ports: lsof -nP -iTCP:3000 -iTCP:3001 -sTCP:LISTEN (both must be free before start).
 - Memory: ps -axo pid,rss,command | grep -E 'node server.js|control_whale.py'.

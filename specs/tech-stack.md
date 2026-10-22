@@ -106,6 +106,14 @@
 - Mode: a mode frame is emitted on driver connect and on every web_connected
   (re-announce); only a real flip changes the mode, clears the pose overlay and
   echoes the frame — an idempotent mode command does not clear a held pose.
+- Expressions (M3.2): a coarse emotion tag resolves driver-side via
+  expr_tags.py (defaults + a WHALE_EXPR_TAGS JSON merge) and is forwarded as the
+  existing {"type":"expression","name":"<preset>"} frame; the tag variant is
+  {"type":"expression","tag":"happy","text":"..."}; an empty name means reset
+  (the frontend calls resetExpression). Same-tag repeats inside
+  WHALE_EXPR_COOLDOWN (default 4 s) are skipped; a tag change applies at once;
+  no express command for WHALE_EXPR_IDLE (default 30 s) or a real mode flip
+  resets the face. Unknown tags fall back to neutral with a 1 Hz log.
 - Relay hardening: the command relay is capped at 100 commands per fixed 1 s
   window (up to ~200 can pass across a boundary) and drops when the python
   writer's buffer exceeds 256 KB; with no python writer connected the
@@ -132,6 +140,8 @@
 - Env knobs: PORT, WS_PORT, WHALE_WS (python endpoint), WHALE_DEBUG=1 (per-frame
   driver logs, off by default), WHALE_MODE=mock|live (default mock),
   WHALE_CMD_WS (CLI endpoint), WHALE_MODEL_MANIFEST (CLI motion-name validation),
+  WHALE_EXPR_TAGS (JSON tag -> preset merge), WHALE_EXPR_COOLDOWN (default 4 s),
+  WHALE_EXPR_IDLE (default 30 s),
   ?ws=ws://host:port (frontend endpoint override — for the Ubuntu split the nginx
   proxy must also pass the page Host, see dev-environment.md).
 - See dev-environment.md for the full runbook and the deployment patterns (M4.2).
@@ -140,9 +150,11 @@
 - Automatic half (agent): node scripts/ws_probe.js (expect PASS, 20–40 fps, increasing
   f), node scripts/ws_role_probe.js (expect close 1008), node scripts/cmd_probe.js
   (the M3.1 gate: v1 frames end to end, say byte-compat, malformed safety, multi-
-  sample RSS — it prints its check count), node scripts/say_probe.js (the M2.2
-  regression), curl smoke of :3000, node --check on the inline frontend script,
-  ps RSS snapshot, port-release check.
+  sample RSS — it prints its check count), node scripts/expr_probe.js (the M3.2
+  gate: per-tag expression routing, cooldown, fallback, idle/mode reset),
+  node scripts/say_probe.js (the M2.2 regression), curl smoke of :3000,
+  node --check on the inline frontend script, ps RSS snapshot, port-release
+  check.
 - Manual half (owner): browser check at http://localhost:3000?debug=1, then OBS
   Browser source — with and without the real model in place.
 - Reports must name absolute artifact paths and measured numbers.

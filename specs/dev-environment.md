@@ -94,10 +94,17 @@
 - Motion groups are validated against whale-girl-frontend/model/whale.model3.json
   (env WHALE_MODEL_MANIFEST; absent in a split deployment → warn + send anyway).
   The tool names a DSH/MCP wrapper uses map to the subcommands: whale_motion →
-  motion, whale_say → say, whale_pose → pose, whale_mode → mode.
+  motion, whale_say → say, whale_pose → pose, whale_mode → mode,
+  whale_express → express (M3.2).
   Exit codes: 0 sent (not acknowledged — the server may drop the frame on its
   python-buffer cap), 1 server unreachable OR reachable with no driver (4002),
   2 validation error.
+- Expressions (M3.2): the model classifies the text inline and calls
+  `scripts/whale_cmd.py express <tag> [text...]` with happy / sad / angry /
+  surprised / confused / love / neutral; the driver maps the tag through
+  expr_tags.py (WHALE_EXPR_TAGS JSON override) to a preset. Same-tag repeats
+  inside WHALE_EXPR_COOLDOWN (default 4 s) are skipped; with no express command
+  for WHALE_EXPR_IDLE (default 30 s) the face returns to neutral.
 - Mock vs live: WHALE_MODE=mock (default) keeps the canned talk bursts; live
   pauses them and hands the mouth to explicit commands. Commands work in both
   modes; a mode command flips at runtime (an idempotent one does nothing) and a
@@ -115,6 +122,7 @@
 
       cd whale-girl-server
       node scripts/cmd_probe.js     # every frame type + malformed safety (prints its count)
+      node scripts/expr_probe.js    # M3.2 per-tag expression routing
 
 ## Deployment patterns (M4.2 consumes this — config only, no code rewrite)
 

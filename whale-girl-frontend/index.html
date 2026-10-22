@@ -503,12 +503,15 @@
         return audioCtx;
       }
 
-      window.addEventListener('pointerdown', function () {
-        if (audioCtx && audioCtx.state !== 'running') ensureAudio();
-      });
-      window.addEventListener('keydown', function () {
-        if (audioCtx && audioCtx.state !== 'running') ensureAudio();
-      });
+      // Any gesture arms the audio: create/resume the AudioContext inside the
+      // gesture so the FIRST say after a refresh already plays (no pill needed).
+      function armAudio() {
+        if (!audioCtx || audioCtx.state !== 'running') {
+          try { ensureAudio(); } catch (err) { /* Web Audio unavailable */ }
+        }
+      }
+      window.addEventListener('pointerdown', armAudio);
+      window.addEventListener('keydown', armAudio);
 
       function stopSay() {
         if (!saySource) return;
@@ -732,7 +735,7 @@
       // the M2.1 hooks; pose and mode are executed driver-side (pose values
       // arrive inside motion frames, a mode frame resets leftover poses).
       // Commands are rare events — nothing here runs per frame.
-      var cmdState = { last: '', ok: null, mode: null }; // null = pending / unknown
+      var cmdState = { last: '', ok: null, mode: null, exprN: 0 }; // exprN = expressions applied (probe)
       var cmdSeq = 0;     // only the newest motion/expression command may update state
       var modeKnown = false; // the first mode frame is an announcement, not a flip
 
@@ -784,10 +787,21 @@
       function runExpressionCommand(msg) {
         var name = String(msg.name);
         var seq = ++cmdSeq;
-        cmdState.last = 'expression: ' + name;
+        cmdState.last = 'expression: ' + (name || 'reset');
         cmdState.ok = null; // pending: resolves to true/false below
         if (!window.whaleModel) {
-          cmdFailed('expression ' + name, 'no model loaded');
+          cmdFailed('expression ' + (name || 'reset'), 'no model loaded');
+          return;
+        }
+        if (!name) {
+          // M3.2 neutral: an empty preset resets the face (idle / mode flip).
+          try {
+            window.whaleModel.resetExpression();
+            cmdState.ok = true;
+            cmdState.exprN++;
+          } catch (err) {
+            cmdFailed('expression reset', (err && err.message) || String(err));
+          }
           return;
         }
         var res;
@@ -806,7 +820,9 @@
         Promise.resolve(res).then(function (ok) {
           if (seq !== cmdSeq) return;
           cmdState.ok = !!ok;
-          if (!ok) {
+          if (ok) {
+            cmdState.exprN++;
+          } else {
             cmdFailed('expression ' + name, 'not applied — expressions: ' + expressionList());
           }
         }, function (err) {
@@ -873,7 +889,8 @@
             runMotionCommand(msg);
             return;
           }
-          if (msg.type === 'expression' && msg.name) {
+          if (msg.type === 'expression' && typeof msg.name === 'string') {
+            // An empty name is the M3.2 neutral reset, so accept any string.
             runExpressionCommand(msg);
             return;
           }

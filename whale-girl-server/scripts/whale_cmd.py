@@ -11,6 +11,7 @@ Tool names a DSH/MCP wrapper should use map to the subcommands:
     whale_say(text)             ->  say <text>
     whale_pose(p)               ->  pose '<json object>'   ({} clears)
     whale_mode(mock)            ->  mode mock|live
+    whale_express(tag, text)    ->  express <tag> [text...]   (M3.2)
 
 Usage (the venv holds websockets; the system Python does not):
     .venv/bin/python scripts/whale_cmd.py motion Hammer
@@ -20,6 +21,8 @@ Usage (the venv holds websockets; the system Python does not):
     .venv/bin/python scripts/whale_cmd.py pose '{}'      # clear the overlay
     .venv/bin/python scripts/whale_cmd.py mode live       # pause mock talk
     .venv/bin/python scripts/whale_cmd.py mode mock
+    .venv/bin/python scripts/whale_cmd.py express happy 今天特别开心
+    .venv/bin/python scripts/whale_cmd.py express neutral
 
 Exit codes: 0 sent (not acknowledged — the server may still drop the frame on
 its python-buffer cap), 1 connection error OR reachable with no driver (4002),
@@ -35,6 +38,11 @@ import os
 import re
 import sys
 
+# expr_tags.py lives one level up (whale-girl-server/); this CLI lives in scripts/
+# so both the driver and the tool read the SAME tag table.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from expr_tags import load_tags  # noqa: E402
 from websockets.exceptions import ConnectionClosed, WebSocketException
 from websockets.sync.client import connect
 
@@ -124,6 +132,13 @@ def build_parser():
 
     mode = sub.add_parser("mode", help="flip mock/live mode")
     mode.add_argument("mode", choices=("live", "mock"))
+
+    express = sub.add_parser("express",
+                             help="show the preset for an emotion tag (M3.2)")
+    express.add_argument(
+        "tag", help="emotion tag (happy / sad / angry / surprised / confused / love / neutral)"
+    )
+    express.add_argument("text", nargs="*", help="optional source text (logged)")
     return parser
 
 
@@ -216,6 +231,21 @@ def main(argv):
         if problem:
             return fail(problem)
         frame = {"type": "pose", "p": overrides}
+    elif args.cmd == "express":
+        tag = args.tag.strip()
+        if not tag or len(tag) > 32:
+            return fail("express tag must be 1-32 characters")
+        try:
+            tags = load_tags()
+        except Exception:  # a broken override must not block the command
+            tags = None
+        if tags is not None and tag not in tags:
+            return fail("unknown emotion tag '%s'. Valid tags: %s"
+                        % (tag, ", ".join(sorted(tags))))
+        frame = {"type": "expression", "tag": tag}
+        text = " ".join(args.text).strip()
+        if text:
+            frame["text"] = text
     else:  # mode
         frame = {"type": "mode", "mock": args.mode == "mock"}
 

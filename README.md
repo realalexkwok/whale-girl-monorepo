@@ -82,11 +82,15 @@ whale-girl-server/scripts/whale_cmd.py (run it with the venv python):
     .venv/bin/python scripts/whale_cmd.py pose '{}'                      # release
     .venv/bin/python scripts/whale_cmd.py mode live                      # pause mock synthesis
     .venv/bin/python scripts/whale_cmd.py mode mock                      # resume
+    .venv/bin/python scripts/whale_cmd.py express happy 今天特别开心     # emotion -> preset
 
 WHALE_MODE=mock|live sets the boot mode (default mock). In live mode the mock
 talk bursts and canned phrases pause while the idle blink/gaze/sway keep going;
 the mouth priority is say > motion-frame mouth > mock envelope (commanded
-motions never pause the mock). Motion names are validated
+motions never pause the mock). `express <tag>` routes a coarse emotion tag
+(happy/sad/angry/surprised/confused/love/neutral) through expr_tags.py to a
+preset; same-tag repeats inside the cooldown are skipped and the face returns to
+neutral after the idle window. Motion names are validated
 against the model manifest, so a typo prints the available groups. ?debug=1
 shows the mode and the last motion/expression/mode command (the pose overlay is
 driver-side and not shown; during a say the line shows the current word).
@@ -150,6 +154,8 @@ driver-side and not shown; during a say the line shows the current word).
   WHALE_CMD_WS overrides the CLI endpoint (needed when WS_PORT is not 3001);
   WHALE_MODEL_MANIFEST points the CLI's motion-name validation at another
   manifest (split deployments).
+- Expression knobs: WHALE_EXPR_TAGS (JSON tag -> preset merge),
+  WHALE_EXPR_COOLDOWN (default 4 s), WHALE_EXPR_IDLE (default 30 s).
 
 ## Troubleshooting
 

@@ -21,6 +21,8 @@ import time
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
+from expr_tags import load_tags
+
 WS_URL = os.environ.get("WHALE_WS", "ws://localhost:3001?role=python")
 FPS = 30
 FRAME_TIME = 1.0 / FPS
@@ -45,6 +47,25 @@ MODE = "live" if os.environ.get("WHALE_MODE", "").strip().lower() == "live" else
 # trigger canned phrases over it. Set by send_say() to the words' end + 0.3 s
 # (an estimate for the macOS-say fallback, which has no timeline).
 SAY_HOLD_UNTIL = 0.0
+
+# --- M3.2 expression routing ------------------------------------------------
+# The LLM tags inline; this table resolves a coarse tag to one of the model's
+# expressions (shared with the CLI via expr_tags.py). A tag CHANGE applies
+# immediately; the SAME tag is re-applied only after EXPR_COOLDOWN, so chat
+# noise cannot flicker the face. With no express command for EXPR_IDLE seconds
+# the face returns to neutral (an empty-name expression frame = reset).
+def _env_seconds(name, default):
+    try:
+        return max(0.0, float(os.environ.get(name, "") or default))
+    except ValueError:
+        return default
+
+
+EXPR_TAGS = load_tags()
+EXPR_NEUTRAL = EXPR_TAGS.get("neutral", "")
+EXPR_COOLDOWN = _env_seconds("WHALE_EXPR_COOLDOWN", 4.0)
+EXPR_IDLE = _env_seconds("WHALE_EXPR_IDLE", 30.0)
+
 AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audio")
 AUDIO_MAX_AGE = 3600.0  # prune speech files older than 1 h on each synthesis
 # edge-tts runs in this short-lived child process: importing it + aiohttp in
@@ -455,6 +476,12 @@ async def run_driver(ws):
     loop = asyncio.get_running_loop()
     web_count = 1  # optimistic start; the server corrects this via events
 
+    # M3.2 expression state (one-shot commands; no per-frame work). The idle
+    # check rides the 1 s log block below.
+    expr_tag = ""
+    expr_at = 0.0
+    expr_deadline = 0.0
+
     async def forward(frame):
         """Send a v1 frame to the frontend over the python connection."""
         try:
@@ -465,6 +492,7 @@ async def run_driver(ws):
     async def dispatch(event):
         """Execute one v1 command frame (already unwrapped from the relay)."""
         global MODE
+        nonlocal expr_tag, expr_at, expr_deadline
         kind = event.get("type")
         if kind == "motion":
             group = event.get("group")
@@ -488,6 +516,35 @@ async def run_driver(ws):
                 return
             await forward(frame)
         elif kind == "expression":
+            # M3.2: a coarse tag resolves through the table; the M3.1 direct
+            # name passthrough keeps working (old CLI/probe clients).
+            tag = event.get("tag")
+            if isinstance(tag, str) and tag:
+                if len(tag) > 32:
+                    log_bad_cmd("expression tag too long (%d chars)"
+                                % len(tag))
+                    return
+                now = time.monotonic()
+                preset = EXPR_TAGS.get(tag)
+                if preset is None:
+                    log_bad_cmd("unknown expression tag %r (valid: %s)"
+                                % (tag[:32], ", ".join(sorted(EXPR_TAGS))))
+                    tag = "neutral"
+                    preset = EXPR_NEUTRAL
+                elif tag == expr_tag and now - expr_at < EXPR_COOLDOWN:
+                    log_notice("express %r within the cooldown, skipped"
+                               % (tag,))
+                    return
+                expr_tag = tag
+                expr_at = now
+                expr_deadline = now + EXPR_IDLE
+                text = event.get("text")
+                detail = ""
+                if isinstance(text, str) and text.strip():
+                    detail = " (%s)" % text.strip()[:30]
+                await forward({"type": "expression", "name": preset})
+                log_notice("express: %s -> %r%s" % (tag, preset, detail))
+                return
             name = event.get("name")
             if not isinstance(name, str) or not name:
                 return
@@ -549,6 +606,12 @@ async def run_driver(ws):
                 if wanted != MODE:
                     MODE = wanted
                     clear_pose()
+                    # M3.2: a real flip also clears the expression state and
+                    # resets the face (the frontend maps "" to resetExpression).
+                    expr_tag = ""
+                    expr_at = 0.0
+                    expr_deadline = 0.0
+                    await forward({"type": "expression", "name": ""})
                     await forward({"type": "mode", "mock": MODE == "mock"})
                     log_notice("mode: %s" % MODE)
             else:
@@ -705,6 +768,13 @@ async def run_driver(ws):
                         log_notice("event reader stopped (%r); restarting"
                                    % (reader_exc,))
                         reader = asyncio.create_task(read_events())
+                # M3.2: an expression goes back to neutral after EXPR_IDLE.
+                if expr_deadline and now >= expr_deadline:
+                    expr_deadline = 0.0
+                    expr_tag = ""
+                    expr_at = 0.0
+                    await forward({"type": "expression", "name": ""})
+                    log_notice("expression idle -> neutral")
     finally:
         reader.cancel()
         if say_task is not None:
