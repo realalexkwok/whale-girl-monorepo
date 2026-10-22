@@ -53,7 +53,9 @@
   /spec-lipsync accelerates M2.2 planning (TTS-driven: edge-tts primary, macOS
   say fallback, word-level envelope + amplitude fallback, browser playback);
   /spec-commands accelerates M3.1 planning (wire-protocol command surface,
-  DSH tool surface, Live2D playback semantics, mock-behind-a-flag).
+  DSH tool surface, Live2D playback semantics, mock-behind-a-flag);
+  /spec-expressions accelerates M3.2 planning (text/emotion -> expression
+  presets, hybrid routing table, cooldown/priority, zero new deps).
 
 ## 3. Owner decisions (binding)
 1. M1 stops before the real model/audio/DSH work; the owner switches the session AI
