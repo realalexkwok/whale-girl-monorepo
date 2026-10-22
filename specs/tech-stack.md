@@ -31,7 +31,9 @@
   https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js
   - supports Cubism 2.1/3/4 models; the Cubism framework is bundled inside.
   - loading: Live2DModel.from(url, { autoInteract: false, motionPreload: 'NONE' })
-  - parameter control: model.internalModel.coreModel.setParameterValueById(id, value)
+  - parameter control: model.internalModel.coreModel.setParameterValueById(id, value);
+    the pose-clear path also uses getParameterIndex(id) and
+    getParameterDefaultValue(index) (both guarded, try/catch) to restore defaults
   - ticker: the UMD bundle auto-uses window.PIXI.Ticker.shared; we additionally call
     Live2DModel.registerTicker(PIXI.Ticker) explicitly (guarded).
 - Renderer: backgroundAlpha 0 (transparent OBS overlay), resizeTo window, antialias,
@@ -128,8 +130,11 @@
 
 ## Testing & verification (two-sided)
 - Automatic half (agent): node scripts/ws_probe.js (expect PASS, 20–40 fps, increasing
-  f), node scripts/ws_role_probe.js (expect close 1008), curl smoke of :3000,
-  node --check on the inline frontend script, ps RSS snapshot, port-release check.
+  f), node scripts/ws_role_probe.js (expect close 1008), node scripts/cmd_probe.js
+  (the M3.1 gate: v1 frames end to end, say byte-compat, malformed safety, multi-
+  sample RSS — it prints its check count), node scripts/say_probe.js (the M2.2
+  regression), curl smoke of :3000, node --check on the inline frontend script,
+  ps RSS snapshot, port-release check.
 - Manual half (owner): browser check at http://localhost:3000?debug=1, then OBS
   Browser source — with and without the real model in place.
 - Reports must name absolute artifact paths and measured numbers.

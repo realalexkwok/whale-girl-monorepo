@@ -1,9 +1,9 @@
 # M3.1 — DSH Interaction: AI-Driven Command Surface — Plan
 
 > Confirmed by the owner (2026-10-21) before implementation; the approved
-> plan-mode plan is the source of truth here. Status: implementation in
-> progress on feature/whale-girl-m31-commands (agents never git commit /
-> push — owner rule).
+> plan-mode plan is the source of truth here. Status: implemented on
+> feature/whale-girl-m31-commands, in the review/fix loop; the owner's manual
+> half is pending at the close (agents never git commit / push — owner rule).
 
 ## Task groups
 0. Spec trio + branch (this folder; branch feature/whale-girl-m31-commands
@@ -60,7 +60,7 @@
     "text":"..."}, {"type":"pose","p":{...}}, {"type":"mode",
     "mock":true|false}. The server only relays; the driver validates.
   - python → server → web (frames): the v0 motion frame unchanged; the
-    M2.2 say frame unchanged (byte-compatible); {"type":"motion",
+    M2.2 say frame schema unchanged + additive src; {"type":"motion",
     "group":"<g>","index":n} and {"type":"expression","name":"<n>"}
     forwarded from commands; {"type":"mode","mock":bool} on a flip.
 - Driver state: MODE (mock|live), POSE_OVERRIDES (dict). Command frames
@@ -97,7 +97,8 @@
 - specs/features/2026-10-21-m3.1-m31-commands/{requirements,plan,
   validation}.md (this trio)
 - NOT touched: package.json, requirements.txt, the model assets,
-  ws_probe.js / ws_role_probe.js, say_probe.js (regression only).
+  ws_role_probe.js, say_probe.js (regression only). ws_probe.js gained v1-frame
+  tolerance (command/say/mode frames are not motion frames).
 
 ## Memory & quality gates
 - No new dependencies (CLI: the venv's websockets; probe: the pinned ws).
@@ -105,8 +106,8 @@
   so the driver's per-frame cost is unchanged; the pose overlay mutates a
   pre-allocated dict in synth(); no per-frame logging; node --check on the
   inline script; CDN pins untouched.
-- The say path must stay byte-compatible: say_probe.js is re-run as a
-  regression, not modified.
+- The say frame schema must stay compatible (additive src only): say_probe.js
+  is re-run as a regression, not modified.
 
 ## Implementation notes (2026-10-21, fix round)
 - The owner's manual half surfaced two issues: (1) the pose test used

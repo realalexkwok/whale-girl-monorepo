@@ -84,14 +84,16 @@
       .venv/bin/python scripts/whale_cmd.py pose '{"ParamEyeLOpen":0,"ParamEyeROpen":0}'
       .venv/bin/python scripts/whale_cmd.py mode live|mock
 
-- The tool connects to ws://localhost:3001?role=web (env WHALE_CMD_WS), sends ONE
-  frame and exits. The server relays it raw to the driver; the driver executes
-  say/pose/mode and forwards motion/expression to the browser (M2.1 hooks).
+- The tool connects to ws://localhost:3001?role=web (env WHALE_CMD_WS), sends one
+  frame, waits briefly for a 4002 "no writer" close, then exits. The server
+  relays it raw to the driver; the driver executes say/pose/mode and forwards
+  motion/expression to the browser (M2.1 hooks).
 - Motion groups are validated against whale-girl-frontend/model/whale.model3.json
   (env WHALE_MODEL_MANIFEST; absent in a split deployment → warn + send anyway).
   The tool names a DSH/MCP wrapper uses map to the subcommands: whale_motion →
   motion, whale_say → say, whale_pose → pose, whale_mode → mode.
-  Exit codes: 0 sent, 1 server unreachable, 2 validation error.
+  Exit codes: 0 sent, 1 server unreachable OR reachable with no driver (4002),
+  2 validation error.
 - Mock vs live: WHALE_MODE=mock (default) keeps the canned talk bursts; live
   pauses them and hands the mouth to explicit commands. Commands work in both
   modes; a mode command flips at runtime (an idempotent one does nothing) and a

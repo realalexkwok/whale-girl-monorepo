@@ -10,9 +10,14 @@ ws.on('open', () => console.log('probe: connected'));
 ws.on('message', (data) => {
   const msg = JSON.parse(data.toString());
   if (msg.type === 'web_connected') { console.log('probe: event ' + JSON.stringify(msg)); return; }
-  // v1 (M3.1): only v0 motion frames carry p (and f); commands, say and mode
-  // frames are not motion frames — ignore them instead of counting or printing.
-  if (msg.type !== 'motion' || !msg.p) return;
+  // v1 (M3.1): say/mode frames and motion *command* frames (group, no p) are
+  // expected; only truly unknown types are reported.
+  if (msg.type === 'say' || msg.type === 'mode') return;
+  if (msg.type === 'motion' && msg.group) return;
+  if (msg.type !== 'motion' || !msg.p) {
+    console.log('probe: unexpected ' + JSON.stringify(msg).slice(0, 120));
+    return;
+  }
   frames += 1;
   if (!first) first = { t: Date.now(), f: msg.f };
   last = { t: Date.now(), f: msg.f, p: msg.p };

@@ -14,6 +14,7 @@ import json
 import math
 import os
 import random
+import re
 import sys
 import time
 
@@ -72,6 +73,17 @@ PARAM_ANGLE_X = "ParamAngleX"
 PARAM_ANGLE_Y = "ParamAngleY"
 PARAM_ANGLE_Z = "ParamAngleZ"
 
+# The eight parameters synth() rewrites every frame; a pose that targets one of
+# them must be re-applied after the synthesis (see POSE_OVERLAP).
+SYNTH_KEYS = frozenset((
+    PARAM_MOUTH, PARAM_EYE_L, PARAM_EYE_R, PARAM_BALL_X, PARAM_BALL_Y,
+    PARAM_ANGLE_X, PARAM_ANGLE_Y, PARAM_ANGLE_Z,
+))
+
+# Live2D parameter-id grammar: ASCII identifiers only. CJK/emoji ids would be
+# escaped 6x by json.dumps and could push the 30 FPS frame past the proxy cap.
+POSE_ID_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+
 # Blink timing (seconds).
 BLINK_INTERVAL = (2.5, 5.5)
 BLINK_CLOSING = 0.09
@@ -104,8 +116,9 @@ MOTION = {
 # overlay shrinks — a stale key would otherwise ride in every frame forever
 # (and enough keys would push the frame past the proxy's 8 KB cap).
 POSE_OVERRIDES = {}
-POSE_LIMIT = 32   # max overlay entries per command
-MAX_POSE_KEY = 64 # longest accepted parameter id (bounds the frame size)
+POSE_OVERLAP = []  # overlay keys synth() rewrites (re-applied after synth)
+POSE_LIMIT = 32    # max overlay entries per command
+MAX_POSE_KEY = 64  # longest accepted parameter id (bounds the frame size)
 MAX_SAY_CHARS = 300  # longest accepted say line (TTS + word timeline)
 MAX_FRAME_BYTES = 8 * 1024  # the proxy's soft cap for relayed frames
 BAD_CMD_AT = 0.0  # rate limit for rejected-frame logging
@@ -130,15 +143,26 @@ def clear_pose():
     for key in POSE_OVERRIDES:
         MOTION["p"].pop(key, None)
     POSE_OVERRIDES.clear()
+    del POSE_OVERLAP[:]
 
 
 def set_pose(overrides):
-    """Replace the overlay; keys the new overlay does not set are removed."""
+    """Replace the overlay; keys the new overlay does not set are removed.
+
+    Values are written into the pre-allocated frame dict once, so the 30 FPS
+    loop does no per-frame overlay iteration; only keys synth() rewrites are
+    re-applied after the synthesis.
+    """
     for key in list(POSE_OVERRIDES):
         if key not in overrides:
             POSE_OVERRIDES.pop(key, None)
             MOTION["p"].pop(key, None)
     POSE_OVERRIDES.update(overrides)
+    MOTION["p"].update(overrides)
+    del POSE_OVERLAP[:]
+    for key in POSE_OVERRIDES:
+        if key in SYNTH_KEYS:
+            POSE_OVERLAP.append(key)
 
 
 def clamp(value, low, high):
@@ -405,9 +429,9 @@ def synth(now, blink, talk, frame):
 
     if MODE == "live":
         p[PARAM_MOUTH] = 0.0  # explicit commands own the mouth in live mode
-    if POSE_OVERRIDES:
-        for pid, value in POSE_OVERRIDES.items():
-            p[pid] = value
+    if POSE_OVERLAP:
+        for pid in POSE_OVERLAP:
+            p[pid] = POSE_OVERRIDES[pid]
 
 
 async def run_driver(ws):
@@ -457,11 +481,10 @@ async def run_driver(ws):
                 if (not isinstance(pid, str)
                         or isinstance(value, bool)
                         or not isinstance(value, (int, float))):
-                    log_bad_cmd("pose value %r for %r" % (value, pid))
+                    log_bad_cmd("bad pose value for %r" % (str(pid)[:32],))
                     return
-                if len(pid) > MAX_POSE_KEY:
-                    log_bad_cmd("pose key too long (%d chars, limit %d)"
-                                % (len(pid), MAX_POSE_KEY))
+                if not POSE_ID_RE.match(pid):
+                    log_bad_cmd("invalid pose id %r" % (pid[:32],))
                     return
                 try:
                     number = float(value)
@@ -475,6 +498,13 @@ async def run_driver(ws):
             if len(clean) > POSE_LIMIT:
                 log_bad_cmd("pose has %d keys (limit %d)"
                             % (len(clean), POSE_LIMIT))
+                return
+            # Bound the escaped frame size before accepting the overlay: the
+            # id grammar already keeps ids ASCII, so this is a safety net.
+            sample = {"type": "motion", "f": 0, "p": dict(MOTION["p"])}
+            sample["p"].update(clean)
+            if len(dump_json(sample)) > MAX_FRAME_BYTES - 64:
+                log_bad_cmd("pose would exceed the frame cap")
                 return
             if clean:
                 set_pose(clean)

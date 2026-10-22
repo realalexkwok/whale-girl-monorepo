@@ -10,7 +10,8 @@
 - Real DSH sessions drive the whale through a wire-protocol **v1 command
   surface**, replacing mock talk synthesis; mock mode stays behind a flag
   (WHALE_MODE=mock|live, default mock).
-- Frame family: motion / expression / say (unchanged) / pose / mode.
+- Frame family: motion / expression / say (schema unchanged + additive src) /
+  pose / mode.
   Expression **transport + execution** ships here; the text/emotion → preset
   selection stays in M3.2 (owner decision).
 - Ingress: the server relays web→python text frames **raw** (it never parses
@@ -89,7 +90,8 @@
 
 ## Validation criteria (owner answer 3)
 - Automatic: cmd_probe.js PASS — motion executes (frontend cmdState ok),
-  expression executes, the outbound say frame is byte-compatible with
+  expression executes, the outbound say frame keeps the M2.2 schema (plus the
+  additive src field) and stays compatible with
   M2.2 (schema + playback active), the pose value is held inside motion
   frames and cleared by {}, mode live → no say frames for ≥ 10 s with the
   mode frame observed, mode mock restores the canned speech; ws_probe

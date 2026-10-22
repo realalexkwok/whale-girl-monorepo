@@ -30,6 +30,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 
 from websockets.exceptions import ConnectionClosed, WebSocketException
@@ -43,8 +44,8 @@ DEFAULT_MANIFEST = os.path.join(
 MANIFEST = os.environ.get("WHALE_MODEL_MANIFEST", DEFAULT_MANIFEST)
 MAX_FRAME_BYTES = 8 * 1024   # the server's soft cap for relayed frames
 MAX_POSE_KEYS = 32           # keep the 30 FPS frame well under that cap
-MAX_POSE_KEY = 64            # longest parameter id the driver accepts
 MAX_SAY_CHARS = 300          # longest say line the driver accepts
+POSE_ID_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")  # Live2D parameter-id grammar
 
 
 def motion_groups(path):
@@ -120,11 +121,12 @@ def build_parser():
 def check_pose(overrides):
     """Return an error message for a bad pose object, else None."""
     for key, value in overrides.items():
-        if (not isinstance(key, str)
-                or len(key) > MAX_POSE_KEY
-                or isinstance(value, bool)
-                or not isinstance(value, (int, float))):
-            return "pose values must be numbers (got %r for %r)" % (value, key)
+        if not isinstance(key, str) or not POSE_ID_RE.match(key):
+            return ("pose keys must be Live2D parameter ids "
+                    "([A-Za-z0-9_]{1,64}); got %r" % (str(key)[:32],))
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return "pose values must be numbers (got %s for %r)" % (
+                type(value).__name__, key)
         try:
             finite = math.isfinite(float(value))
         except (OverflowError, ValueError):

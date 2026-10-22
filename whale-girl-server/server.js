@@ -85,7 +85,7 @@ function relayCommandToPython(ws, data, isBinary) {
   const text = data.toString();
   if (text.length > MAX_FRAME_BYTES) { framesDropped++; return; }
   if (text === '{"type":"hello"}') return; // page handshake: web-only, not a command
-  const now = Date.now();
+  const now = performance.now(); // monotonic: a wall-clock step cannot stall the limiter
   if (now - cmdWindowStart >= 1000) { cmdWindowStart = now; cmdWindowCount = 0; }
   if (++cmdWindowCount > MAX_CMDS_PER_SEC) { framesDropped++; return; }
   if (!pythonClient || pythonClient.readyState !== WebSocket.OPEN) {
@@ -107,6 +107,20 @@ function relayCommandToPython(ws, data, isBinary) {
 
 function hostnameOf(url) {
   try { return new URL(url).hostname; } catch (err) { return ''; }
+}
+
+// localhost / 127.0.0.1 / [::1] are the same machine (a page opened as
+// 127.0.0.1 may connect to ws://localhost — that must not be rejected).
+function isLoopbackHost(host) {
+  return host === 'localhost' || host === '127.0.0.1' ||
+    host === '[::1]' || host === '::1';
+}
+
+function originAllowed(origin, requestHost) {
+  const originHost = hostnameOf(origin);
+  if (!originHost) return false;
+  if (originHost === requestHost) return true;
+  return isLoopbackHost(originHost) && isLoopbackHost(requestHost);
 }
 
 function maybeLog(force) {
@@ -135,8 +149,7 @@ wss.on('connection', (ws, req) => {
   const origin = req.headers.origin;
   if (origin) {
     const requestHost = hostnameOf('http://' + (req.headers.host || ''));
-    const originHost = hostnameOf(origin);
-    if (!originHost || originHost !== requestHost) {
+    if (!originAllowed(origin, requestHost)) {
       ws.close(1008, 'origin not allowed (use the local page)');
       return;
     }

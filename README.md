@@ -86,7 +86,8 @@ WHALE_MODE=mock|live sets the boot mode (default mock). In live mode the mock
 talk bursts and canned phrases pause while the idle blink/gaze/sway keep going;
 say > motion > mock envelope is the priority ladder. Motion names are validated
 against the model manifest, so a typo prints the available groups. ?debug=1
-shows the last command and the mode.
+shows the mode and the last motion/expression/mode command (the pose overlay is
+driver-side and not shown; during a say the line shows the current word).
 
 ## Wire protocol (v0 + v1 commands)
 
@@ -109,8 +110,8 @@ shows the last command and the mode.
   The browser plays the audio via Web Audio and drives ParamMouthOpenY from the
   word timeline; an empty words list (macOS say fallback) uses an amplitude
   envelope of the decoded audio instead. "src":"mock" marks the canned mock
-  line, "cmd" a whale_cmd.py line: a mock line never interrupts a playing line,
-  a commanded one does (latest-wins).
+  line; "cmd" is a whale_cmd.py line or the WHALE_SAY_TEXT test trigger. A mock
+  line never interrupts a playing line, a commanded one does (latest-wins).
 - Server → python:
 
       {"type":"web_connected","count":N}
@@ -173,7 +174,9 @@ shows the last command and the mode.
   optional deploy.sh wrapper for operators who already use SSH.
 - SSH port forwarding (OPTIONAL advanced mode): scripts/ubuntu-tunnel.sh for
   operators who prefer no open ports (ships in M4.2).
-- Remaining work is configuration only — no code path assumes localhost.
+- Remaining work is configuration only — the one host dependency is the
+  WebSocket origin guard (the page host must match the WS host; the nginx proxy
+  must pass `proxy_set_header Host $host`).
 
 ## Milestones
 

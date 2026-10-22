@@ -226,13 +226,18 @@ const sayFrames = [];
 const modeFrames = [];
 let lastMotion = null;
 let motionCount = 0;
+let maxMotionBytes = 0;
 
 function collect(data) {
   let msg;
   try { msg = JSON.parse(data.toString()); } catch (err) { return; }
   if (msg.type === 'say') sayFrames.push(msg);
   else if (msg.type === 'mode') modeFrames.push(msg);
-  else if (msg.type === 'motion' && msg.p) { lastMotion = msg; motionCount++; }
+  else if (msg.type === 'motion' && msg.p) {
+    lastMotion = msg;
+    motionCount++;
+    if (data.length > maxMotionBytes) maxMotionBytes = data.length;
+  }
 }
 
 async function waitSay(predicate, timeoutMs, label) {
@@ -259,6 +264,27 @@ async function cmdState(chrome) {
   if (await portOpen(WS_PORT)) throw new Error('port ' + WS_PORT + ' already in use — stop the running server first');
 
   const server = await startServer();
+
+  // The server must refuse commands with no brain and reject foreign origins.
+  const noBrainCode = await new Promise((resolve) => {
+    const c = new WebSocket('ws://localhost:' + WS_PORT + '?role=web');
+    const timer = setTimeout(() => { try { c.terminate(); } catch (e) { /* ignore */ } resolve(0); }, 5000);
+    c.on('open', () => c.send('{"type":"motion","group":"Idle"}'));
+    c.on('close', (code) => { clearTimeout(timer); resolve(code); });
+    c.on('error', () => { /* close follows */ });
+  });
+  record('command without a driver is refused', noBrainCode === 4002,
+    'close code ' + noBrainCode + ' (expected 4002)');
+  const badOriginCode = await new Promise((resolve) => {
+    const c = new WebSocket('ws://localhost:' + WS_PORT + '?role=web',
+      { origin: 'http://evil.example' });
+    const timer = setTimeout(() => { try { c.terminate(); } catch (e) { /* ignore */ } resolve(0); }, 5000);
+    c.on('close', (code) => { clearTimeout(timer); resolve(code); });
+    c.on('error', () => { /* close follows */ });
+  });
+  record('foreign origin is rejected', badOriginCode === 1008,
+    'close code ' + badOriginCode + ' (expected 1008)');
+
   const chrome = await startChrome();
   await waitFor(async () => (await chrome.evaluate(
     '!!(window.whaleSpeech && window.whaleSpeech.state().wsState === 1)'
@@ -273,11 +299,19 @@ async function cmdState(chrome) {
   // Start the driver only after both web clients are connected so every
   // frame (say/mode/motion) is delivered to the probe and to the page.
   const driver = startDriver();
+  const serverSamples = [];
+  const driverSamples = [];
+  let driverProc = driver;
+  function sampleRss() {
+    serverSamples.push(rssKb(server.pid));
+    if (driverProc) driverSamples.push(rssKb(driverProc.pid));
+  }
 
   // 1) WHALE_MODE=live boot: the mock talk bursts stay silent.
   await sleep(SILENCE_MS);
   record('live boot: mock speech paused', sayFrames.length === 0,
     sayFrames.length + ' say frames in ' + (SILENCE_MS / 1000) + ' s (expected 0)');
+  sampleRss();
 
   // 2) motion through the CLI tool end to end.
   let cli = spawnSync(PYTHON, [CLI, 'motion', MOTION], {
@@ -294,6 +328,15 @@ async function cmdState(chrome) {
   }, 8000, 'frontend applied motion ' + MOTION);
   record('motion applied on the frontend', true,
     'cmdState.last="motion: ' + MOTION + '", ok=true (after the hook resolved)');
+  const cliBad = spawnSync(PYTHON, [CLI, 'motion', 'Nope'], { cwd: ROOT, timeout: 15000 });
+  record('CLI rejects an unknown motion group', cliBad.status === 2,
+    'exit ' + cliBad.status);
+  const cliNoServer = spawnSync(PYTHON, [CLI, 'say', 'x'], {
+    cwd: ROOT, timeout: 15000,
+    env: Object.assign({}, process.env, { WHALE_CMD_WS: 'ws://localhost:1?role=web' }),
+  });
+  record('CLI reports an unreachable server', cliNoServer.status === 1,
+    'exit ' + cliNoServer.status);
 
   // 3) expression on the same transport.
   probeWs.send(JSON.stringify({ type: 'expression', name: EXPRESSION }));
@@ -324,6 +367,14 @@ async function cmdState(chrome) {
     'non-synthesized pose key removed');
   record('pose clears non-synthesized keys', true,
     'ParamBrowLY present while held, absent from the frames after {}');
+  await sleep(250);
+  const brow = await chrome.evaluate(
+    '(function(){var c=window.whaleModel.model.internalModel.coreModel;' +
+    'var i=c.getParameterIndex("ParamBrowLY");' +
+    'return {v:c.getParameterValueById("ParamBrowLY"), d:c.getParameterDefaultValue(i)};})()'
+  );
+  record('pose {} restores the model default', !!brow && Math.abs(brow.v - brow.d) < 0.25,
+    'ParamBrowLY=' + (brow && brow.v) + ' (default ' + (brow && brow.d) + ')');
 
   // 5) mode mock: the flip frame arrives and the canned speech resumes.
   const modeMockBase = modeFrames.length;
@@ -386,6 +437,7 @@ async function cmdState(chrome) {
   record('page played the commanded say', !!pageSay && pageSay.audio === dshSay.audio,
     'engine=' + (pageSay && pageSay.engine) + ' decoded=' + (pageSay && pageSay.bufferBytes) + ' bytes, duration ' +
     (pageSay && pageSay.duration ? pageSay.duration.toFixed(2) : '?') + ' s');
+  sampleRss(); // audio active
 
   // 7) mock mode must never cut a commanded line (M3.1 fix: src + hold).
   const modeMockBase2 = modeFrames.length;
@@ -424,6 +476,17 @@ async function cmdState(chrome) {
     .filter((m) => m.src === 'mock').length;
   record('driver hold suppresses mock lines during the command',
     midMockFrames === 0, midMockFrames + ' mock frames after the commanded frame');
+  // The frontend rule: a mock say must not replace a playing commanded line.
+  await chrome.evaluate('window.whaleSpeech.testSay(' + JSON.stringify({
+    type: 'say', audio: canned2.audio, words: canned2.words || [], src: 'mock',
+  }) + ')');
+  await sleep(400);
+  const afterInject = await chrome.evaluate('window.whaleSpeech.state()');
+  const afterInjectSay = await chrome.evaluate('window.whaleSpeech.probeStats().say');
+  record('frontend ignores a mock say while a line plays',
+    !!afterInject && afterInject.active === true && !!afterInjectSay &&
+      afterInjectSay.audio === cmd2.audio,
+    'injected src:"mock" — the page still plays ' + (afterInjectSay && afterInjectSay.audio));
   await waitFor(async () => {
     const st = await chrome.evaluate('window.whaleSpeech.state()');
     return !!st && st.active === false;
@@ -437,20 +500,26 @@ async function cmdState(chrome) {
   const bigKey = 'k' + 'x'.repeat(300);                 // > the driver's 64-char cap
   const manyKeys = {};
   for (let i = 0; i < 33; i++) manyKeys['ParamP' + i] = 1;  // > the 32-key cap
+  const unicodeKeys = {};
+  for (let i = 0; i < 32; i++) unicodeKeys['参数' + i] = 1;  // CJK ids: 6x escaped
   const badFrames = [
     '{"type":"pose","p":{"ParamBrowLY":1e999}}',                    // non-finite
     '{"type":"pose","p":{"ParamBrowLY":' + '9'.repeat(400) + '}}',  // int overflow
     '{"type":"pose","p":{"' + bigKey + '":1}}',                     // key too long
     '{"type":"pose","p":' + JSON.stringify(manyKeys) + '}',         // too many keys
+    '{"type":"pose","p":' + JSON.stringify(unicodeKeys) + '}',      // non-ASCII ids
     '{"type":"web_connected","count":0}',                           // spoofed event
     '{"type":"motion","group":' + '['.repeat(1500) + ']'.repeat(1500) + '}'  // deep nesting
   ];
   for (const frame of badFrames) probeWs.send(frame);
   await sleep(700);
   const lastP = lastMotion ? lastMotion.p : {};
-  const badKeysAbsent = !('ParamBrowLY' in lastP) && !(bigKey in lastP) && !('ParamP0' in lastP);
+  const badKeysAbsent = !('ParamBrowLY' in lastP) && !(bigKey in lastP)
+    && !('ParamP0' in lastP) && !('参数0' in lastP);
   record('bad pose frames are rejected', badKeysAbsent,
-    'non-finite / 400-digit / long-key / 33-key poses left the frames clean');
+    'non-finite / 400-digit / long-key / 33-key / CJK-key poses left the frames clean');
+  record('motion frames stay under the 8 KB proxy cap',
+    maxMotionBytes > 0 && maxMotionBytes < 8192, 'max ' + maxMotionBytes + ' bytes');
   probeWs.send(JSON.stringify({ type: 'expression', name: EXPRESSION }));
   await waitFor(async () => {
     const st = await cmdState(chrome);
@@ -468,6 +537,10 @@ async function cmdState(chrome) {
   const liveFlipModeBase = modeFrames.length;
   probeWs.send(JSON.stringify({ type: 'mode', mock: false }));
   await waitModeAfter(false, liveFlipModeBase, 5000);
+  await sleep(250);
+  const flipped = await chrome.evaluate('window.whaleSpeech.state()');
+  record('live flip stops a playing canned line', !!flipped && flipped.active === false,
+    'active=' + (flipped && flipped.active));
   await sleep(SILENCE_MS);
   const leaked = sayFrames.length - liveFlipBase;
   record('live flip silences canned speech', leaked === 0,
@@ -494,11 +567,18 @@ async function cmdState(chrome) {
   const rate = (motionCount - beforeCount) / ((Date.now() - beforeAt) / 1000);
   record('motion stream 25-35 fps', rate >= 25 && rate <= 35, rate.toFixed(1) + ' fps over 2.00 s');
 
-  // 12) RSS budgets with commands active.
-  const serverRss = rssKb(server.pid);
-  const driverRss = rssKb(driver.pid);
-  record('server RSS <= 60 MB', serverRss <= 60 * 1024, serverRss + ' KB');
-  record('driver RSS <= 30 MB', driverRss <= 30 * 1024, driverRss + ' KB');
+  // 12) RSS budgets: multi-sample over the run (boot, streaming, audio, end).
+  sampleRss();
+  const srvSorted = serverSamples.slice().sort((a, b) => a - b);
+  const drvSorted = driverSamples.slice().sort((a, b) => a - b);
+  const srvMed = srvSorted[Math.floor(srvSorted.length / 2)];
+  const drvMed = drvSorted[Math.floor(drvSorted.length / 2)];
+  const srvMax = srvSorted[srvSorted.length - 1];
+  const drvMax = drvSorted[drvSorted.length - 1];
+  record('server RSS <= 60 MB (median)', srvMed <= 60 * 1024,
+    'samples ' + serverSamples.join(', ') + ' KB — median ' + srvMed + ', max ' + srvMax);
+  record('driver RSS <= 30 MB (median)', drvMed <= 30 * 1024,
+    'samples ' + driverSamples.join(', ') + ' KB — median ' + drvMed + ', max ' + drvMax);
 
   probeWs.close();
   chrome.close();

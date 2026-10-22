@@ -133,11 +133,15 @@
         if (!frameP || (id in frameP)) return;
         if (id === 'ParamMouthOpenY' && sayActive) return;
         lastParams.delete(id);
-        if (!frameCore || typeof frameCore.getParameterIndex !== 'function') return;
-        var index = frameCore.getParameterIndex(id);
-        if (index >= 0) {
-          frameCore.setParameterValueById(id, frameCore.getParameterDefaultValue(index));
-        }
+        if (!frameCore
+            || typeof frameCore.getParameterIndex !== 'function'
+            || typeof frameCore.getParameterDefaultValue !== 'function') return;
+        try {
+          var index = frameCore.getParameterIndex(id);
+          if (index >= 0) {
+            frameCore.setParameterValueById(id, frameCore.getParameterDefaultValue(index));
+          }
+        } catch (err) { /* older bundle: leave the value */ }
       }
 
       // --- placeholder whale (shown until/unless the real model loads) ---
@@ -576,7 +580,8 @@
             amp: words.length ? null : buildAmp(buffer),
             wordCursor: 0,
             label: words.length ? words[0][2] : '…',
-            audioUrl: url
+            audioUrl: url,
+            src: msg.src === 'mock' ? 'mock' : 'cmd'
           };
           lastSay = sayActive;
           probeN = 0;
@@ -649,8 +654,10 @@
         }
       }
 
-      // Console hooks (same style as window.whaleModel).
+      // Console hooks (same style as window.whaleModel). testSay injects a
+      // say frame locally so the probe can assert the mock-ignore rule.
       window.whaleSpeech = {
+        testSay: function (msg) { handleSay(msg); },
         state: function () {
           return {
             active: !!sayActive,
@@ -767,6 +774,12 @@
         cmdState.mode = next;
         cmdState.last = 'mode: ' + cmdState.mode;
         cmdState.ok = true;
+        if (next === 'live' && sayActive && sayActive.src === 'mock') {
+          // live mode must be silent at once: stop a playing canned line;
+          // a commanded line keeps playing.
+          stopSay();
+          sayActive = null;
+        }
         if (window.whaleModel) {
           try { window.whaleModel.resetPose(); } catch (err) { /* ignore */ }
         }
@@ -839,8 +852,11 @@
             }
           }
         };
-        ws.onclose = function () {
-          setStatus(statusLine('ws disconnected, retrying...'));
+        ws.onclose = function (evt) {
+          // Surface the close code: 1008 = origin guard, 1006 = network.
+          setStatus(statusLine('ws disconnected (' +
+            (evt && typeof evt.code === 'number' ? evt.code : '?') +
+            '), retrying...'));
           scheduleReconnect();
         };
         ws.onerror = function () {
