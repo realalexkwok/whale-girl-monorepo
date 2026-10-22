@@ -701,13 +701,25 @@ async function cmdState(chrome) {
     'long key, 33 keys, CJK keys, >8 KB multibyte, spoofed web_connected, deep ' +
     'nesting); the expression applied and the motion stream kept flowing (' +
     (mcAfter - mcBefore) + ' frames)');
+  // The driver's own semantic caps (the CLI pre-checks hide these branches).
+  const capsStateBefore = await cmdState(chrome);
+  const capsSayBefore = sayFrames.length;
+  probeWs.send(JSON.stringify({ type: 'motion', group: 'g'.repeat(129) }));
+  probeWs.send(JSON.stringify({ type: 'motion', group: MOTION, index: 10000 }));
+  probeWs.send(JSON.stringify({ type: 'say', text: 'x'.repeat(301) }));
+  await sleep(1500);
+  const capsStateAfter = await cmdState(chrome);
+  record('driver caps reject over-limit wire commands',
+    sayFrames.length === capsSayBefore && !!capsStateAfter &&
+      capsStateAfter.last === (capsStateBefore && capsStateBefore.last),
+    '129-char group / index 10000 / 301-char say ignored; last cmd unchanged');
   sampleRss();
 
   // The relay's fixed-window cap: a 150-frame burst must be partially dropped.
   const droppedBefore = parseServerCounter('dropped');
   for (let i = 0; i < 150; i++) probeWs.send('{"type":"mode","mock":true}');
   await sleep(5200);
-  probeWs.send('{"type":"mode","mock":true}'); // force a fresh aggregate log line
+  probeWs.send('{"type":"mode","mock":true}'); // the 5.2 s span covers a full 5 s log window
   await sleep(600);
   const droppedAfter = parseServerCounter('dropped');
   record('command flood is rate-capped',

@@ -63,8 +63,9 @@ speech (neural voice + word timestamps) with macOS "say" as the automatic
 fallback, writes the audio to whale-girl-server/audio/ (gitignored) and sends
 a say frame; the browser plays it via Web Audio (OBS captures it) and animates
 the mouth from the words, while the mock talk envelope remains the no-audio
-fallback. In mock mode a random canned Chinese phrase is spoken at each talk
-burst; in live mode a DSH session supplies the text (see Commands below). A
+fallback. In mock mode a random canned Chinese phrase is spoken at most once
+per talk burst (the hold window and the in-flight drop may skip one); in live
+mode a DSH session supplies the text (see Commands below). A
 line plays to its end: the mock never interrupts it, while a newer command line
 replaces it (latest-wins). See specs/dev-environment.md for the env knobs and
 the say probe.
@@ -146,7 +147,9 @@ driver-side and not shown; during a say the line shows the current word).
   (see specs/dev-environment.md).
 - WHALE_MODE=mock|live (default mock): commands work in both modes, live only
   pauses the mock talk bursts/canned speech; a mode command flips it at runtime.
-  WHALE_CMD_WS overrides the CLI endpoint (needed when WS_PORT is not 3001).
+  WHALE_CMD_WS overrides the CLI endpoint (needed when WS_PORT is not 3001);
+  WHALE_MODEL_MANIFEST points the CLI's motion-name validation at another
+  manifest (split deployments).
 
 ## Troubleshooting
 

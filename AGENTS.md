@@ -62,8 +62,9 @@ must be answered by the user.
 
 ### Memory discipline (hard requirement — macOS OOM prevention)
 - Budgets (tech-stack.md): server ≤ 60 MB RSS, driver ≤ 30 MB RSS at 30 FPS —
-  steady state (after warm-up; the boot transient is not part of the gate);
-  re-check with the ps command above at every feature close.
+  steady state (after warm-up; the boot transient is not part of the gate; the
+  owner confirmation is recorded in tech-stack.md at the close); re-check with
+  the ps command above at every feature close.
 - No per-frame allocations in the hot paths (driver frame dict is pre-allocated and
   mutated in place; frontend message handler avoids closures/spreads; server never
   JSON.parses frames).

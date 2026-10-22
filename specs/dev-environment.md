@@ -95,7 +95,8 @@
   (env WHALE_MODEL_MANIFEST; absent in a split deployment → warn + send anyway).
   The tool names a DSH/MCP wrapper uses map to the subcommands: whale_motion →
   motion, whale_say → say, whale_pose → pose, whale_mode → mode.
-  Exit codes: 0 sent, 1 server unreachable OR reachable with no driver (4002),
+  Exit codes: 0 sent (not acknowledged — the server may drop the frame on its
+  python-buffer cap), 1 server unreachable OR reachable with no driver (4002),
   2 validation error.
 - Mock vs live: WHALE_MODE=mock (default) keeps the canned talk bursts; live
   pauses them and hands the mouth to explicit commands. Commands work in both

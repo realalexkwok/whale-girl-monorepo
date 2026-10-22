@@ -121,11 +121,11 @@
   0.3 s, estimated for the macOS-say fallback) and queues a commanded say
   behind an in-flight synthesis (one slot); the frontend ignores src:"mock"
   while a line plays. Commanded says keep latest-wins.
-- Verification after the fix rounds: cmd_probe 52/52 (src fields, mock never
+- Verification after the fix rounds: cmd_probe 60/60 (src fields, mock never
   cuts a commanded line, pose key clearing + replacement, malformed-frame
   rejection, live flip silence, page-after-driver mode, CLI paths, every-sample
   RSS), say_probe 12/12, ws_probe 30.0 fps, role probe 1008, curl 200,
-  node --check 35,955 B, ports released.
+  node --check 36,361 B, ports released.
 
 ## Implementation notes (2026-10-22, review rounds 2–4)
 - Relay hardening: the server tags commands ({"relay":...}), caps them at
@@ -141,7 +141,7 @@
   frontend's decode-time guard stops a mock that was decoding during the flip.
 - CLI: mirrors the caps (say ≤ 300 chars, pose grammar/count, group ≤ 128,
   index ≤ 9999), reports close codes, and exits 2 on validation errors.
-- Probe: 52+ checks including the CLI paths, the 4002/1008 paths, malformed
+- Probe: 60+ checks including the CLI paths, the 4002/1008 paths, malformed
   frames (invalid JSON, non-object, oversize multibyte), the decode-time race,
   and every-sample steady-state RSS (the boot transient is recorded only).
 

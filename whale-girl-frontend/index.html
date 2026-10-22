@@ -610,6 +610,9 @@
           src.connect(ctx.destination);
           src.onended = function () {
             if (saySource === src) saySource = null;
+            // Without a model applyMouth() never runs, so clear the active
+            // line here too — the placeholder page must keep speaking.
+            if (sayActive && sayActive.audioUrl === url) sayActive = null;
           };
           saySource = src;
           sayStarts++;
@@ -733,9 +736,14 @@
       var cmdSeq = 0;     // only the newest motion/expression command may update state
       var modeKnown = false; // the first mode frame is an announcement, not a flip
 
+      var cmdFailAt = 0;
       function cmdFailed(what, detail) {
         cmdState.ok = false;
-        console.error('[whale] ' + what + ' failed: ' + detail);
+        var now = Date.now();
+        if (now - cmdFailAt >= 1000) { // 1 Hz: a command flood must not spam the console
+          cmdFailAt = now;
+          console.error('[whale] ' + what + ' failed: ' + detail);
+        }
       }
 
       function motionListText() {
@@ -811,7 +819,6 @@
       function runModeCommand(msg) {
         if (typeof msg.mock !== 'boolean') return; // never guess a mode
         var next = msg.mock ? 'mock' : 'live';
-        cmdSeq++; // a mode command supersedes pending motion/expression results
         if (!modeKnown) {
           // The first mode frame is the driver's announcement (connect or a
           // page that joined later): adopt it without a pose reset or a
@@ -823,6 +830,7 @@
         // A repeated mode (e.g. an idempotent 'mode live' from an AI) must not
         // wipe a held pose; only a real switch resets the model.
         if (next === cmdState.mode) return;
+        cmdSeq++; // a real flip supersedes pending motion/expression results
         cmdState.mode = next;
         cmdState.last = 'mode: ' + cmdState.mode;
         cmdState.ok = true;

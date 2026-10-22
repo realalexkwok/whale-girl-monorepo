@@ -37,7 +37,8 @@
    mode frames.
 3. Validation — **cmd_probe.js + full gate** (automatic) + the owner's
    manual pass from a real DSH session in OBS.
-4. Hardening recorded after review rounds 2–4 (2026-10-22): the command relay
+4. Hardening proposed in the review rounds (2026-10-22; the owner confirms it at
+   the close): the command relay
    is rate-capped (100/s) and drops when the python buffer is full; with no
    python writer the server closes the sender with 4002 (the CLI exits 1); the
    web socket has a best-effort same-origin guard (1008, loopback aliases
