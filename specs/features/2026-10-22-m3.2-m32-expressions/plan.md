@@ -86,5 +86,8 @@
 - Automatic: expr_probe per-tag assertions + cooldown + fallback + passthrough +
   idle + mode-flip + RSS; cmd_probe 61/61; say_probe 12/12; ws_probe 20–40 fps;
   role probe close 1008; curl 200; node --check; ports released.
-- Manual (owner): DSH emotional lines in OBS; ?debug=1 shows the tag -> preset;
-  the preset defaults confirmed; unknown tag -> neutral.
+- Manual (owner): DSH emotional lines in OBS; ?debug=1 shows
+  `expression: <preset>`; the preset defaults confirmed; an unknown tag is
+  rejected by the CLI (exit 2 + the tag list; the driver's raw-frame fallback is
+  covered by the probe); after a refresh + one click a say plays without the
+  pill.

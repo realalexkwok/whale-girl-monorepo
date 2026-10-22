@@ -12,12 +12,13 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | --- | --- | --- |
 | expr_probe (per-tag routing) | node scripts/expr_probe.js | PASS — 21/21 checks (breakdown below) |
 | M3.1 command gate | node scripts/cmd_probe.js | PASS — 61/61 checks (regression) |
-| M2.2 say regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 54/54 (100%), gap max 0.083, latency mean 15 ms / max 32 ms, decoded 847,872 B / 4.42 s |
+| M2.2 say regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 54/54 (100%), gap max 0.108, latency mean 13 ms / max 23 ms, decoded 847,872 B / 4.42 s |
 | Motion probe | node scripts/ws_probe.js | PASS — 30.0 fps over 2.00 s, 61 frames |
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | HTTP static host | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ | 200 PASS |
 | Frontend inline JS | node --check (extracted script) | PASS — 38,285 B at /tmp/m32-inline.js |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Steady state at 60 s: server 55,136 KB / driver 22,208 KB; probes max server 57,616 KB (expr) / 56,720 KB (cmd), driver max 23,856 KB; the boot transient (61,840 KB at 5 s) decays by ~15 s and is not gated |
+| Review round 2 | node --check + the probes above | PASS — the stale plan line fixed, the neutral/fallback preset capped, malformed env warns on stderr, the probe comments/RSS note/step-4 determinism fixed |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Steady state at 60 s: server 45,104 KB / driver 16,832 KB; probes max server 57,248 KB (expr) / 50,352 KB (cmd), driver max 30,208 KB (expr boot sample; 19,568 KB cmd) — all samples within 60/30 MB |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released, no stray processes |
 
 ### expr_probe.js breakdown (PASS 21/21)
@@ -37,7 +38,7 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | a name passthrough also idle-resets | exprN 13 → 14 |
 | a real mode flip resets the expression | exprN 15 → 16 |
 | idle returns the face to neutral | after ~8 s (probe env), exprN 18 → 19 |
-| server / driver RSS (every sample) | 57,616 KB / 23,856 KB max |
+| server / driver RSS (every sample) | 57,248 KB / 30,208 KB max (samples 57,248/56,768/52,720 and 30,208/29,840/17,600) |
 | ports released | :3000 and :3001 free |
 
 Implementation notes:
@@ -54,7 +55,7 @@ Implementation notes:
   limiter so a skip is observable); the defaults are 4 s / 30 s.
 - The probe captures the driver's stdout (skip notices), asserts the CLI's
   stderr tag list, guards the model manifest (every default preset must exist),
-  and samples RSS at boot and after the tag phase.
+  and samples RSS at boot, after the tag phase and at the end.
 - The wait before the first CLI command covers the driver's connect announce (a
   CLI command sent before the python writer connects gets a 4002 close).
 

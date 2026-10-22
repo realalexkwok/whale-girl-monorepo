@@ -16,6 +16,7 @@ the defaults with a warning). An empty preset name means "reset the face".
 
 import json
 import os
+import sys
 
 DEFAULT_TAGS = {
     "happy": "开心兴奋",
@@ -39,16 +40,28 @@ def load_tags(environ=None):
         except ValueError:
             print(
                 "[whale] WHALE_EXPR_TAGS is not valid JSON; using the defaults",
+                file=sys.stderr,
                 flush=True,
             )
             return table
         if not isinstance(extra, dict):
             print(
                 "[whale] WHALE_EXPR_TAGS must be a JSON object; using the defaults",
+                file=sys.stderr,
                 flush=True,
             )
             return table
+        skipped = []
         for key, value in extra.items():
             if isinstance(key, str) and isinstance(value, str):
                 table[key] = value
+            else:
+                skipped.append(str(key)[:32])
+        if skipped:
+            print(
+                "[whale] WHALE_EXPR_TAGS skipped non-string entries: %s"
+                % ", ".join(sorted(skipped)),
+                file=sys.stderr,
+                flush=True,
+            )
     return table

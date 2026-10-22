@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // M3.2 expression-routing probe (automatic half).
 // Boots the server, headless Chrome at ?debug=1 and the driver in LIVE mode with
-// a 1 s cooldown / 6 s idle (so the timing checks are fast), then drives the
+// a 2.5 s cooldown / 8 s idle (so the timing checks are fast), then drives the
 // whale_express path: CLI + raw frames -> the driver table -> the M3.1
 // expression frame -> the frontend hooks.
 // Asserts: every default tag resolves to its preset, an unknown tag falls back
@@ -317,6 +317,7 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   // The driver announces the mode on connect: wait for it so the CLI's first
   // command has a python writer (otherwise the server answers 4002).
   await waitFor(() => modeFrames.length > 0, 8000, 'driver connected (mode announce)');
+  sampleRss();
 
   const cmdState = () => chrome.evaluate(
     'window.whaleModel && window.whaleModel.cmdState ? window.whaleModel.cmdState : null'
@@ -371,8 +372,11 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   record('a tagless expression frame resets', true, 'exprN ' + before + ' -> ' + st.exprN);
 
   // 4) the neutral tag resets too.
+  const before4 = (await cmdState()).exprN;
   tagFrame('happy');
-  await waitState((s) => s.last === 'expression: ' + TAGS.happy, 8000, 'happy again');
+  await waitState(
+    (s) => s.last === 'expression: ' + TAGS.happy && s.ok === true && s.exprN > before4,
+    8000, 'happy again');
   before = (await cmdState()).exprN;
   tagFrame('neutral');
   st = await waitState(
@@ -423,7 +427,7 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   probeWs.send(JSON.stringify({ type: 'mode', mock: false }));
   await waitModeAfter(false, modeBase, 5000);
 
-  // 8) idle -> neutral (probe env WHALE_EXPR_IDLE=6 s).
+  // 8) idle -> neutral (probe env WHALE_EXPR_IDLE=8 s).
   tagFrame('sad');
   await waitState((s) => s.last === 'expression: ' + TAGS.sad, 8000, 'sad before idle');
   before = (await cmdState()).exprN;

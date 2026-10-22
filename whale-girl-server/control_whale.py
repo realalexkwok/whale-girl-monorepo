@@ -491,6 +491,11 @@ async def run_driver(ws):
     expr_tag = ""
     expr_at = 0.0
     expr_deadline = 0.0
+    # A too-long neutral preset (WHALE_EXPR_TAGS) must never build an oversized
+    # frame: fall back to the reset frame.
+    expr_neutral = EXPR_NEUTRAL if len(EXPR_NEUTRAL) <= MAX_CMD_NAME else ""
+    if EXPR_NEUTRAL and not expr_neutral:
+        log_bad_cmd("WHALE_EXPR_TAGS neutral preset too long; using reset")
 
     async def forward(frame):
         """Send a v1 frame to the frontend over the python connection."""
@@ -531,20 +536,22 @@ async def run_driver(ws):
             tag = event.get("tag")
             if isinstance(tag, str) and tag:
                 if len(tag) > 32:
-                    log_bad_cmd("expression tag too long (%d chars)"
-                                % len(tag))
-                    return
+                    log_bad_cmd("expression tag too long (%d chars); using "
+                                "neutral (valid: %s)"
+                                % (len(tag), ", ".join(sorted(EXPR_TAGS))))
+                    tag = "neutral"
                 now = time.monotonic()
                 preset = EXPR_TAGS.get(tag)
-                if preset is not None and len(preset) > MAX_CMD_NAME:
-                    log_bad_cmd("expression preset too long (%d chars) for %r"
-                                % (len(preset), tag[:32]))
-                    preset = None
                 if preset is None:
                     log_bad_cmd("unknown expression tag %r (valid: %s)"
                                 % (tag[:32], ", ".join(sorted(EXPR_TAGS))))
                     tag = "neutral"
-                    preset = EXPR_NEUTRAL
+                    preset = expr_neutral
+                elif len(preset) > MAX_CMD_NAME:
+                    log_bad_cmd("expression preset too long (%d chars) for %r"
+                                % (len(preset), tag[:32]))
+                    tag = "neutral"
+                    preset = expr_neutral
                 elif tag == expr_tag and now - expr_at < EXPR_COOLDOWN:
                     # A repeat still counts as activity: keep the face alive.
                     expr_deadline = now + EXPR_IDLE
@@ -570,7 +577,7 @@ async def run_driver(ws):
                 expr_tag = "neutral"
                 expr_at = time.monotonic()
                 expr_deadline = expr_at + EXPR_IDLE
-                await forward({"type": "expression", "name": EXPR_NEUTRAL})
+                await forward({"type": "expression", "name": expr_neutral})
                 return
             if len(name) > MAX_CMD_NAME:
                 log_bad_cmd("expression name too long (%d chars)" % len(name))
