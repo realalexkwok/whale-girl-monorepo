@@ -2,7 +2,7 @@
 
 > Confirmed by the owner (2026-10-22) before implementation; the approved
 > plan-mode plan is the source of truth here. Status: implemented on
-> feature/whale-girl-m32-expressions (review rounds 1–4 fixes applied); the
+> feature/whale-girl-m32-expressions (review rounds 1–5 fixes applied); the
 > owner's manual half is owed at the close (agents never git commit / push —
 > owner rule).
 

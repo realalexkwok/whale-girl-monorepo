@@ -444,16 +444,17 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   record('idle returns the face to neutral', true,
     'exprN ' + before + ' -> ' + st.exprN + ' after ~' + (IDLE_MS / 1000) + ' s');
 
-  // 9) RSS: only the END sample is the steady-state gate (AGENTS budgets); the
-  // boot and tag-phase samples are reported as informational (warm-up).
+  // 9) RSS smoke check: the END sample is a post-flow snapshot (not the
+  // steady state — the 60 s settle and cmd_probe's every-sample gate are the
+  // budget evidence). The boot and tag-phase samples are warm-up context.
   sampleRss();
   const serverEnd = serverSamples[serverSamples.length - 1];
   const driverEnd = driverSamples[driverSamples.length - 1];
-  record('server RSS <= 60 MB (steady state, end sample)',
+  record('server RSS <= 60 MB (end sample, post-flow smoke)',
     serverEnd > 0 && serverEnd <= 60 * 1024,
     'server boot ' + serverSamples[0] + ' / tag-phase ' +
     serverSamples[serverSamples.length - 2] + ' / end ' + serverEnd + ' KB');
-  record('driver RSS <= 30 MB (steady state, end sample)',
+  record('driver RSS <= 30 MB (end sample, post-flow smoke)',
     driverEnd > 0 && driverEnd <= 30 * 1024,
     'driver boot ' + driverSamples[0] + ' / tag-phase ' +
     driverSamples[driverSamples.length - 2] + ' / end ' + driverEnd + ' KB');

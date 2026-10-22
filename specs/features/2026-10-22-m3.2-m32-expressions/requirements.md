@@ -3,7 +3,7 @@
 > Confirmed by the owner (2026-10-22, grouped ask round: requirements / plan /
 > validation; answers: hybrid routing table / driver table + CLI + new probe /
 > per-tag probe + full gate). Status: implemented on
-> feature/whale-girl-m32-expressions (review rounds 1–4 fixes applied); the
+> feature/whale-girl-m32-expressions (review rounds 1–5 fixes applied); the
 > manual half is owed by the owner at the close.
 
 ## Scope

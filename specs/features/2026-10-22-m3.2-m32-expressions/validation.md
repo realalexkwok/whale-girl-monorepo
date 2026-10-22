@@ -1,6 +1,6 @@
 # M3.2 — LLM-Driven Expressions: Emotion Tag -> Preset Routing — Validation
 
-> Status: IMPLEMENTED on feature/whale-girl-m32-expressions (review rounds 1–4
+> Status: IMPLEMENTED on feature/whale-girl-m32-expressions (review rounds 1–5
 > fixes applied and the automatic half re-run on that tree) — the manual half is
 > owed by the owner at the close. Roadmap tick + history archive happen only on
 > the owner's close instruction.
@@ -17,7 +17,7 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | HTTP static host | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ | 200 PASS |
 | Frontend inline JS | node --check (extracted script) | PASS — 38,285 B at /tmp/m32-inline.js |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Steady state at 60 s: server 58,032 KB / driver 20,800 KB; expr_probe gates the END sample 27,104 KB / 15,744 KB (boot 53,984 / 29,456 and tag-phase 54,112 / 29,600 KB informational); cmd_probe every-sample max 54,096 KB / 20,736 KB — within the steady-state 60/30 MB budgets |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | The budget evidence: the 60 s settle server 58,032 KB / driver 20,800 KB and cmd_probe's every-sample max 54,096 KB / 20,736 KB — within the steady-state 60/30 MB budgets. expr_probe's end sample (33,728 / 17,424 KB) is a post-flow smoke check, not the steady state |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released, no stray processes |
 
 ### expr_probe.js breakdown (PASS 22/22)
@@ -38,11 +38,11 @@ All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-se
 | a name passthrough also idle-resets | exprN 14 → 15 |
 | a real mode flip resets the expression | exprN 16 → 17 |
 | idle returns the face to neutral | after ~8 s (probe env), exprN 19 → 20 |
-| RSS steady state (end sample) | server 27,104 KB; driver 15,744 KB — boot 53,984 / 29,456 KB and tag-phase 54,112 / 29,600 KB are informational (warm-up) |
+| RSS end sample (post-flow smoke) | server 33,728 KB; driver 17,424 KB — boot 58,432 / 29,184 KB and tag-phase 57,168 / 29,312 KB are informational (warm-up); the 60 s settle and cmd_probe are the budget evidence |
 | ports released | :3000 and :3001 free |
 
 Implementation notes:
-- **Review rounds 1–4**: the CLI is the strict ingress (exit 2 + the tag list,
+- **Review rounds 1–5**: the CLI is the strict ingress (exit 2 + the tag list,
   nothing sent) while the driver's raw-frame fallback neutralizes; cooldown skips
   and name passthroughs refresh the idle deadline; tagless/overlong tags fall
   back to neutral (bypassing the cooldown); a non-empty neutral override is
@@ -61,9 +61,9 @@ Implementation notes:
   limiter so a skip is observable); the defaults are 4 s / 30 s.
 - The probe captures the driver's stdout (skip notices), asserts the CLI's
   stderr tag list, guards the model manifest (every default preset must exist),
-  and samples RSS at boot, after the tag phase and at the end; only the end
-  sample is the steady-state gate (the first two are warm-up, reported for
-  context).
+  and samples RSS at boot, after the tag phase and at the end; the end sample
+  is a post-flow smoke check (the real budget evidence is the 60 s settle plus
+  cmd_probe's every-sample gate).
 - The wait before the first CLI command covers the driver's connect announce (a
   CLI command sent before the python writer connects gets a 4002 close).
 
