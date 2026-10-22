@@ -19,8 +19,11 @@
    `name:""` to `resetExpression()`; `cmdState.exprN` counts applied
    expressions (probe evidence); and the audio-enable fix (any pointer/key
    gesture creates/resumes the AudioContext, so the first say after a refresh
-   plays without the pill — the pill remains the OBS fallback). Check:
-   node --check on the inline script.
+   plays without the pill — the pill remains the OBS fallback). The 0.4.0 hook
+   quirk is covered too: setExpression() rejects the preset still tracked as
+   currentExpression, so the hooks clear that tracking to let a reset->replay
+   (and a cooldown repeat) start again. Check: node --check on the inline
+   script.
 3. T4 — CLI (whale-girl-server/scripts/whale_cmd.py): the `express` subcommand
    (`express <tag> [text...]`), validating the tag against the shared table
    (exit 2 with the tag list), sending the tag frame; exit codes unchanged.
