@@ -1,47 +1,60 @@
 # M3.2 — LLM-Driven Expressions: Emotion Tag -> Preset Routing — Validation
 
 > Status: IMPLEMENTED on feature/whale-girl-m32-expressions (review round 1
-> fixes applied) — automatic half re-run results below; the manual half is owed
-> by the owner at the close. Roadmap tick + history archive happen only on the
-> owner's close instruction.
+> fixes applied and the automatic half re-run on that tree) — the manual half is
+> owed by the owner at the close. Roadmap tick + history archive happen only on
+> the owner's close instruction.
 
 ## Automatic verification results (measured 2026-10-22, macOS)
 All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-server.
 
 | Check | Command | Result |
 | --- | --- | --- |
-| expr_probe (per-tag routing) | node scripts/expr_probe.js | PASS — 18/18 checks (breakdown below) |
+| expr_probe (per-tag routing) | node scripts/expr_probe.js | PASS — 21/21 checks (breakdown below) |
 | M3.1 command gate | node scripts/cmd_probe.js | PASS — 61/61 checks (regression) |
-| M2.2 say regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 52/52 (100%), gap max 0.083, latency mean 17 ms / max 36 ms, decoded 847,872 B / 4.42 s |
+| M2.2 say regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 54/54 (100%), gap max 0.083, latency mean 15 ms / max 32 ms, decoded 847,872 B / 4.42 s |
 | Motion probe | node scripts/ws_probe.js | PASS — 30.0 fps over 2.00 s, 61 frames |
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | HTTP static host | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ | 200 PASS |
-| Frontend inline JS | node --check (extracted script) | PASS — 36,927 B at /tmp/m32-inline.js |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Settled stack 57,696 KB / 24,352 KB; probes max server 52,752 KB (expr) / 49,856 KB (cmd), driver max 24,352 KB — within the steady-state 60/30 MB budgets |
+| Frontend inline JS | node --check (extracted script) | PASS — 38,285 B at /tmp/m32-inline.js |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | Steady state at 60 s: server 55,136 KB / driver 22,208 KB; probes max server 57,616 KB (expr) / 56,720 KB (cmd), driver max 23,856 KB; the boot transient (61,840 KB at 5 s) decays by ~15 s and is not gated |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released, no stray processes |
 
-### expr_probe.js breakdown (PASS 18/18)
+### expr_probe.js breakdown (PASS 21/21)
 | Check | Measured |
 | --- | --- |
+| WHALE_EXPR_TAGS override merges | happy -> 爱心眼, proud -> 双手比耶 (offline, env-spawned) |
 | CLI express exits 0 | status 0 — `express happy 今天特别开心` |
 | happy -> 开心兴奋 (CLI) | cmdState.last="expression: 开心兴奋", exprN=1 |
-| CLI rejects an unknown tag | exit 2 with the valid tag list |
+| CLI rejects an unknown tag | exit 2 with the valid tag list on stderr |
 | sad / angry / surprised / confused / love | 悲伤 / 生气 / 感叹号 / 问号 / 爱心眼 (exprN 1 → 6) |
 | unknown tag -> neutral reset | exprN 6 → 7 |
-| neutral tag -> reset | exprN 8 → 9 |
-| same tag inside the cooldown | skipped (exprN stayed 10) |
-| same tag after the cooldown | applied (exprN 11) |
-| M3.1 name passthrough | expression: 脸红 applied (exprN 12) |
-| a real mode flip resets the expression | exprN 13 → 14 |
-| idle returns the face to neutral | after ~6 s (probe env), exprN 16 → 17 |
-| server / driver RSS | 52,752 KB / 18,288 KB |
+| a tagless expression frame resets | exprN 7 → 8 |
+| neutral tag -> reset | exprN 9 → 10 |
+| same tag inside the cooldown | skipped, exprN stayed 11, the driver logged "within the cooldown, skipped" |
+| same tag after the cooldown | applied (exprN 12) |
+| M3.1 name passthrough | expression: 脸红 applied (exprN 12 → 13) |
+| a name passthrough also idle-resets | exprN 13 → 14 |
+| a real mode flip resets the expression | exprN 15 → 16 |
+| idle returns the face to neutral | after ~8 s (probe env), exprN 18 → 19 |
+| server / driver RSS (every sample) | 57,616 KB / 23,856 KB max |
 | ports released | :3000 and :3001 free |
 
 Implementation notes:
+- **Hook fix (review round 1)**: pixi-live2d-display 0.4.0's
+  `ExpressionManager.setExpression()` returns false when the requested preset is
+  still `currentExpression`, and `resetExpression()` does not clear it — so a
+  reset followed by the same preset (or a cooldown repeat) silently did nothing.
+  `playExpression`/`resetExpression` now clear that tracking first; the probe's
+  reset → replay and cooldown checks cover it.
 - The frontend accepts any string in an expression frame (`name:""` = reset),
   and `cmdState.exprN` counts applied expressions/resets (the probe evidence).
-- The probe runs the driver with `WHALE_EXPR_COOLDOWN=1` and
-  `WHALE_EXPR_IDLE=6` so the timing checks are fast; the defaults are 4 s / 30 s.
+- The probe runs the driver with `WHALE_EXPR_COOLDOWN=2.5` and
+  `WHALE_EXPR_IDLE=8` (the cooldown is longer than the driver's 1 Hz notice
+  limiter so a skip is observable); the defaults are 4 s / 30 s.
+- The probe captures the driver's stdout (skip notices), asserts the CLI's
+  stderr tag list, guards the model manifest (every default preset must exist),
+  and samples RSS at boot and after the tag phase.
 - The wait before the first CLI command covers the driver's connect announce (a
   CLI command sent before the python writer connects gets a 4002 close).
 

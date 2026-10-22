@@ -28,8 +28,8 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.PORT) || 3000;
 const WS_PORT = Number(process.env.WS_PORT) || 3001;
 const VISIBLE = process.argv.includes('--visible');
-const COOLDOWN_MS = 1000;
-const IDLE_MS = 6000;
+const COOLDOWN_MS = 2500; // > the driver's 1 Hz notice limiter so a skip is logged
+const IDLE_MS = 8000;
 
 let TAGS = {};
 try {
@@ -383,8 +383,9 @@ async function waitModeAfter(mock, baseline, timeoutMs) {
   before = (await cmdState()).exprN;
   tagFrame('happy');
   await waitState((s) => s.exprN > before, 8000, 'happy (cooldown first)');
-  tagFrame('happy'); // immediately: must be skipped
-  await sleep(COOLDOWN_MS / 2);
+  await sleep(1200); // > the 1 Hz notice limiter, < the cooldown
+  tagFrame('happy'); // inside the cooldown: must be skipped
+  await sleep(COOLDOWN_MS - 900);
   st = await cmdState();
   const cooldownLogged = driverLog.indexOf('within the cooldown, skipped') !== -1;
   record('same tag inside the cooldown is skipped',

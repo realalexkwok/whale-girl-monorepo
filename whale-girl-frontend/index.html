@@ -237,7 +237,23 @@
             try { return m.motion(group, index, priority); } catch (err) { return Promise.reject(err); }
           },
           playExpression: function (name) {
-            try { return m.expression(name); } catch (err) { return Promise.reject(err); }
+            try {
+              var em = expressionManager();
+              if (em && em.definitions) {
+                // pixi-live2d-display 0.4.0 rejects re-applying the expression
+                // that is still tracked as current (setExpression returns
+                // false). Clear the tracking so a repeated preset — after a
+                // cooldown repeat or a reset then re-apply — starts again.
+                var index = typeof em.getExpressionIndex === 'function'
+                  ? em.getExpressionIndex(name) : -1;
+                if (index > -1 && em.expressions &&
+                    em.expressions[index] === em.currentExpression) {
+                  em.currentExpression = undefined;
+                  em.reserveExpressionIndex = -1;
+                }
+              }
+              return m.expression(name);
+            } catch (err) { return Promise.reject(err); }
           },
           // Stops the active motion; the idle motion resumes automatically
           // (by design — this is the model's resting state).
@@ -259,7 +275,14 @@
           },
           resetExpression: function () {
             var em = expressionManager();
-            if (em && typeof em.resetExpression === 'function') em.resetExpression();
+            if (!em) return;
+            // 0.4.0's resetExpression() starts the default motion but keeps
+            // currentExpression, which then blocks re-applying the same preset.
+            try {
+              em.currentExpression = undefined;
+              em.reserveExpressionIndex = -1;
+            } catch (err) { /* read-only build: the reset below still runs */ }
+            if (typeof em.resetExpression === 'function') em.resetExpression();
           },
           listMotions: motionGroups,
           listExpressions: expressionNames
