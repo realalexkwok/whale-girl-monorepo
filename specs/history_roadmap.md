@@ -194,3 +194,49 @@
   re-measure with audio and live commands active and the server RSS headroom at
   the OBS gate (the steady-state interpretation is recorded in tech-stack.md);
   M5.1/M5.2 own whale_say as the announcement seam.
+
+## M3.2 LLM-driven expressions
+- Closed 2026-10-22. DSH sessions steer the face through whale_express(tag[, text]):
+  the model classifies inline, the driver resolves a coarse tag to a Live2D preset
+  via expr_tags.py and forwards the existing M3.1 {"type":"expression","name":...}
+  frame. Inbound {"type":"expression","tag":"happy","text":"..."} is a variant of
+  the M3.1 frame (no new frame type); name:"" is the reset. Tags + defaults:
+  happy -> 开心兴奋, sad -> 悲伤, angry -> 生气, surprised -> 感叹号,
+  confused -> 问号, love -> 爱心眼, neutral -> reset.
+- Semantics: a tag change applies immediately; the SAME tag within
+  WHALE_EXPR_COOLDOWN (default 4 s) is skipped (skips still refresh the idle
+  deadline); no express command for WHALE_EXPR_IDLE (default 30 s) resets the
+  face; a real mode flip clears the expression and resets. The CLI is the strict
+  ingress (exit 2 + the tag list, nothing sent); raw unknown/tagless/overlong tags
+  reaching the driver fall back to neutral with a 1 Hz log. WHALE_EXPR_TAGS (JSON)
+  merges over the defaults; neutral always resets. Expressions drive the face
+  (ParamMouthForm) and coexist with speech; the mouth ladder is unchanged.
+- Frontend: name:"" -> resetExpression(); cmdState.exprN counts applied
+  expressions/resets. Hook fix: pixi-live2d-display 0.4.0's
+  ExpressionManager.setExpression() returns false for the preset still tracked as
+  currentExpression and resetExpression() does not clear it, so the hooks clear
+  currentExpression/reserveExpressionIndex first (reset -> replay and cooldown
+  repeats work).
+- Evidence (close re-run 2026-10-22 on 89eeff7): expr_probe 22/22 (every tag, CLI
+  list, cooldown with the driver skip log, tagless/overlong neutral, name
+  passthrough, idle + mode-flip resets, WHALE_EXPR_TAGS merge incl. the neutral
+  exception, manifest guard, ports), cmd_probe 61/61, say_probe 12/12 (53/53
+  in-word, gap 0.108, 21/32 ms), ws_probe 30.1 fps (61 frames), role probe 1008,
+  curl 200, inline script 38,285 B, RSS 60 s settle 45,248 / 16,672 KB (budget
+  evidence; the probe's end sample is a post-flow smoke check), ports released.
+  Manual half: the owner exercised the pass (all six tags, CLI rejection,
+  cooldown, idle, audio after reload + click, OBS connected).
+- Review rounds: eight independent reviewer passes (one persistent reviewer);
+  every finding fixed, the final pass reported no remaining findings. Notable
+  fixes: the CLI/driver unknown-tag contract, the 0.4.0 reset->replay bug, idle
+  refresh on skips/name passthroughs, tagless/overlong neutral, the neutral
+  override contract, probe evidence (manifest guard, override merge, skip-log
+  assertion, RSS policy) and doc/status consistency. Commits on
+  feature/whale-girl-m32-expressions: 880584d (feature), ef4f26d + ff3060f
+  (round 1), 4acd951 + 75a1a01 (round 2), dbaec7a (round 3), 8950101 (round 4),
+  e61af13 (round 5), 1123a37 (round 6), 89eeff7 (round 7 status sync), plus the
+  close commit. Spec trio: specs/features/2026-10-22-m3.2-m32-expressions/.
+- Handoffs: M4.1 owns the OBS browser-source memory re-measure with audio +
+  commands + expressions active (server RSS headroom at the OBS gate); M5.1/M5.2
+  own reusing whale_express alongside the announcements and the MCP tool wrapper
+  for the whale_* tools.

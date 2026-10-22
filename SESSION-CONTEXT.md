@@ -14,7 +14,7 @@
 - Branch rules: feature/whale-girl-<item>; close = merge into main → push → delete
   local branch. Agents never git commit / git push without the owner's instruction.
 
-## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20); M2.2 CLOSED (2026-10-21); M3.1 CLOSED (2026-10-22)
+## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20); M2.2 CLOSED (2026-10-21); M3.1 CLOSED (2026-10-22); M3.2 CLOSED (2026-10-22)
 - M1: server (express :3000 + ws proxy :3001), frontend (PixiJS 7.4.3 + cubism4,
   transparent canvas, placeholder fallback), mock driver (30 FPS blink/talk/gaze/sway),
   probes and docs. Evidence: motion probe PASS at 30.0 fps (twice), role rejection
@@ -29,6 +29,16 @@
   specs/features/2026-10-20-m2.1-model-integration/validation.md.
 - M2.1's manual pass (browser ?debug=1, console hooks, failure path, OBS Browser
   source) also covers the M1 manual acceptance, which was never separately recorded.
+- M3.2: LLM-driven expressions — the DSH model tags text inline
+  (whale_express), expr_tags.py resolves the tag to a preset, and the driver
+  forwards the M3.1 expression frame with cooldown/hysteresis, neutral fallback
+  (CLI strict, raw frames neutralized), idle reset, mode-flip reset and the
+  WHALE_EXPR_TAGS override (neutral always resets). Frontend hook fix: 0.4.0's
+  setExpression rejects the preset still tracked as currentExpression, so the
+  hooks clear the tracking (reset -> replay works). Evidence: expr_probe 22/22,
+  cmd_probe 61/61, say_probe 12/12, ws 30.1 fps, role 1008, curl 200, inline
+  38,285 B, RSS settle 45,248 / 16,672 KB, ports released. Manual half owner-run
+  2026-10-22. Full detail: specs/features/2026-10-22-m3.2-m32-expressions/validation.md.
 - M3.1: DSH command surface — v1 frames (motion/expression/say/pose/mode) relayed
   as {"relay":...} to the driver, which executes say/pose/mode and forwards
   motion/expression; whale_cmd.py (motion|say|pose|mode) is the DSH tool; the
@@ -90,12 +100,11 @@
     Design drafts: docs/drafts/ai-agent-notifier/.
 
 ## 4. In-flight / next
-- NOTHING is in flight. M3.1 is fully closed (2026-10-22): merged into main and
-  pushed; its local feature branch was deleted. NEXT: M3.2 (LLM-driven
-  expressions) planning via /spec-plan, carrying the M3.1 handoff — the
-  expression frame + frontend execution already ship; the text/emotion ->
-  preset mapping and an optional whale_expression CLI/MCP wrapper are the new
-  work.
+- NOTHING is in flight. M3.2 is fully closed (2026-10-22): merged into main and
+  pushed; its local feature branch was deleted. NEXT: M4.1 (memory/asset
+  optimization — the hard OBS < 100 MB gate) planning via /spec-plan, carrying
+  the M3.2 handoffs (re-measure with audio + commands + expressions active,
+  server RSS headroom at the OBS gate).
 - M2.2 is fully closed (2026-10-21): merged into main and pushed; its local
   feature branch was deleted.
 - M2.1 is fully closed: merged into main and pushed (2026-10-20); its local
@@ -107,9 +116,11 @@
   3.9; 16.0 needs 3.10+, 17.x needs 3.11+).
 - Ports 3000/3001 free at last check (the close left the stack stopped); env
   knobs PORT, WS_PORT, WHALE_WS, WHALE_MODE, WHALE_CMD_WS,
-  WHALE_MODEL_MANIFEST.
+  WHALE_MODEL_MANIFEST, WHALE_EXPR_TAGS/WHALE_EXPR_COOLDOWN/WHALE_EXPR_IDLE
+  (M3.2; WHALE_EXPR_TAGS must be set for both the driver and the CLI).
 - Scripts: ws_probe, ws_role_probe, say_probe (M2.2), cmd_probe (M3.1, 61
-  checks), validate_model; whale_cmd.py (DSH motion/say/pose/mode) and
+  checks), expr_probe (M3.2, 22 checks), validate_model; whale_cmd.py (DSH
+  motion/say/pose/mode/express), expr_tags.py (tag -> preset table) and
   tts_synth.py (edge-tts helper).
 - CDN URLs pinned in tech-stack.md, all verified 200 on 2026-10-19.
 - Live2D asset installed at whale-girl-frontend/model/ (4.3 MB, gitignored;

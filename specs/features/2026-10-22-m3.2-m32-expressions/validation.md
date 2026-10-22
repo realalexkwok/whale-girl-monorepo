@@ -1,32 +1,32 @@
 # M3.2 — LLM-Driven Expressions: Emotion Tag -> Preset Routing — Validation
 
-> Status: IMPLEMENTED on feature/whale-girl-m32-expressions (review rounds 1–7
-> fixes applied and the automatic half re-run on that tree) — the manual half is
-> owed by the owner at the close. Roadmap tick + history archive happen only on
-> the owner's close instruction.
+> Status: **CLOSED 2026-10-22.** Automatic half re-run at the close on the final
+> tree (89eeff7): expr_probe 22/22, cmd_probe 61/61, say_probe 12/12, ws_probe
+> 30.1 fps, role probe 1008, curl 200, inline script 38,285 B, RSS 60 s settle
+> 45,248 / 16,672 KB, ports released, no strays. The owner exercised the manual
+> pass on 2026-10-22 (all six tags, the CLI rejection, cooldown, idle, OBS); the
+> review-round fixes that followed are covered by the automatic gate, including
+> the 0.4.0 reset→replay path. Owner instruction: "/spec-close M3.2".
 
 ## Automatic verification results (measured 2026-10-22, macOS)
 All commands ran from /Users/superguo/Projects/whale-girl-monorepo/whale-girl-server.
 
-**Run provenance (2026-10-22):** the full automatic pass (cmd_probe, say_probe,
-ws_probe, role probe, curl, the 60 s RSS settle and the inline node --check)
-ran on the round-4 tree (committed as 8950101); the later commits only change
-probe labels/comments and specs, so those numbers remain valid. The expr_probe
-22/22 row and its RSS samples were re-run on the final code tree (e61af13); the
-only commits after it are docs-only (the provenance/status note), so the code
-under review is unchanged. The expr/cmd/say/ws numbers in the table are
-therefore from two runs, not one single run.
+**Run provenance (2026-10-22):** the numbers below are the close re-run on the
+final tree (89eeff7) — one full pass (expr_probe, cmd_probe, say_probe,
+ws_probe, role probe, curl, the 60 s RSS settle, the inline node --check). The
+review-verification numbers from the earlier trees are archived in the review
+history and are superseded by this pass.
 
 | Check | Command | Result |
 | --- | --- | --- |
 | expr_probe (per-tag routing) | node scripts/expr_probe.js | PASS — 22/22 checks (breakdown below) |
 | M3.1 command gate | node scripts/cmd_probe.js | PASS — 61/61 checks (regression) |
-| M2.2 say regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 53/53 (100%), gap max 0.083, latency mean 18 ms / max 36 ms, decoded 847,872 B / 4.42 s |
-| Motion probe | node scripts/ws_probe.js | PASS — 30.0 fps over 2.00 s, 61 frames |
+| M2.2 say regression | node scripts/say_probe.js | PASS — 12/12: 9 words, in-word 53/53 (100%), gap max 0.108, latency mean 21 ms / max 32 ms, decoded 847,872 B / 4.42 s |
+| Motion probe | node scripts/ws_probe.js | PASS — 30.1 fps over 2.00 s, 61 frames |
 | Role probe | node scripts/ws_role_probe.js | PASS — close 1008 + reason |
 | HTTP static host | curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ | 200 PASS |
 | Frontend inline JS | node --check (extracted script) | PASS — 38,285 B at /tmp/m32-inline.js |
-| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | The budget evidence: the 60 s settle server 58,032 KB / driver 20,800 KB and cmd_probe's every-sample max 54,096 KB / 20,736 KB — within the steady-state 60/30 MB budgets. expr_probe's end sample (33,728 / 17,424 KB) is a post-flow smoke check, not the steady state |
+| Memory budget | ps -axo pid,rss,command \| grep -E 'node server.js\|control_whale.py' | The budget evidence: the 60 s settle server 45,248 KB / driver 16,672 KB and cmd_probe's every-sample max 49,680 KB / 20,752 KB — within the steady-state 60/30 MB budgets. expr_probe's end sample (31,504 / 17,680 KB) is a post-flow smoke check, not the steady state |
 | Clean shutdown | lsof after SIGTERM | PASS — ports 3000/3001 released, no stray processes |
 
 ### expr_probe.js breakdown (PASS 22/22)
@@ -47,11 +47,11 @@ therefore from two runs, not one single run.
 | a name passthrough also idle-resets | exprN 14 → 15 |
 | a real mode flip resets the expression | exprN 16 → 17 |
 | idle returns the face to neutral | after ~8 s (probe env), exprN 19 → 20 |
-| RSS end sample (post-flow smoke) | server 33,728 KB; driver 17,424 KB — boot 58,432 / 29,184 KB and tag-phase 57,168 / 29,312 KB are informational (warm-up); the 60 s settle and cmd_probe are the budget evidence |
+| RSS end sample (post-flow smoke) | server 31,504 KB; driver 17,680 KB — boot 41,296 / 29,456 KB and tag-phase 39,232 / 29,680 KB are informational (warm-up); the 60 s settle and cmd_probe are the budget evidence |
 | ports released | :3000 and :3001 free |
 
 Implementation notes:
-- **Review rounds 1–5**: the CLI is the strict ingress (exit 2 + the tag list,
+- **Review rounds 1–7**: the CLI is the strict ingress (exit 2 + the tag list,
   nothing sent) while the driver's raw-frame fallback neutralizes; cooldown skips
   and name passthroughs refresh the idle deadline; tagless/overlong tags fall
   back to neutral (bypassing the cooldown); a non-empty neutral override is
@@ -76,7 +76,7 @@ Implementation notes:
 - The wait before the first CLI command covers the driver's connect announce (a
   CLI command sent before the python writer connects gets a 4002 close).
 
-## Manual verification (owner, first-time-user pass — PENDING)
+## Manual verification (owner, first-time-user pass — PASSED 2026-10-22)
 Preconditions: the README quick start (npm install + the venv) and the DS鲸鱼娘
 model dropped into whale-girl-frontend/model/ (node scripts/validate_model.js
 passes).
@@ -102,6 +102,21 @@ passes).
    `ws connected` (not 1008).
 8. Report any failure with the exact command, the ?debug=1 line and the console
    output.
+
+Owner record (2026-10-22): the owner exercised steps 1–8 with the driver in
+live mode — all six tags showed their presets, `express banana` exited 2 with
+the tag list, the cooldown and idle reset behaved, a reload + one click made the
+next say audible, and the OBS Browser source reported `ws connected` (the
+owner could not force the 1008 path in OBS; that guard is covered by cmd_probe).
+The review-round fixes that followed (the 0.4.0 reset→replay fix, the
+tagless/overlong neutral paths, the neutral-override contract, the RSS gate
+policy) are covered by the automatic half above, which was re-run at the close
+on 89eeff7.
+
+Already verified automatically (do NOT re-run): expr_probe 22/22, cmd_probe
+61/61, say_probe 12/12, ws_probe 30.1 fps, role probe 1008, curl 200, inline
+`node --check` 38,285 B, RSS settle 45,248 / 16,672 KB, ports released — all
+measured at this close (2026-10-22).
 
 ## Handoff to dependant milestones
 - M4.1 owns the OBS browser-source memory re-measure with audio + commands +

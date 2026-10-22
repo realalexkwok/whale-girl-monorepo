@@ -1,6 +1,6 @@
 # Whale Girl — Roadmap
 
-> **Status: M1 complete (2026-10-19); M2.1 closed (2026-10-20); M2.2 closed (2026-10-21); M3.1 closed (2026-10-22).** V1 (M1–M5) is the
+> **Status: M1 complete (2026-10-19); M2.1 closed (2026-10-20); M2.2 closed (2026-10-21); M3.1 closed (2026-10-22); M3.2 closed (2026-10-22).** V1 (M1–M5) is the
 > commitment; V2/V3 are directional vision. Order is strict — execute items
 > top-to-bottom; no skipping or reordering without owner approval. One branch per item
 > (or small item group). Completed-item detail lives in
@@ -47,8 +47,8 @@
 ### M3 — DSH 互动大脑 (interaction)
 - [x] M3.1 DSH interaction: real AI-driven parameter commands replacing mock
       synthesis (mock mode stays behind a flag) — closed 2026-10-22; [detail](history_roadmap.md#m31-dsh-command-surface)
-- [ ] M3.2 LLM-driven expressions: text/emotion → expression presets (moved from the
-      V2 vision list at the 2026-10-20 replan)
+- [x] M3.2 LLM-driven expressions: text/emotion → expression presets (moved from the
+      V2 vision list at the 2026-10-20 replan) — closed 2026-10-22; [detail](history_roadmap.md#m32-llm-driven-expressions)
 
 ### M4 — 内存压榨与部署 (memory squeeze + deployment)
 - [ ] M4.1 memory/asset optimization: browser-source extra memory < 100 MB on the Mac
