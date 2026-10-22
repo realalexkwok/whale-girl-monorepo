@@ -72,7 +72,8 @@ specs/features/2026-10-21-m3.1-m31-commands/ and specs/tech-stack.md
   ws_probe + role probe stay green; RSS snapshot within budget
 - MANUAL: the owner triggers commands from a DSH session (Web or TUI) and
   watches the whale play the motion / speak / flip mock mode in OBS;
-  ?debug=1 shows the last executed command
+  ?debug=1 shows the mode and the last motion/expression/mode command (say and
+  pose do not set it)
 
 ## 5. Output
 - Augmented ask round -> /spec-plan scaffold:

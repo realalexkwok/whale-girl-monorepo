@@ -129,6 +129,8 @@
       // A parameter that stops appearing in the frames was a pose-overlay key:
       // restore its default so a cleared pose really leaves the model too.
       // Allocation-free: one shared callback, a Map forEach and no objects.
+      // Bounded work: lastParams only grows with pose-overlay keys (driver cap
+      // 32) on top of the 8 synthesized parameters.
       function resetGoneParam(value, id) {
         if (!frameP || Object.prototype.hasOwnProperty.call(frameP, id)) return;
         if (id === 'ParamMouthOpenY' && sayActive) return;
@@ -568,13 +570,18 @@
         }
         // The fetch/decode chain is a function so the probe can delay it and
         // prove the decode-time guard (delayMs is test-only; frames never pass it).
+        // A hung audio request must not wedge pendingCmdSay (mock speech
+        // would stay muted forever): abort it after 8 s.
+        var controller = typeof AbortController === 'function' ? new AbortController() : null;
+        var sayTimer = controller ? setTimeout(function () { controller.abort(); }, 8000) : null;
         var play = function () {
-          fetch(url).then(function (res) {
+          fetch(url, controller ? { signal: controller.signal } : undefined).then(function (res) {
             if (!res.ok) throw new Error('audio HTTP ' + res.status);
             return res.arrayBuffer();
           }).then(function (buf) {
             return ctx.decodeAudioData(buf);
           }).then(function (buffer) {
+          if (sayTimer) clearTimeout(sayTimer);
           // Latest-wins guard: a newer say arrived while this one decoded, so
           // drop this (now stale) buffer instead of replacing the new say.
           if (gen !== sayGen) return;
@@ -619,6 +626,7 @@
             if (DEBUG) setStatus(statusLine('audio: suspended — click the pill to enable'));
           }
           }).catch(function (err) {
+            if (sayTimer) clearTimeout(sayTimer);
             if (gen === sayGen) pendingCmdSay = false;
             sayAsyncError('decode failed: ' + (err && err.message ? err.message : err));
           });
@@ -722,6 +730,8 @@
       // arrive inside motion frames, a mode frame resets leftover poses).
       // Commands are rare events — nothing here runs per frame.
       var cmdState = { last: '', ok: null, mode: null }; // null = pending / unknown
+      var cmdSeq = 0;     // only the newest motion/expression command may update state
+      var modeKnown = false; // the first mode frame is an announcement, not a flip
 
       function cmdFailed(what, detail) {
         cmdState.ok = false;
@@ -737,6 +747,7 @@
       function runMotionCommand(msg) {
         var group = String(msg.group);
         var index = (typeof msg.index === 'number') ? msg.index : undefined;
+        var seq = ++cmdSeq;
         cmdState.last = 'motion: ' + group + (index !== undefined ? '/' + index : '');
         cmdState.ok = null; // pending: resolves to true/false below
         if (!window.whaleModel) {
@@ -752,9 +763,11 @@
           return;
         }
         Promise.resolve(res).then(function (ok) {
+          if (seq !== cmdSeq) return; // a newer command owns the state now
           cmdState.ok = !!ok;
           if (!ok) cmdFailed('motion ' + group, 'not started — motions: ' + motionListText());
         }, function (err) {
+          if (seq !== cmdSeq) return;
           var why = (err && err.message) || String(err);
           cmdFailed('motion ' + group, why + ' — motions: ' + motionListText());
         });
@@ -762,6 +775,7 @@
 
       function runExpressionCommand(msg) {
         var name = String(msg.name);
+        var seq = ++cmdSeq;
         cmdState.last = 'expression: ' + name;
         cmdState.ok = null; // pending: resolves to true/false below
         if (!window.whaleModel) {
@@ -782,11 +796,13 @@
           return;
         }
         Promise.resolve(res).then(function (ok) {
+          if (seq !== cmdSeq) return;
           cmdState.ok = !!ok;
           if (!ok) {
             cmdFailed('expression ' + name, 'not applied — expressions: ' + expressionList());
           }
         }, function (err) {
+          if (seq !== cmdSeq) return;
           cmdFailed('expression ' + name,
             ((err && err.message) || String(err)) + ' — expressions: ' + expressionList());
         });
@@ -795,6 +811,15 @@
       function runModeCommand(msg) {
         if (typeof msg.mock !== 'boolean') return; // never guess a mode
         var next = msg.mock ? 'mock' : 'live';
+        cmdSeq++; // a mode command supersedes pending motion/expression results
+        if (!modeKnown) {
+          // The first mode frame is the driver's announcement (connect or a
+          // page that joined later): adopt it without a pose reset or a
+          // phantom "mode" command in the debug line.
+          modeKnown = true;
+          cmdState.mode = next;
+          return;
+        }
         // A repeated mode (e.g. an idempotent 'mode live' from an AI) must not
         // wipe a held pose; only a real switch resets the model.
         if (next === cmdState.mode) return;
@@ -880,6 +905,7 @@
           }
         };
         ws.onclose = function (evt) {
+          pendingCmdSay = false; // a dead socket must not mute the mock forever
           // Surface the close code: 1008 = origin guard, 1006 = network.
           setStatus(statusLine('ws disconnected (' +
             (evt && typeof evt.code === 'number' ? evt.code : '?') +

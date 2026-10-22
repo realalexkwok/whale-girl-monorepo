@@ -84,7 +84,8 @@ whale-girl-server/scripts/whale_cmd.py (run it with the venv python):
 
 WHALE_MODE=mock|live sets the boot mode (default mock). In live mode the mock
 talk bursts and canned phrases pause while the idle blink/gaze/sway keep going;
-say > motion > mock envelope is the priority ladder. Motion names are validated
+the mouth priority is say > motion-frame mouth > mock envelope (commanded
+motions never pause the mock). Motion names are validated
 against the model manifest, so a typo prints the available groups. ?debug=1
 shows the mode and the last motion/expression/mode command (the pose overlay is
 driver-side and not shown; during a say the line shows the current word).

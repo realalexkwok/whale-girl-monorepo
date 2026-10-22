@@ -526,7 +526,7 @@ async def run_driver(ws):
             # id grammar already keeps ids ASCII, so this is a safety net.
             sample = {"type": "motion", "f": 0, "p": dict(MOTION["p"])}
             sample["p"].update(clean)
-            if len(dump_json(sample)) > MAX_FRAME_BYTES - 64:
+            if len(dump_json(sample).encode("utf-8")) > MAX_FRAME_BYTES - 64:
                 log_bad_cmd("pose would exceed the frame cap")
                 return
             if clean:
@@ -541,7 +541,7 @@ async def run_driver(ws):
                     MODE = wanted
                     clear_pose()
                     await forward({"type": "mode", "mock": MODE == "mock"})
-                    print("[whale-girl] mode: %s" % MODE, flush=True)
+                    log_notice("mode: %s" % MODE)
             else:
                 log_bad_cmd("mode command without a boolean 'mock'")
 
@@ -688,6 +688,14 @@ async def run_driver(ws):
                 )
                 if DEBUG and payload:
                     print("[whale-girl] sample: %s" % payload, flush=True)
+                # A dead reader would freeze commands while the frames continue:
+                # surface it and restart it on the live connection.
+                if reader.done() and not reader.cancelled():
+                    reader_exc = reader.exception()
+                    if reader_exc is not None:
+                        log_notice("event reader stopped (%r); restarting"
+                                   % (reader_exc,))
+                        reader = asyncio.create_task(read_events())
     finally:
         reader.cancel()
         if say_task is not None:

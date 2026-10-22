@@ -55,8 +55,11 @@
    (ParamEyeBallX was too subtle to judge).
 
 ## Semantics (binding)
-- Priority ladder: **say > motion > mock envelope**. The existing frontend
-  rule (a live say skips the motion-frame ParamMouthOpenY) is unchanged.
+- Mouth priority ladder: **a live say > the motion-frame ParamMouthOpenY >
+  the mock envelope**. The existing frontend rule (a live say skips the
+  motion-frame ParamMouthOpenY) is unchanged; commanded Live2D motions are body
+  animations and do not pause the mock speech (narrowed in review round 8 to
+  match the implemented semantics).
 - playMotion uses FORCE priority + restart (M2.1 precedent); resetPose() runs
   on a mode switch.
 - pose = **driver-side overlay**: each pose command replaces the overlay,

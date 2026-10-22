@@ -291,8 +291,8 @@ async function cmdState(chrome) {
   if (await portOpen(WS_PORT)) throw new Error('port ' + WS_PORT + ' already in use — stop the running server first');
 
   const server = await startServer();
-  record('server boot RSS (informational)', rssKb(server.pid) > 0,
-    rssKb(server.pid) + ' KB right after spawn — the steady-state gate starts after the settle');
+  console.log('probe: server boot RSS ' + rssKb(server.pid) +
+    ' KB ~1 s after spawn (startup transient, not gated)');
 
   // The server must refuse commands with no brain and reject foreign origins.
   const noBrainCode = await new Promise((resolve) => {
@@ -313,6 +313,17 @@ async function cmdState(chrome) {
   });
   record('foreign origin is rejected', badOriginCode === 1008,
     'close code ' + badOriginCode + ' (expected 1008)');
+  // Loopback aliases are the same machine: a 127.0.0.1 page must be allowed.
+  const aliasCode = await new Promise((resolve) => {
+    const c = new WebSocket('ws://localhost:' + WS_PORT + '?role=web',
+      { origin: 'http://127.0.0.1:' + PORT });
+    const timer = setTimeout(() => { try { c.terminate(); } catch (e) { /* ignore */ } resolve('open'); }, 3000);
+    c.on('open', () => { clearTimeout(timer); try { c.close(); } catch (e) { /* ignore */ } resolve('open'); });
+    c.on('close', (code) => { clearTimeout(timer); resolve(code === 1000 ? 'open' : code); });
+    c.on('error', () => { /* close follows */ });
+  });
+  record('loopback alias is allowed', aliasCode === 'open',
+    'origin http://127.0.0.1:' + PORT + ' -> ' + aliasCode);
 
   const chrome = await startChrome();
   await waitFor(async () => (await chrome.evaluate(
@@ -413,6 +424,28 @@ async function cmdState(chrome) {
   });
   record('CLI reports a rejected role (1008)', cliWrongRole.status === 1,
     'exit ' + cliWrongRole.status);
+  const cliSayBase = sayFrames.length;
+  const cliSay = spawnSync(PYTHON, [CLI, 'say', '命令行测试'],
+    { cwd: ROOT, timeout: 30000, env: cliEnv() });
+  record('CLI say exits 0', cliSay.status === 0, 'exit ' + cliSay.status);
+  await waitFor(() => sayFrames.some((m, i) => i >= cliSayBase && m.src === 'cmd'),
+    60000, 'a cmd say frame from the CLI');
+  record('CLI say produces a cmd say frame', true, 'new src:"cmd" frame');
+  // The frontend failure path: a bad motion/expression must report ok=false.
+  probeWs.send(JSON.stringify({ type: 'motion', group: 'Nope' }));
+  await waitFor(async () => {
+    const st = await cmdState(chrome);
+    return st && st.last === 'motion: Nope' && st.ok === false;
+  }, 8000, 'a bad motion reports a failure');
+  record('a bad motion reports ok=false', true,
+    'cmdState.ok=false (the console lists the motions)');
+  probeWs.send(JSON.stringify({ type: 'expression', name: 'NoSuch' }));
+  await waitFor(async () => {
+    const st = await cmdState(chrome);
+    return st && st.last === 'expression: NoSuch' && st.ok === false;
+  }, 8000, 'a bad expression reports a failure');
+  record('a bad expression reports ok=false', true,
+    'cmdState.ok=false (the console lists the expressions)');
 
   // 3) expression on the same transport.
   probeWs.send(JSON.stringify({ type: 'expression', name: EXPRESSION }));
@@ -490,6 +523,15 @@ async function cmdState(chrome) {
     && Array.isArray(cannedSay.words);
   record('mode mock: canned speech resumes', cannedOk,
     'audio=' + cannedSay.audio + ' words=' + (Array.isArray(cannedSay.words) ? cannedSay.words.length : 'none'));
+  // A valid motion must work in mock mode too (say > motion-frame mouth only
+  // constrains the mouth, not body motions).
+  probeWs.send(JSON.stringify({ type: 'motion', group: MOTION }));
+  await waitFor(async () => {
+    const st = await cmdState(chrome);
+    return st && st.last === 'motion: ' + MOTION && st.ok === true;
+  }, 8000, 'a motion in mock mode');
+  record('motion works in mock mode too', true,
+    'cmdState.last="motion: ' + MOTION + '" while the mock talks');
 
   // 6) mode live again, then a real DSH say command (byte-compat with M2.2).
   const modeLiveBase = modeFrames.length;
@@ -757,6 +799,19 @@ async function cmdState(chrome) {
   }, 20000, 'the NEW page learned the live mode');
   record('page joining after the driver learns the live mode', true,
     'a new document (timeOrigin changed) has cmdState.mode="live"');
+
+  // CLI mode flip end to end (the DSH's only ingress for mode).
+  const cliFlipBase = modeFrames.length;
+  const cliFlip = spawnSync(PYTHON, [CLI, 'mode', 'mock'],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  record('CLI mode flip exits 0', cliFlip.status === 0, 'exit ' + cliFlip.status);
+  await waitModeAfter(true, cliFlipBase, 5000);
+  record('CLI mode flip produces a mode frame', true, '{"mock":true} via the CLI');
+  const cliRestoreBase = modeFrames.length;
+  spawnSync(PYTHON, [CLI, 'mode', 'live'],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  await waitModeAfter(false, cliRestoreBase, 5000);
+  record('CLI mode flip restores live', true, '{"mock":false} via the CLI');
 
   // 11) the motion stream is still healthy at ~30 fps.
   const beforeCount = motionCount;

@@ -93,8 +93,8 @@
 - Commands vs server events: the {"relay":...} tag is the only command path;
   web_connected is accepted only top-level from the server, so no web client
   can stop the 30 FPS stream by spoofing the count. Malformed frames
-  (non-finite numbers, huge ints, deep nesting, oversized poses) are rejected
-  with a rate-limited log and never kill the command reader.
+  (non-finite numbers, huge ints, deep nesting, oversized poses) are rejected —
+  with a rate-limited log where actionable — and never kill the command reader.
 - Pose: max 32 keys, key ids must match [A-Za-z0-9_]{1,64} (ASCII keeps the
   json escaping bounded), finite numbers only; a pose whose escaped motion frame
   would exceed the 8 KB cap is rejected; a new pose replaces the overlay and
@@ -118,7 +118,9 @@
 - Driver semantics: WHALE_MODE=mock|live (default mock). Live pauses the mock
   talk bursts + canned phrases and zeroes the mock mouth; idle blink/gaze/sway
   continue; a mode flip clears the pose overlay and the frontend resets poses.
-  Priority ladder: say > motion > mock envelope.
+  Mouth priority ladder: a live say > the motion-frame ParamMouthOpenY > the
+  mock envelope. Commanded Live2D motions are body animations: they do not
+  pause the mock speech or the say mouth.
 - Roles and caps are unchanged (single python writer, many web clients, 8 KB
   soft frame cap / 64 KB maxPayload, raw passthrough).
 - Trust: any web client can send commands — acceptable for localhost/V1;

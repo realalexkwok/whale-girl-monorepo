@@ -77,7 +77,7 @@ function notifyWebCount() {
 
 // v1 (M3.1): relay a web-client command to the python writer verbatim.
 // Raw text only — the proxy never parses frames (tech-stack.md invariant).
-let cmdWindowStart = 0;
+let cmdWindowStart = performance.now(); // a full window from boot
 let cmdWindowCount = 0;
 
 function relayCommandToPython(ws, data, isBinary) {
@@ -90,7 +90,9 @@ function relayCommandToPython(ws, data, isBinary) {
   if (++cmdWindowCount > MAX_CMDS_PER_SEC) { framesDropped++; return; }
   if (data.length > MAX_FRAME_BYTES) { framesDropped++; return; }
   const text = data.toString();
-  if (text === '{"type":"hello"}') return; // page handshake: web-only, not a command
+  // The page handshake is compact JSON; tolerate whitespace variants (a third-
+  // party client may pretty-print it). Trim is cheap: rare, small frames only.
+  if (text.trim() === '{"type":"hello"}') return;
   if (!pythonClient || pythonClient.readyState !== WebSocket.OPEN) {
     framesDropped++;
     // Tell the sender instead of pretending the command was delivered.
@@ -116,7 +118,8 @@ function hostnameOf(url) {
 // 127.0.0.1 may connect to ws://localhost — that must not be rejected).
 function isLoopbackHost(host) {
   return host === 'localhost' || host === '127.0.0.1' ||
-    host === '[::1]' || host === '::1';
+    host === '[::1]' || host === '::1' ||
+    host === '0.0.0.0' || host === '[::]';
 }
 
 function originAllowed(origin, requestHost) {
