@@ -30,10 +30,10 @@ own server and REFUSE a busy port 3000 — stop the stack before running them.
 | Check | Command | Result |
 | --- | --- | --- |
 | Script syntax | `bash -n whale-girl-server/scripts/{install-ubuntu,ubuntu-tunnel,deploy-ubuntu}.sh` | PASS (all three) |
-| Installer dry-run (no root) | `bash whale-girl-server/scripts/install-ubuntu.sh --check` | EXIT 0 — repo/server/frontend paths resolved; node v25.2.0, python3 3.9.10; both units + the nginx site rendered; apt/systemctl/nginx/certbot/ufw warnings are the expected macOS-only ones |
-| Tunnel dry-run | `bash whale-girl-server/scripts/ubuntu-tunnel.sh --dry-run ubuntu@203.0.113.9` | EXIT 0 — prints `ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -L 3000:localhost:3000 -L 3001:localhost:3001 ubuntu@203.0.113.9` |
+| Installer dry-run (no root) | `bash whale-girl-server/scripts/install-ubuntu.sh --check` | EXIT 0 — paths resolved; node v25.2.0, npm 10.5.2, python3 3.9.10; ACME webroot /var/www/whale-girl-acme; loopback-only server unit + brain unit rendered; nginx site rendered; apt/systemctl/nginx/certbot/ufw warnings are the expected macOS-only ones |
+| Tunnel dry-run | `bash whale-girl-server/scripts/ubuntu-tunnel.sh --dry-run ubuntu@203.0.113.9` | EXIT 0 — warns when local 3000/3001 are busy (a warning in --dry-run), then prints `ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -L 3000:localhost:3000 -L 3001:localhost:3001 ubuntu@203.0.113.9` |
 | Tunnel missing host | `bash whale-girl-server/scripts/ubuntu-tunnel.sh </dev/null` | EXIT 1 — actionable "missing host" message |
-| Deploy dry-run | `bash whale-girl-server/scripts/deploy-ubuntu.sh --dry-run ubuntu@203.0.113.9 /opt/whale-girl-monorepo whale.example.com` | EXIT 0 — prints the rsync (model included, node_modules/.venv/.git/audio/logs excluded) + the remote install command |
+| Deploy dry-run | `bash whale-girl-server/scripts/deploy-ubuntu.sh --dry-run ubuntu@203.0.113.9` | EXIT 0 — rsync to the home-relative default `whale-girl-monorepo/` (model included; node_modules/.venv/.git/audio/logs excluded) + the remote install command |
 | Motion probe (default URL) | `node whale-girl-server/scripts/ws_probe.js` (stack up) | PASS — 30.0 fps over 2.00 s, 61 frames, monotonic f |
 | Motion probe (WS_URL knob) | `WS_URL='ws://localhost:3001?role=web' node scripts/ws_probe.js` | PASS — 30.0 fps, 61 frames (default unchanged) |
 | Role rejection | `node whale-girl-server/scripts/ws_role_probe.js` | PASS — close code 1008 with the unknown-role reason |
@@ -65,7 +65,7 @@ no port forwarding.
 
 3. **Point your domain at the VM** (before the install, so certbot can validate): create an
    A record for the domain you will use (e.g. `whale.example.com`) → the VM's public IP.
-   Port 80 must be open in the provider firewall (the default for a fresh VM).
+   Ports 80 and 443 must be open in the provider firewall (the default for a fresh VM).
 4. **Install** (one command; idempotent — safe to re-run after `git pull`; the domain is
    remembered in `/etc/whale-girl/domain`, so a later re-run without the argument keeps
    Let's Encrypt TLS):
@@ -97,7 +97,11 @@ no port forwarding.
        cd whale-girl-server
        WS_URL='wss://whale.example.com/ws?role=web' node scripts/ws_probe.js
 
-   Expect `PASS` (~30 fps, monotonic f).
+   Expect `PASS` (~30 fps, monotonic f). Also verify the origin guard THROUGH NGINX (the
+   deployment path, not just the raw port):
+
+       WS_URL='wss://whale.example.com/ws?role=web' WS_ORIGIN='https://whale.example.com' node scripts/ws_probe.js                # PASS
+       WS_URL='wss://whale.example.com/ws?role=web' WS_ORIGIN='https://evil.example' WS_EXPECT=reject node scripts/ws_probe.js   # close 1008
 9. **Point the browser/OBS at it** — in OBS, edit the whale Browser source:
 
        https://whale.example.com/?ws=wss://whale.example.com/ws
@@ -124,8 +128,9 @@ by default), firewall-allow 3000/tcp + 3001/tcp and use
 `http://<server-ip>:3000?ws=ws://<server-ip>:3001` (direct TCP, no nginx).
 
 ## P3 tunnel smoke (owner, optional advanced mode)
-1. Dry-run first: `bash scripts/ubuntu-tunnel.sh --dry-run ubuntu@whale.example.com` — it
-   prints the exact `ssh -N -L` command and checks the local ports.
+1. Dry-run first: `cd whale-girl-server && bash scripts/ubuntu-tunnel.sh --dry-run
+   ubuntu@whale.example.com` — it prints the exact `ssh -N -L` command and checks the
+   local ports.
 2. Run it for real from the Mac and leave it open. The page and the WS proxy come from the
    box through the tunnel (the box must already be installed by pattern 2).
 3. Browser: `http://localhost:3000/?debug=1` — the page loads from the box, the status line
@@ -140,9 +145,10 @@ Deployed by the agent over SSH (rsync + remote commands); the owner then ran
 `sudo bash scripts/install-ubuntu.sh` (no domain -> self-signed TLS):
 - Host: `superguo-SQM2270`, Ubuntu 24.04.4 LTS, node v22.23.2, python3 3.12.3; repo at
   `/home/superguo/Projects/whale-girl-monorepo/` (5.2 MB, model included).
-- systemd: `whale-girl.service` + `whale-girl-brain.service` + `nginx` all **active and
-  enabled**; node on :3000/:3001, nginx on :80/:443 (self-signed
-  `/etc/ssl/whale-girl/selfsigned.crt`, site `whale-girl`, `server_name _`).
+- systemd (16:53 snapshot): `whale-girl.service` + `whale-girl-brain.service` + `nginx` all
+  **active and enabled**; node on :3000/:3001, nginx on :80/:443 (self-signed
+  `/etc/ssl/whale-girl/selfsigned.crt`, site `whale-girl`, `server_name _`). The brain unit
+  later died (17:13) — see the displacement bullet below.
 - Remote-side `ws_probe`: **PASS 30.0 fps, 61 frames**; `/model/whale.model3.json` **200**
   over http and https; `/` **200**.
 - Speech end-to-end on the box: edge-tts synthesized two commanded lines
@@ -190,9 +196,35 @@ Re-checks after the fixes (2026-10-23, all green):
 - `ubuntu-tunnel.sh --dry-run` — warns about the busy local ports (the owner's tunnel was up),
   then prints the ssh command with `ExitOnForwardFailure=yes`; `deploy-ubuntu.sh --dry-run`
   prints the rsync + the remote install (domain validated/quoted; invalid domain exits 1).
-- Origin guard through the tunnel: no Origin -> **PASS 30.4 fps**; matching Origin
-  (`http://localhost:3000`) -> **PASS 29.9 fps**; mismatched Origin
-  (`http://evil.example`) -> **close 1008, PASS (expected rejection)**.
+- Origin guard through the tunnel (the raw WS port, Host=localhost): no Origin ->
+  **PASS 30.4 fps**; matching Origin (`http://localhost:3000`) -> **PASS 29.9 fps**;
+  mismatched Origin (`http://evil.example`) -> **close 1008, PASS (expected rejection)**.
+  The nginx/domain path is checked in the gate runbook (step 8, `wss://<domain>/ws` with
+  `WS_ORIGIN`) — it needs a trusted certificate, so it runs with the domain gate.
+
+## Review round 2 (2026-10-23)
+Verdict: FIX REQUIRED (1 major, 9 minor); all fixed in the follow-up commit.
+
+| Finding | Fix |
+| --- | --- |
+| MAJOR 1: apt `npm` is unsatisfiable on a NodeSource host (`nodejs` Provides/Conflicts: npm) | npm is added to the apt list only when `command -v npm` is absent; the box keeps its bundled npm |
+| MINOR 2: apply_site did not really restore a fresh install's site | the last nginx-accepted site is kept as `whale-girl.prev`; a failure restores it, or removes the site with an accurate message |
+| MINOR 3: the domain was persisted only after a new certbot request | persisted whenever DOMAIN is set and the cert exists |
+| MINOR 4: the runbook block still cloned main | the block names `-b feature/whale-girl-m42-deployment` until the merge |
+| MINOR 5: "no domain -> self-signed" is false once remembered | `--no-domain` (and `rm /etc/whale-girl/domain`) documented and implemented |
+| MINOR 6: ufw ran after certbot | the firewall step now runs before nginx/certbot |
+| MINOR 7: origin evidence was tunnel-only | noted as the tunnel path; the gate now also checks `wss://` through nginx with `WS_ORIGIN` |
+| MINOR 8: trio described a one-line ws_probe and a Mac brain | requirements/plan wording updated |
+| MINOR 9: stale table/runbook rows | refreshed (tunnel/--check/deploy rows, 80+443, P3 cd, 16:53 snapshot, AGENTS host) |
+| MINOR 10: `WHALE_ALLOW_LAN` through sudo was unreliable | `--allow-lan` flag added and documented |
+
+Re-checks after round 2 (2026-10-23):
+- `bash -n` + `--check` exit 0; `--check --allow-lan` renders the server unit WITHOUT the IP
+  restriction; `--check --no-domain` reports `(source: --no-domain)`.
+- NodeSource apt simulation on the box: the installer's package list WITHOUT npm resolves
+  (`0 upgraded, 0 newly installed ...`); `apt-get install -s npm` alone is unsatisfiable
+  (`node-ms: Depends: nodejs:any` -> "Unable to correct problems") — the guard is required.
+- Still owed: a full re-run of the fixed installer on the box (sudo) and the domain gate.
 
 ## Already verified, do NOT re-run
 | Item | Evidence |

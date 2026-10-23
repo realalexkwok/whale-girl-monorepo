@@ -234,7 +234,8 @@ The quick start above IS the deployment: server + brain + browser/OBS on one com
 Nothing else to configure.
 
 ### Pattern 2 — cloud server (no SSH knowledge needed)
-On a fresh Ubuntu 24.04 VM, in the provider's web console:
+On a fresh Ubuntu 24.04 VM, in the provider's web console (until M4.2 is merged to main, add
+`-b feature/whale-girl-m42-deployment` to the clone):
 
     git clone https://github.com/realalexkwok/whale-girl-monorepo.git
     cd whale-girl-monorepo/whale-girl-server
@@ -244,9 +245,9 @@ Open **80/tcp and 443/tcp in the provider firewall** before this step (certbot n
 to validate the domain). `install-ubuntu.sh` installs the system packages (including nodejs
 and npm), both systemd units (server + brain), the venv, and an nginx TLS site; certbot
 obtains the certificate. It is idempotent — after `git pull`, run it again; it remembers the
-domain, so a re-run without the argument keeps Let's Encrypt TLS. Run it without a domain to
-fall back to a self-signed certificate (browsers will warn; the wss probe rejects it). Then
-in OBS on the Mac:
+domain, so a re-run without the argument keeps Let's Encrypt TLS. Run with `--no-domain`
+(or `rm /etc/whale-girl/domain`) to switch back to a self-signed certificate (browsers will
+warn; the wss probe rejects it). Then in OBS on the Mac:
 
     https://whale.example.com/?ws=wss://whale.example.com/ws
 
@@ -271,7 +272,7 @@ Logs: `sudo journalctl -u whale-girl -f` (server), `sudo journalctl -u whale-gir
 (brain). Operators who already use SSH can run
 `bash whale-girl-server/scripts/deploy-ubuntu.sh user@host` from the repo root instead of
 hand-syncing (rsync + the remote install; optional, never required). LAN alternative:
-install with `WHALE_ALLOW_LAN=1` (the server socket is loopback-only by default), open
+install with `--allow-lan` (the server socket is loopback-only by default), open
 3000/tcp + 3001/tcp, and use `http://<server-ip>:3000?ws=ws://<server-ip>:3001`.
 
 ### Pattern 3 — SSH port forwarding (OPTIONAL advanced mode)
@@ -285,8 +286,8 @@ speech), and the model upload from pattern 2 applies.
 
 ### Security notes
 - The server unit binds loopback only (`IPAddressAllow=localhost`): nginx and SSH tunnels
-  reach it, but the raw :3000/:3001 sockets are not exposed. `WHALE_ALLOW_LAN=1` at install
-  time disables that for the LAN-direct pattern.
+  reach it, but the raw :3000/:3001 sockets are not exposed. `--allow-lan` (or
+  `WHALE_ALLOW_LAN=1`) at install time disables that for the LAN-direct pattern.
 - Both units run as root (systemd default) — accepted for a home box; use a dedicated
   `User=` if you need stronger isolation.
 - The WS origin guard rejects browser origins that do not match the page host (close 1008);

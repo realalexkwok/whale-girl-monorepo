@@ -35,8 +35,9 @@
 
 ### install-ubuntu.sh
 - Invocation: `sudo bash install-ubuntu.sh <domain>` (positional domain wins; `WHALE_DOMAIN`
-  env accepted), `sudo bash install-ubuntu.sh` (no domain → self-signed fallback),
-  `bash install-ubuntu.sh --check` (dry-run, no root).
+  env accepted), `sudo bash install-ubuntu.sh --no-domain` (self-signed fallback / forget
+  the remembered domain), `--allow-lan` (LAN-direct), `bash install-ubuntu.sh --check`
+  (dry-run, no root).
 - Repo paths resolve from the script location (`scripts/../..` = monorepo root); the unit
   and site templates embed absolute paths, so the repo may live anywhere.
 - Phases with `set -euo pipefail` + `die()`/actionable messages: (0) preflight — EUID 0,
@@ -91,12 +92,12 @@
 - specs/dev-environment.md: "shipped by M4.2 (2026-10-23)" + script paths + decision log
   entries; keep the pattern text as the contract.
 - specs/tech-stack.md: server-side system packages (allowed, non-runtime) + the
-  driver-on-Mac default + Ubuntu 24.04 target + the ws_probe WS_URL knob.
+  box-brain default + Ubuntu 24.04 target + the ws_probe knobs.
 - AGENTS.md: M4.2 gate recipes (install-ubuntu.sh --check, the ≤10-min runbook pointer).
 
 ## Files
 - whale-girl-server/scripts/install-ubuntu.sh, ubuntu-tunnel.sh, deploy-ubuntu.sh
-- whale-girl-server/scripts/ws_probe.js (one line + comment)
+- whale-girl-server/scripts/ws_probe.js (WS_URL/WS_ORIGIN/WS_EXPECT knobs)
 - README.md, specs/dev-environment.md, specs/tech-stack.md, AGENTS.md
 - specs/features/2026-10-23-m4.2-m42-deployment/{requirements,plan,validation}.md
 

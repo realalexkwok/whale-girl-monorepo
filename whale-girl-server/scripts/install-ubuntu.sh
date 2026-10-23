@@ -13,10 +13,10 @@
 #   3. python venv + pip install (brain dependencies)
 #   4. systemd: whale-girl (server, loopback-only by default) + whale-girl-brain
 #      (parameter driver), both enabled
-#   5. nginx: HTTP -> node :3000, /ws -> node :3001 (upgraded); TLS via certbot
+#   5. ufw 'Nginx Full' when ufw is active (before certbot, so port 80 is open)
+#   6. nginx: HTTP -> node :3000, /ws -> node :3001 (upgraded); TLS via certbot
 #      (domain) or a self-signed certificate (no domain). The ACME challenge is
 #      served from /var/www/whale-girl-acme (0755) so www-data can read it.
-#   6. ufw 'Nginx Full' when ufw is active
 #
 # Security notes:
 # - The server unit (whale-girl.service) is restricted to loopback with
@@ -53,6 +53,7 @@ ALLOW_LAN="${WHALE_ALLOW_LAN:-0}"
 CHECK=0
 DOMAIN=""
 DOMAIN_SRC="none"
+FORGET_DOMAIN=0
 
 say()  { printf '[install-ubuntu] %s\n' "$*"; }
 warn() { printf '[install-ubuntu] WARN: %s\n' "$*" >&2; }
@@ -63,18 +64,22 @@ usage() {
     'Usage:' \
     '  sudo bash scripts/install-ubuntu.sh <domain>   # TLS via certbot (recommended)' \
     '  sudo bash scripts/install-ubuntu.sh            # no domain: self-signed certificate' \
+    '  sudo bash scripts/install-ubuntu.sh --no-domain  # forget the remembered domain' \
+    '  sudo bash scripts/install-ubuntu.sh --allow-lan  # LAN-direct: no loopback restriction' \
     '  bash scripts/install-ubuntu.sh --check         # dry-run: print the resolved config' \
     '' \
     'Env: WHALE_DOMAIN (alternative to the positional domain; a previous domain is' \
     '     remembered in /etc/whale-girl/domain), WHALE_PORT (default 3000),' \
-    '     WHALE_WS_PORT (default 3001), WHALE_ALLOW_LAN=1 (omit the loopback-only' \
-    '     restriction on the server unit for the LAN-direct pattern).' \
+    '     WHALE_WS_PORT (default 3001), WHALE_ALLOW_LAN=1 (same as --allow-lan;' \
+    '     use sudo WHALE_ALLOW_LAN=1 bash ... if you prefer the env).' \
     '     The script is idempotent: re-run after git pull.'
 }
 
 for arg in "$@"; do
   case "$arg" in
     --check) CHECK=1 ;;
+    --allow-lan) ALLOW_LAN=1 ;;
+    --no-domain) FORGET_DOMAIN=1 ;;
     -h|--help) usage; exit 0 ;;
     -*) die "unknown option: $arg (try --help)" ;;
     *) DOMAIN="$arg" ;;
@@ -90,6 +95,10 @@ fi
 if [ -z "$DOMAIN" ] && [ -s "$DOMAIN_FILE" ]; then
   DOMAIN="$(tr -d '\n' < "$DOMAIN_FILE")"
   DOMAIN_SRC="remembered in $DOMAIN_FILE"
+fi
+if [ "$FORGET_DOMAIN" -eq 1 ]; then
+  DOMAIN=""
+  DOMAIN_SRC="--no-domain"
 fi
 
 # --- repo layout ------------------------------------------------------------
@@ -323,9 +332,16 @@ step_apt() {
   say "step 1/6: apt packages"
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
-  apt-get install -y --no-install-recommends \
-    nginx certbot python3-certbot-nginx python3-venv python3-pip ufw curl \
-    ca-certificates lsof nodejs npm
+  local pkgs=(nginx certbot python3-certbot-nginx python3-venv python3-pip ufw curl \
+    ca-certificates lsof nodejs)
+  # Stock Ubuntu 24.04's nodejs does NOT pull npm (and --no-install-recommends
+  # suppresses it); NodeSource's nodejs PROVIDES npm and Conflicts: npm, so asking
+  # apt for the distro npm package there is unsatisfiable. Install npm only when
+  # the host has none.
+  if ! command -v npm >/dev/null 2>&1; then
+    pkgs+=(npm)
+  fi
+  apt-get install -y --no-install-recommends "@@{pkgs[@]}"
   NODE_BIN="$(command -v node || true)"
   [ -n "$NODE_BIN" ] || die "node is missing after apt; on Ubuntu 24.04 the 'nodejs' package provides it — check the apt output above"
   local v
@@ -383,11 +399,12 @@ step_systemd() {
 }
 
 # Render + install the site, test it BEFORE touching the running service, and
-# restore the previous file if nginx rejects the new one (a bad site left in
-# sites-enabled would break nginx on the next boot).
+# keep the last site nginx accepted (site.prev) so a failed render can restore it
+# (a bad site left in sites-enabled would break nginx on the next boot).
 apply_site() {
   local site=/etc/nginx/sites-available/whale-girl
   local enabled=/etc/nginx/sites-enabled/whale-girl
+  local prev=/etc/nginx/sites-available/whale-girl.prev
   local out
   resolve_tls
   render_site > "$site.tmp"
@@ -396,18 +413,19 @@ apply_site() {
   ln -sfn "$site" "$enabled"
   if ! out="$(nginx -t 2>&1)"; then
     printf '%s\n' "$out" >&2
-    if [ -f "$site.bak" ]; then
-      install -m 0644 "$site.bak" "$site"
-      nginx -t >/dev/null 2>&1 || warn "the previous site also fails nginx -t — check the config manually"
-    else
-      rm -f "$enabled" "$site"
+    if [ -f "$prev" ]; then
+      install -m 0644 "$prev" "$site"
+      nginx -t >/dev/null 2>&1 || warn "the last good site also fails nginx -t — check the config manually"
+      die "nginx config test failed — the last good site was restored"
     fi
-    die "nginx config test failed — the previous site was restored"
+    rm -f "$enabled" "$site"
+    die "nginx config test failed — the site was removed (no previous site existed)"
   fi
+  install -m 0644 "$site" "$prev"   # remember the last site nginx accepted
 }
 
 step_nginx() {
-  say "step 5/6: nginx site + TLS"
+  say "step 6/6: nginx site + TLS"
   local map_file=/etc/nginx/conf.d/whale-girl-ws-upgrade.conf
   local site=/etc/nginx/sites-available/whale-girl
   render_ws_map > "$map_file.tmp"
@@ -416,7 +434,12 @@ step_nginx() {
 
   mkdir -p "$ACME_WEBROOT"
   chmod 0755 "$ACME_WEBROOT"
-  [ -f "$site" ] && cp -a "$site" "$site.bak"
+  rm -f "$site.bak"   # pre-round-2 backup name; harmless if absent
+
+  if [ "$FORGET_DOMAIN" -eq 1 ]; then
+    rm -f "$DOMAIN_FILE"
+    say "forgot the remembered domain — using self-signed TLS"
+  fi
 
   rm -f /etc/nginx/sites-enabled/default
   apply_site
@@ -429,8 +452,6 @@ step_nginx() {
       --non-interactive --agree-tos --register-unsafely-without-email \
       --deploy-hook "systemctl reload nginx" \
       || die "certbot failed: check that $DOMAIN resolves to this server and that port 80 is open (the ACME webroot is $ACME_WEBROOT)"
-    mkdir -p "$(dirname "$DOMAIN_FILE")"
-    printf '%s\n' "$DOMAIN" > "$DOMAIN_FILE"
   fi
   if [ -z "$DOMAIN" ]; then
     local need_ss=0
@@ -451,6 +472,15 @@ step_nginx() {
     fi
   fi
 
+  # Persist the domain whenever a Let's Encrypt cert exists, so a later no-argument
+  # re-run reuses it (and never silently downgrades to self-signed).
+  if [ -n "$DOMAIN" ] && [ -f "$CERT_DIR/$DOMAIN/fullchain.pem" ]; then
+    if [ ! -f "$DOMAIN_FILE" ] || [ "$(cat "$DOMAIN_FILE" 2>/dev/null)" != "$DOMAIN" ]; then
+      mkdir -p "$(dirname "$DOMAIN_FILE")"
+      printf '%s\n' "$DOMAIN" > "$DOMAIN_FILE"
+    fi
+  fi
+
   apply_site
   systemctl reload nginx
 
@@ -463,21 +493,21 @@ step_nginx() {
     code="$(curl -ks -o /dev/null -w '%{http_code}' https://127.0.0.1/ || true)"
     [ "$code" = "200" ] || die "nginx is not answering on 443 (got HTTP $code) — check: journalctl -u whale-girl; nginx -t"
   fi
-  say "step 5/6 done: the page answers through nginx"
+  say "step 6/6 done: the page answers through nginx"
 }
 
 step_ufw() {
-  say "step 6/6: firewall"
+  say "step 5/6: firewall (allow 80/443 before certbot)"
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
     ufw allow 'Nginx Full' >/dev/null 2>&1 || { ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null; }
-    say "step 6/6 done: ufw allowed 'Nginx Full' (or 80/443/tcp)"
+    say "step 5/6 done: ufw allowed 'Nginx Full' (or 80/443/tcp)"
   else
-    say "step 6/6 done: ufw inactive — open 80/tcp + 443/tcp in the provider firewall if it filters"
+    say "step 5/6 done: ufw inactive — open 80/tcp + 443/tcp in the provider firewall if it filters"
   fi
   if [ "$ALLOW_LAN" = "1" ]; then
     say "note: LAN mode — the raw :$PORT/:$WS_PORT sockets are reachable on the LAN"
   else
-    say "note: the raw :$PORT/:$WS_PORT sockets are loopback-only (WHALE_ALLOW_LAN=1 for LAN-direct)"
+    say "note: the raw :$PORT/:$WS_PORT sockets are loopback-only (--allow-lan or WHALE_ALLOW_LAN=1 for LAN-direct)"
   fi
 }
 
@@ -520,6 +550,6 @@ step_apt
 step_npm
 step_venv
 step_systemd
-step_nginx
 step_ufw
+step_nginx
 final_report

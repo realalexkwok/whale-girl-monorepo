@@ -67,8 +67,8 @@ must be answered by the user.
   CPU/GPU profile: node scripts/perf_probe.js --seconds 60 --rss-minutes 10.
 - M4.2 gate (deployment, <=10-min fresh Ubuntu runbook): bash scripts/install-ubuntu.sh
   --check (no root; validates paths/config and renders both units + the nginx site),
-  bash scripts/deploy-ubuntu.sh --dry-run <host>, bash scripts/ubuntu-tunnel.sh --dry-run
-  <host>. The <=10-min fresh-VM runbook lives in
+  bash scripts/deploy-ubuntu.sh --dry-run ubuntu@203.0.113.9, bash scripts/ubuntu-tunnel.sh
+  --dry-run ubuntu@203.0.113.9. The <=10-min fresh-VM runbook lives in
   specs/features/2026-10-23-m4.2-m42-deployment/validation.md (curl https 200 +
   WS_URL='wss://<domain>/ws?role=web' node scripts/ws_probe.js -> PASS; origin guard:
   WS_ORIGIN=... matching -> PASS, WS_ORIGIN=... WS_EXPECT=reject -> close 1008).

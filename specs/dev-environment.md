@@ -208,11 +208,11 @@ localhost. Nothing else to configure.
 
        git clone https://github.com/realalexkwok/whale-girl-monorepo.git
        cd whale-girl-monorepo/whale-girl-server
-       sudo bash scripts/install-ubuntu.sh <domain>   # no domain -> self-signed TLS
+       sudo bash scripts/install-ubuntu.sh <domain>   # --no-domain: self-signed TLS
 
 2. install-ubuntu.sh (shipped, idempotent — re-run after git pull) does: apt deps
    (nodejs >= 18 + npm, python3 >= 3.9, nginx, certbot), npm ci, the venv + pip
-   install, two systemd units (whale-girl server — loopback-only unless
+   install, two systemd units (whale-girl server — loopback-only unless --allow-lan /
    WHALE_ALLOW_LAN=1 — and whale-girl-brain driver, Restart=always + journald), and
    an nginx TLS site: HTTP -> node :3000 (express static + /audio) and /ws -> node
    :3001 (upgraded, with proxy_set_header Host $host); the ACME challenge is served
@@ -222,12 +222,13 @@ localhost. Nothing else to configure.
    `bash scripts/install-ubuntu.sh --check` is the no-root dry-run (validates
    paths/config and renders both units + the site). The Mac browser source then
    points at https://<domain>/?ws=wss://<domain>/ws (?ws= is required — the frontend
-   default is ws://localhost:3001).
+   default is ws://localhost:3001). Switching back to self-signed: --no-domain (or
+   rm /etc/whale-girl/domain).
 3. Optional for operators who already use SSH: scripts/deploy-ubuntu.sh wraps
    rsync + the remote install (--dry-run supported) — a convenience, never a
    requirement.
-4. LAN alternative: install with WHALE_ALLOW_LAN=1 (the server socket is
-   loopback-only by default), firewall-allow 3000/tcp + 3001/tcp and use
+4. LAN alternative: install with --allow-lan (the server socket is loopback-only by
+   default), firewall-allow 3000/tcp + 3001/tcp and use
    http://<server-ip>:3000?ws=ws://<server-ip>:3001.
 
 ### Pattern 3 — SSH port forwarding (OPTIONAL advanced mode)
@@ -268,5 +269,7 @@ displaces it (4001), and on-failure would leave the box brain dead.
   supported for dev/motion-only (speech silent).
 - #7 (2026-10-23, M4.2 review): the server unit is loopback-only
   (IPAddressAllow=localhost) — nginx + SSH tunnels reach it, raw :3000/:3001 are not
-  exposed; WHALE_ALLOW_LAN=1 restores the LAN-direct pattern. The brain unit is
-  Restart=always because a displaced driver exits 0.
+  exposed; --allow-lan (or WHALE_ALLOW_LAN=1) restores the LAN-direct pattern. The brain
+  unit is Restart=always because a displaced driver exits 0. Review round 2: npm is
+  installed only when absent (NodeSource's nodejs provides npm and Conflicts: npm); ufw
+  runs before certbot; the last nginx-accepted site is kept as .prev.

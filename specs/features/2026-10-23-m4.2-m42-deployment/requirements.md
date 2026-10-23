@@ -25,7 +25,8 @@
   documented fallback, not the gate path.
 - Target distro: **Ubuntu 24.04 LTS**.
 - No runtime code paths change. New files: three deployment scripts, docs updates, this
-  spec trio; plus a one-line `WS_URL` env knob in ws_probe.js (verification tooling only).
+  spec trio; plus `WS_URL`/`WS_ORIGIN`/`WS_EXPECT` knobs in ws_probe.js (verification
+  tooling only).
 
 ## Decisions
 1. Three patterns as the roadmap writes them; config-only runtime.
@@ -66,7 +67,11 @@
     the domain is remembered in /etc/whale-girl/domain (a re-run without the argument keeps
     Let's Encrypt TLS); nginx -t runs before enable/start and restores the previous site on
     failure; deploy-ubuntu.sh defaults to a home-relative remote dir and quotes the domain;
-    ws_probe gains WS_ORIGIN / WS_EXPECT=reject for the origin-guard check.
+    ws_probe gains WS_ORIGIN / WS_EXPECT=reject for the origin-guard check. Round 2:
+    npm is apt-installed only when absent (NodeSource's nodejs provides npm and Conflicts:
+    npm); ufw allows 80/443 before certbot; the last nginx-accepted site is kept as .prev;
+    the domain is persisted whenever the cert exists; `--allow-lan` / `--no-domain` flags
+    (sudo-safe; the env var may not survive sudo).
 
 ## Context
 - Budgets unchanged: server ≤ 60 MB / driver ≤ 30 MB RSS (measured on the Mac; one RSS
