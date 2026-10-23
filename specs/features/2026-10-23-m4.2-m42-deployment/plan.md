@@ -140,8 +140,8 @@
 ```
 bash -n whale-girl-server/scripts/{install-ubuntu.sh,ubuntu-tunnel.sh,deploy-ubuntu.sh}
 bash whale-girl-server/scripts/install-ubuntu.sh --check
-bash whale-girl-server/scripts/deploy-ubuntu.sh --dry-run
-bash whale-girl-server/scripts/ubuntu-tunnel.sh --dry-run example.com
+bash whale-girl-server/scripts/deploy-ubuntu.sh --dry-run ubuntu@203.0.113.9
+bash whale-girl-server/scripts/ubuntu-tunnel.sh --dry-run ubuntu@203.0.113.9
 bash whale-girl-server/scripts/stack.sh start
 node whale-girl-server/scripts/ws_probe.js
 WS_URL='ws://localhost:3001?role=web' node whale-girl-server/scripts/ws_probe.js

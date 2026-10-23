@@ -229,3 +229,10 @@
   whale-girl-brain.service ships) — driver-on-Mac remains supported for
   dev/motion-only. Verification knob: ws_probe accepts WS_URL (default
   ws://localhost:3001?role=web) for probing the public wss URL.
+- 2026-10-23 (M4.2 review round 1): server-side packages include **nodejs + npm** (stock
+  Ubuntu 24.04 `nodejs` does not pull npm; `--no-install-recommends` suppresses it); the
+  ACME webroot is /var/www/whale-girl-acme (0755) because nginx workers (www-data) cannot
+  read a repo under a 750 home; the server unit is loopback-only
+  (IPAddressAllow=localhost) unless WHALE_ALLOW_LAN=1; the brain unit is Restart=always
+  (a displaced driver exits 0); the domain is remembered in /etc/whale-girl/domain;
+  ws_probe also accepts WS_ORIGIN / WS_EXPECT=reject for the origin-guard check.
