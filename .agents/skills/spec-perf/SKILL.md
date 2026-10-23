@@ -1,6 +1,6 @@
 ---
 name: spec-perf
-description: Plan the Whale Girl M4.1 memory/performance hardening item — define the <100MB OBS browser-source extra-memory measurement protocol, audit the optimization levers (PixiJS/Live2D/Web Audio), leak-soak verification, scene sizing, and reconnect hardening. Use when planning M4.1, memory budgets, OBS memory measurement, leak hunting, or performance profiling of the whale pipeline.
+description: Plan the Whale Girl M4.1 memory/performance hardening item — define the <180MB steady-state OBS browser-source extra-memory measurement protocol (amended 2026-10-22 from <100MB), audit the optimization levers (PixiJS/Live2D/Web Audio), leak-soak verification, scene sizing, and reconnect hardening. Use when planning M4.1, memory budgets, OBS memory measurement, leak hunting, or performance profiling of the whale pipeline.
 ---
 
 # Spec-Driven Memory/Perf Planning (Whale Girl, M4.1)
@@ -19,7 +19,7 @@ involves no DSH commands — the DSH note does not apply here.)
   driver ≤ 30 MB steady-state + amendments), specs/dev-environment.md
 - Handoffs M4.1 MUST honour:
   - specs/features/2026-10-20-m2.1-model-integration/validation.md — "M4.1
-    owns: the <100 MB OBS browser-source gate re-measured with the real model
+    owns: the OBS browser-source gate (now < 180 MB steady state) re-measured with the real model
     (2.1 MB moc3 + ~1.9 MB textures add real GPU/memory load)"
   - re-read the M2.2 / M3.1 / M3.2 validation.md handoffs — they may name
     M4.1 too
@@ -35,7 +35,8 @@ involves no DSH commands — the DSH note does not apply here.)
   (b) Chrome DevTools performance.memory + heap snapshots via CDP for
   diagnosis; (c) both. Fix: soak length (draft 30 min with scripted
   say/motion/expression traffic), sampling interval, and the pass threshold
-  (<100 MB gate, draft <90 MB to keep headroom).
+  (<180 MB steady-state gate; the original draft was <100 MB, amended after the
+  2026-10-22 measurement; keep headroom above the measured value).
 - LEVERS to audit, one at a time (measure first, optimize second): renderer
   (resolution/antialias/ticker), Live2D (motionPreload already NONE; texture
   sizes; cache pruning), audio (keep ONE decoded utterance at a time),
@@ -47,8 +48,9 @@ involves no DSH commands — the DSH note does not apply here.)
 - ORDER: baseline → apply each lever → re-measure → record every value.
 
 ## 3. Hard constraints (enforce in the plan, do not ask)
-- The gate is HARD: <100 MB OBS extra memory on the Mac, re-measured after
-  every change; each measurement (value + commit) lands in validation.md
+- The gate is HARD: < 180 MB steady-state OBS extra memory on the Mac (amended
+  2026-10-22 from <100 MB), re-measured after every change; each measurement
+  (value + commit) lands in validation.md
 - No new dependencies for measurement (ps + the existing probe/CDP tooling)
 - All existing gates stay green: cmd_probe, say_probe, expr_probe,
   ws_probe, ws_role_probe

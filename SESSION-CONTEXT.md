@@ -105,8 +105,9 @@
 ## 4. In-flight / next
 - M4.1 IMPLEMENTED + MANUAL PASS PASSED (2026-10-23) on
   feature/whale-girl-m41-memory-perf — committed: ac4834f (implementation),
-  13ab13e (review round-1 fixes); the review-fix loop is closing (reviewer verdict:
-  APPROVE). TG1–TG5 done; gate amended by the owner to < 180 MB steady state (final
+  13ab13e (review round-1 fixes), 0bfa4a5 (round-2 evidence/guards); the review-fix
+  loop is CLOSED with the reviewer's final verdict APPROVE (nothing beyond the
+  deferred/intentional list). TG1–TG5 done; gate amended by the owner to < 180 MB steady state (final
   steady delta 114.8 MB PASS, full-phase 126.9 MB; cold-OBS baseline 163.5 MB);
   perf 60 fps, p95 17.4–18.6 ms, heap +0.31–0.34 MB post-GC, server mean 27–28 MB,
   driver 14–16 MB; cmd 63/63 (BubbleGum leftover guard), expr 22/22, say 13/13 ×2

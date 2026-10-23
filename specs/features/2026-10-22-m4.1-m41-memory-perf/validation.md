@@ -2,8 +2,8 @@
 
 > Status: IMPLEMENTATION COMPLETE + MANUAL PASS PASSED (2026-10-23) — the automatic
 > half passes against the amended < 180 MB gate, all nine manual steps passed, and
-> the review-fix loop runs next; then /spec-close handles the roadmap tick, the
-> history archive and the handoffs.
+> the review-fix loop is CLOSED (final verdict APPROVE, 2026-10-23); /spec-close
+> handles the roadmap tick, the history archive and the handoffs.
 
 ## Baseline measurement (2026-10-22, OBS 32.2.2, real model, live traffic)
 
@@ -53,8 +53,9 @@ Measurement gotchas found and handled:
 - Full-phase delta: 126.9 MB (reported for transparency).
 - Stability: no monotonic growth detected (slope negative in both phases; drift
   negative) — the data show no net growth, not a proof of no leak.
-- Provenance (recorded 2026-10-23): the four CSVs were captured 2026-10-22
-  18:48–19:49, i.e. before the 2026-10-23 motion-leftover reset — one O(nParams)
+- Provenance (recorded 2026-10-23): the CSVs were captured 2026-10-22 (baseline
+  17:13–18:13, final 18:48–19:49), i.e. before the 2026-10-23 motion-leftover
+  reset — one O(nParams)
   reset per commanded motion (~12 per 30-min mix), no per-frame work, no retained
   allocation. The post-fix perf probe passes (60.0 fps, p95 18.0 ms, heap +0.34 MB)
   and the margin is 65 MB (114.8 vs 180), so the reviewer judged a re-soak
@@ -74,7 +75,7 @@ Measurement gotchas found and handled:
 ## Automatic verification results (all measured — filled at the close)
 | Check | Command | Result |
 | --- | --- | --- |
-| OBS gate (baseline) | bash scripts/mem_probe.sh | **FAIL as written**: full-phase delta 191.0 MB / steady delta 163.5 MB vs the <100 MB gate — owner decision pending (see above) |
+| OBS gate (baseline) | bash scripts/mem_probe.sh | **FAIL as written** (historical): full-phase delta 191.0 MB / steady delta 163.5 MB vs the then-<100 MB gate — superseded by the 2026-10-22 amendment; the final PASS is below |
 | OBS gate (final) | bash scripts/mem_probe.sh --compare ... --steady | **PASS** — steady delta 114.8 MB < 180 MB (amended gate; internal target ≤ 160 MB met); full-phase 126.9 MB |
 | Stability (slope + drift) | mem_probe assertions | **PASS** — final A slope −1.53 MB/min, B −0.14; drift −28.8 / −3.0 MB (growth-only rule; since review round 2 BOTH phases are asserted — a growing baseline can no longer shrink the delta into a false PASS) |
 | CPU/GPU profile | node scripts/perf_probe.js | **PASS** — 60.0 fps over 62 s, frame-time p95 17.4–18.6 ms, JS heap growth 0.31–0.33 MB post-GC (the pre-GC 6.22 MB was garbage, not a leak). Post-fix re-run (2026-10-23): 60 fps, p95 17.4 ms, heap +0.33 MB, server 23/27/46 MB, driver 15/16/17 MB |
