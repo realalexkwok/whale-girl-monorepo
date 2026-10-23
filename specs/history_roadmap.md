@@ -240,3 +240,66 @@
   commands + expressions active (server RSS headroom at the OBS gate); M5.1/M5.2
   own reusing whale_express alongside the announcements and the MCP tool wrapper
   for the whale_* tools.
+
+## M4.1 memory/asset optimization and the OBS memory gate
+
+**Closed 2026-10-23.** Owner-approved scope (2026-10-22, grouped ask round 1a/2a/3a):
+the OBS browser source's extra memory, measured as the ps RSS delta of OBS's CEF
+helper processes between Phase A (source visible + scripted say/motion/expression/
+pose traffic, one mode flip) and Phase B (source hidden with "Shutdown source when
+not visible", page unloaded), read over the last 10 minutes of each 30-minute soak,
+with a no-monotonic-growth rule so a leak fails even under the threshold.
+
+- Gate amendment: the original 2026-10-20 figure (< 100 MB) could not pass. The
+  measured baseline was 163.5 MB steady (197.2 - 33.7; full-phase 191.0 MB); the
+  page renderer alone is ~94 MB and Chromium's renderer/GPU baseline is structural
+  (antialias off +3 MB and resolution 1 +8 MB were within noise). The owner amended
+  the hard gate to < 180 MB steady state on 2026-10-22 (tech-stack.md). The final
+  tree measured 114.8 MB steady (151.5 - 36.7; full-phase 126.9 MB; both phases
+  shrink). The baseline ran on a cold OBS (6 CEF processes, 2 renderers) and the
+  final on a warm one (5 processes, 1 renderer); even adding the missing 15,216 KB
+  renderer, 129.8 MB < 180 MB.
+- What shipped: scripts/mem_probe.sh (phase sampler + --compare --steady; both
+  phases' stability asserted), scripts/traffic_mix.sh (scripted traffic with a
+  driver preflight and a one-shot mode flip), scripts/obs_toggle.js (strict
+  obs-websocket toggle: exit 3 on a missing scene/source, exit 2 on a failed
+  handshake), scripts/obs_fake.js (test double for the toggle), scripts/perf_probe.js
+  (CDP-injected fps/frame-time/heap profile + server/driver RSS soak with a
+  dead-process guard), scripts/stack.sh (supervised server + brain, auto-restart,
+  silent by default). Frontend: reconnect/visibility hardening (single retry timer,
+  immediate resume retry, re-fit on resume) and the motion-leftover reset (a
+  commanded motion's own parameter tracks are restored to their defaults when it
+  finishes — the BubbleGum bubble no longer sticks to the mouth until a refresh).
+  Probes: cmd_probe 63/63 (BubbleGum leftover guard), say_probe 13/13 (Ketchup
+  during every say, cmdState.ok asserted), expr_probe 22/22, perf_probe 7/7.
+  Docs: the spec trio, the tech-stack amendment, dev-environment (measurement
+  protocol + "who runs what"), README (quick start + memory gate), AGENTS (recipes,
+  budgets, status).
+- Evidence (close re-run 2026-10-23 on 4d4c53a): ws_probe 30.0 fps / 61 frames,
+  role probe 1008, curl 200, inline script 41,005 B node --check, stack RSS
+  node 50,896 KB / python 17,056 KB, cmd_probe 63/63, expr_probe 22/22, say_probe
+  13/13 + 13/13 (edge 54/54 in-word, gap 0.104, latency 14/30 ms; fallback
+  amplitude 1.00), perf_probe 7/7 (60.0 fps, p95 17.7 ms, heap +0.34 MB, server
+  24/29/34 MB, driver 15/17/19 MB), ports released. The OBS gate is the recorded
+  2026-10-22 soak (114.8 MB steady vs 180); the reviewer waived a post-fix re-soak
+  (one O(nParams) reset per commanded motion, no per-frame work, 65 MB margin,
+  post-fix perf probe and the owner's final-tree manual pass). Manual half: the
+  owner ran all nine steps on 2026-10-23 and they passed.
+- Review: one persistent reviewer subagent, two rounds + close-out, final verdict
+  APPROVE. Findings fixed: (1) stack.sh did not export WHALE_MODE, so the supervised
+  driver silently fell back to the mock rehearsal — fixed, verified live/mock;
+  (2) obs_toggle.js fell back to items[0] when the named source was missing and
+  exited 0 on a failed handshake — now fails closed (exit 3 / exit 2) with a
+  committed test double; (3) evidence corrections (inline size, soak provenance,
+  warm-OBS composition caveat, phase-B stability assertion, dead-process guard).
+- Commits: ac4834f (implementation), 13ab13e (review round 1), 0bfa4a5 (round 2),
+  4d4c53a (close-out), plus the close-bookkeeping commit. Spec trio:
+  specs/features/2026-10-22-m4.1-m41-memory-perf/.
+- Deferred (recorded; no later milestone owns them): full post-fix 2 x 30-min
+  re-soak; ticker maxFPS 30 (CPU-only cadence, needs owner consent); resolution 1.5
+  (no-op at DPR 1); ResizeObserver; 5-min lever windows (3-min used, within noise);
+  say_probe measures the frontend envelope, not the rendered parameter; stack.sh
+  internal "driver" wording.
+- Handoffs: M4.2 owns nothing new (the deployment surface is unchanged, config
+  only); M5.1/M5.2 own nothing new (the new scripts are verification tooling, not
+  runtime; whale_say/whale_express stay the announcement seams).

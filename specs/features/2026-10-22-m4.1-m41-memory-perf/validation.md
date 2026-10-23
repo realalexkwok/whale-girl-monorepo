@@ -1,9 +1,9 @@
 # M4.1 — Memory/Asset Optimization — Validation
 
-> Status: IMPLEMENTATION COMPLETE + MANUAL PASS PASSED (2026-10-23) — the automatic
-> half passes against the amended < 180 MB gate, all nine manual steps passed, and
-> the review-fix loop is CLOSED (final verdict APPROVE, 2026-10-23); /spec-close
-> handles the roadmap tick, the history archive and the handoffs.
+> Status: **CLOSED 2026-10-23** — automatic half green on the final commit
+> (4d4c53a), manual pass all nine steps passed, review-fix loop closed with the
+> reviewer's APPROVE, roadmap ticked and detail archived in
+> specs/history_roadmap.md.
 
 ## Baseline measurement (2026-10-22, OBS 32.2.2, real model, live traffic)
 
@@ -262,11 +262,44 @@ ports (`run/ports`) so `status`/`stop` target the running instance.
   perf_probe 7/7 (60.0 fps, p95 18.4 ms, heap +1.07 MB, server 22 MB / driver
   13.6 MB alive); mem_probe synthetic PASS/FAIL/exit-code matrix.
 
+## Close verification (2026-10-23, commit 4d4c53a — fresh run)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| WS probe | node scripts/ws_probe.js | **PASS** — 30.0 fps over 2.00 s, 61 frames, monotonic f |
+| Role probe | node scripts/ws_role_probe.js | close **1008** (unknown role) |
+| HTTP smoke | curl :3000 | **200** |
+| Inline script | node --check on the extracted script | **PASS** — 41,005 B |
+| Stack RSS | ps while streaming | node **50,896 KB** / python **17,056 KB** (budgets 60/30 MB) |
+| M3.1 gate | node scripts/cmd_probe.js | **PASS 63/63** (BubbleGum leftover guard: left=0) |
+| M3.2 gate | node scripts/expr_probe.js | **PASS 22/22** |
+| M2.2 regression | node scripts/say_probe.js (both) | **PASS 13/13 + 13/13** — edge 54/54 in-word, gap 0.104, latency 14/30 ms; fallback amplitude 1.00 |
+| CPU/GPU profile | node scripts/perf_probe.js --seconds 60 --rss-minutes 2 | **PASS 7/7** — 60.0 fps, p95 17.7 ms, heap +0.34 MB; server 24/29/34 MB, driver 15/17/19 MB |
+| OBS gate | recorded soak (not re-run at close; reviewer waived) | **PASS** — 114.8 MB steady vs < 180 MB (CSVs 2026-10-22; see the provenance note) |
+| Shutdown | stack.sh stop + lsof | ports 3000/3001 free, no strays |
+
+### Already verified, do NOT re-run
+| Item | What it covered | Verified by |
+| --- | --- | --- |
+| Manual pass (nine steps) | page/OBS render, hide/show, 1280x720 resize, reconnect both halves, audio, commands, memory sanity | owner, 2026-10-23 |
+| OBS memory soak (baseline + final) | the gate + stability rule over 2 x 30 min | agent, 2026-10-22 (provenance above) |
+| Review rounds 1-2 | two majors + evidence/guards, final APPROVE | independent reviewer, 2026-10-23 |
+| Lever audit | antialias/resolution memory-neutral; audio/DOM audits clean | agent, 2026-10-22 |
+
 ## Handoff to dependant milestones
 - M4.2 owns: nothing new — the deployment surface is unchanged (config only). The
   memory gate protocol itself is documentation, not a deployment dependency.
 - M5.1/M5.2 own: nothing new — the new scripts (mem_probe/traffic_mix/obs_toggle/
   perf_probe) are verification tooling, not runtime; `whale_say`/`whale_express`
   stay the announcement seams.
+- Deferred inside M4.1 (recorded; no later milestone owns them — revisit only with
+  owner consent): a full post-fix 2 x 30-min re-soak (reviewer waived: one
+  O(nParams) reset per commanded motion, no per-frame work, 65 MB margin, post-fix
+  perf probe + the owner's final-tree manual pass); ticker maxFPS 30 (CPU-only
+  cadence change); resolution 1.5 (no-op at OBS CEF DPR 1); ResizeObserver (window
+  resize proved reliable); 5-min lever windows (3-min used, within the noise floor);
+  say_probe measures the frontend envelope rather than the rendered parameter
+  (model-level LipSync is structural/manual); stack.sh keeps the historic "driver"
+  wording in internal messages while the user-facing text says "brain".
 - The owner's manual pass is COMPLETE (2026-10-23, all nine steps passed — see the
-  owner record above); the roadmap tick + history archive happen in /spec-close.
+  owner record above).

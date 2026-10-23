@@ -14,7 +14,7 @@
 - Branch rules: feature/whale-girl-<item>; close = merge into main → push → delete
   local branch. Agents never git commit / git push without the owner's instruction.
 
-## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20); M2.2 CLOSED (2026-10-21); M3.1 CLOSED (2026-10-22); M3.2 CLOSED (2026-10-22)
+## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20); M2.2 CLOSED (2026-10-21); M3.1 CLOSED (2026-10-22); M3.2 CLOSED (2026-10-22); M4.1 CLOSED (2026-10-23)
 - M1: server (express :3000 + ws proxy :3001), frontend (PixiJS 7.4.3 + cubism4,
   transparent canvas, placeholder fallback), mock driver (30 FPS blink/talk/gaze/sway),
   probes and docs. Evidence: motion probe PASS at 30.0 fps (twice), role rejection
@@ -39,6 +39,19 @@
   cmd_probe 61/61, say_probe 12/12, ws 30.1 fps, role 1008, curl 200, inline
   38,285 B, RSS settle 45,248 / 16,672 KB, ports released. Manual half owner-run
   2026-10-22. Full detail: specs/features/2026-10-22-m3.2-m32-expressions/validation.md.
+- M4.1: memory/asset optimization + the OBS memory gate — the extra memory is the ps
+  RSS delta of OBS's CEF helpers between the source visible + scripted traffic and
+  the source hidden and unloaded, read over the last 10 min of each 30-min soak with
+  a no-growth rule. The owner amended the gate from < 100 MB to < 180 MB steady
+  state on 2026-10-22 (measured baseline 163.5 MB; final 114.8 MB). New tooling:
+  mem_probe, traffic_mix, obs_toggle (+ obs_fake), perf_probe, stack.sh; frontend
+  reconnect/visibility hardening + the motion-leftover reset (the BubbleGum bubble
+  no longer sticks to the mouth); cmd_probe 63/63, say_probe 13/13 x2 (Ketchup
+  during every say), expr_probe 22/22, perf 7/7. Evidence: close re-run 2026-10-23 —
+  ws 30.0 fps, role 1008, curl 200, inline 41,005 B, RSS 50,896 / 17,056 KB, gate
+  PASS 114.8 vs 180; manual pass all nine steps (owner). Review: one reviewer, two
+  rounds, final APPROVE. Full detail:
+  specs/features/2026-10-22-m4.1-m41-memory-perf/validation.md.
 - M3.1: DSH command surface — v1 frames (motion/expression/say/pose/mode) relayed
   as {"relay":...} to the driver, which executes say/pose/mode and forwards
   motion/expression; whale_cmd.py (motion|say|pose|mode) is the DSH tool; the
@@ -103,18 +116,11 @@
     Design drafts: docs/drafts/ai-agent-notifier/.
 
 ## 4. In-flight / next
-- M4.1 IMPLEMENTED + MANUAL PASS PASSED (2026-10-23) on
-  feature/whale-girl-m41-memory-perf — committed: ac4834f (implementation),
-  13ab13e (review round-1 fixes), 0bfa4a5 (round-2 evidence/guards); the review-fix
-  loop is CLOSED with the reviewer's final verdict APPROVE (nothing beyond the
-  deferred/intentional list). TG1–TG5 done; gate amended by the owner to < 180 MB steady state (final
-  steady delta 114.8 MB PASS, full-phase 126.9 MB; cold-OBS baseline 163.5 MB);
-  perf 60 fps, p95 17.4–18.6 ms, heap +0.31–0.34 MB post-GC, server mean 27–28 MB,
-  driver 14–16 MB; cmd 63/63 (BubbleGum leftover guard), expr 22/22, say 13/13 ×2
-  (Ketchup-during-say guard), ws 30.0 fps, role 1008, curl 200, inline 41,005 B.
-  The owner's nine manual steps all passed; the pass found and drove two late fixes
-  (the say-mouth guard and the motion-leftover reset). The obs-websocket config was
-  restored and OBS quit after the measurement. /spec-close remains.
+- NOTHING is in flight. M4.1 is fully closed (2026-10-23): merged into main and
+  pushed; its local feature branch was deleted. NEXT: M4.2 (deployment for general
+  users — install-ubuntu.sh + systemd + nginx TLS + the optional tunnel script;
+  same-machine localhost stays the default) via /spec-plan, re-reading the M4.1
+  handoff (nothing new is deferred to it — the deployment surface is config only).
 - M3.2 is fully closed (2026-10-22): merged into main and pushed; its local
   feature branch was deleted.
 - M2.2 is fully closed (2026-10-21): merged into main and pushed; its local
@@ -138,6 +144,10 @@
 - CDN URLs pinned in tech-stack.md, all verified 200 on 2026-10-19.
 - Live2D asset installed at whale-girl-frontend/model/ (4.3 MB, gitignored;
   DS鲸鱼娘, moc3 v4); gate it with node scripts/validate_model.js.
+- OBS 32.2.2: the whale Browser source ("浏览器", http://localhost:3000/?debug=1)
+  has "Shutdown source when not visible" ON (M4.1 measurement; the page unloads
+  when hidden); the obs-websocket plugin config is back to server_enabled:false —
+  scripts/obs_toggle.js needs it enabled temporarily for the memory-gate protocol.
 - edge-tts 7.3.1 in whale-girl-server/.venv; TTS audio in
   whale-girl-server/audio/ (gitignored, pruned after 1 h);
   scripts/tts_synth.py is the synthesis helper (45 s timeout, JSON words back).
@@ -156,11 +166,10 @@
 ## 7. Git state
 - Remote: origin = git@github.com:realalexkwok/whale-girl-monorepo.git; main tracks
   origin/main.
-- main is at 71e689a (pushed 2026-10-22, a821406..71e689a): M1, M2.1, M2.2, M3.1
-  and M3.2 closed. The M3.2 series: 880584d (feature), ef4f26d + ff3060f (review
-  round 1), 4acd951 + 75a1a01 (round 2), dbaec7a (round 3), 8950101 (round 4),
-  e61af13 (round 5), 1123a37 (round 6), 89eeff7 (round 7 status sync) and
-  71e689a (close bookkeeping). The ff merge fast-forwarded main and the push
-  published it; the local feature/whale-girl-m32-expressions branch was deleted;
-  working tree clean; on main. The earlier M3.1 history (main at 499d75f) and
-  M2.2 history (main at 6261a9c) are preserved in specs/history_roadmap.md.
+- main carries M1, M2.1, M2.2, M3.1, M3.2 and M4.1. The M4.1 series:
+  ac4834f (implementation), 13ab13e (review round 1), 0bfa4a5 (round 2), 4d4c53a
+  (close-out) and the close-bookkeeping commit. The ff merge fast-forwarded main and
+  the push published it; the local feature/whale-girl-m41-memory-perf branch was
+  deleted; working tree clean; on main. The earlier M3.1 (main at 499d75f), M2.2
+  (6261a9c) and M3.2 (0326545) histories are preserved in
+  specs/history_roadmap.md.

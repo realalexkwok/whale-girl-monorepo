@@ -52,11 +52,12 @@
       V2 vision list at the 2026-10-20 replan) — closed 2026-10-22; [detail](history_roadmap.md#m32-llm-driven-expressions)
 
 ### M4 — 内存压榨与部署 (memory squeeze + deployment)
-- [ ] M4.1 memory/asset optimization: browser-source steady-state extra memory
+- [x] M4.1 memory/asset optimization: browser-source steady-state extra memory
       < 180 MB on the Mac (hard gate, amended by the owner 2026-10-22 after the
       measured baseline; originally < 100 MB; re-measured after every change), scene
       sizing, reconnect hardening, CPU/GPU profile on target streaming hardware
-      (absorbs the pre-replan M2.5)
+      (absorbs the pre-replan M2.5) — closed 2026-10-23;
+      [detail](history_roadmap.md#m41-memoryasset-optimization-and-the-obs-memory-gate)
 - [ ] M4.2 deployment for general users (2026-10-20 amendment, owner 1a/2a/3a):
       pattern 1 same-machine — the dev loop as-is, zero SSH (DEFAULT for normal
       users); pattern 2 cloud server — git pull + install-ubuntu.sh + systemd +
