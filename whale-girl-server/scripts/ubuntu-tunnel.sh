@@ -47,17 +47,23 @@ fi
 
 command -v ssh >/dev/null 2>&1 || die "ssh not found (install an SSH client, or use pattern 1/2 instead)"
 
-if [ "$DRY" -eq 0 ]; then
-  busy=""
-  for p in 3000 3001; do
-    if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
-      busy="$busy $p"
-    fi
-  done
-  [ -z "$busy" ] || die "local port(s)$busy already in use — stop the local stack first (bash scripts/stack.sh stop)"
+busy=""
+for p in 3000 3001; do
+  if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
+    busy="$busy $p"
+  fi
+done
+if [ -n "$busy" ]; then
+  msg="local port(s)$busy already in use — stop the local stack first (bash scripts/stack.sh stop)"
+  if [ "$DRY" -eq 1 ]; then
+    printf '[ubuntu-tunnel] WARN: %s\n' "$msg" >&2
+  else
+    die "$msg"
+  fi
 fi
 
 SSH_ARGS=(-N -o ServerAliveInterval=30 -o ServerAliveCountMax=3
+          -o ExitOnForwardFailure=yes
           -L 3000:localhost:3000 -L 3001:localhost:3001
           "$USER_NAME@$HOST")
 

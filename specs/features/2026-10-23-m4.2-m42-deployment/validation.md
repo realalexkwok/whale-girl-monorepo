@@ -1,8 +1,8 @@
 # M4.2 — Deployment for General Users — Validation
 
-> Status: implementation complete 2026-10-23 — automatic half GREEN (results below);
-> the manual/gate half (the ≤10-minute fresh-Ubuntu runbook below, plus the P3 tunnel
-> smoke) is the owner's acceptance step.
+> Status: implementation complete 2026-10-23; review round 1 fixed (4 major + 10 minor —
+> see "Review round 1" below). The manual/gate half (the ≤10-minute fresh-Ubuntu runbook
+> below, plus the P3 tunnel smoke) is the owner's acceptance step.
 
 ## Success criteria (from the ask round)
 Automatic half (Mac):
@@ -56,7 +56,9 @@ no port forwarding.
 
 1. **Open the provider console** and log into the new VM (the console usually drops you in
    as root or a sudo user).
-2. **Clone the repo** (~1 min):
+2. **Clone the repo** (~1 min). Until M4.2 is merged to main, clone the feature branch
+   (`git clone -b feature/whale-girl-m42-deployment ...`); after the close, `main` contains
+   the scripts and the plain clone below is correct:
 
        git clone https://github.com/realalexkwok/whale-girl-monorepo.git
        cd whale-girl-monorepo
@@ -64,7 +66,9 @@ no port forwarding.
 3. **Point your domain at the VM** (before the install, so certbot can validate): create an
    A record for the domain you will use (e.g. `whale.example.com`) → the VM's public IP.
    Port 80 must be open in the provider firewall (the default for a fresh VM).
-4. **Install** (one command; idempotent — safe to re-run after `git pull`):
+4. **Install** (one command; idempotent — safe to re-run after `git pull`; the domain is
+   remembered in `/etc/whale-girl/domain`, so a later re-run without the argument keeps
+   Let's Encrypt TLS):
 
        cd whale-girl-server
        sudo bash scripts/install-ubuntu.sh whale.example.com
@@ -98,12 +102,13 @@ no port forwarding.
 
        https://whale.example.com/?ws=wss://whale.example.com/ws
 
-   (or just `https://whale.example.com/` — the page derives the same host when `?ws=` is
-   absent). The whale renders, blinks and animates. The brain already runs on the box
-   (`systemctl status whale-girl-brain`) — it must, because say frames carry
-   page-relative `/audio/<file>` URLs. Motion-only alternative: stop the brain unit and
-   run the driver on the Mac (`WHALE_WS='wss://whale.example.com/ws?role=python'
-   .venv/bin/python control_whale.py`) — speech would be silent.
+   **The `?ws=` override is required**: without it the page connects to `ws://localhost:3001`
+   (the dev default), not the server. The whale renders, blinks and animates. The brain
+   already runs on the box (`systemctl status whale-girl-brain`) — it must, because say
+   frames carry page-relative `/audio/<file>` URLs. Motion-only alternative: stop the
+   brain unit and run the driver on the Mac
+   (`WHALE_WS='wss://whale.example.com/ws?role=python' .venv/bin/python control_whale.py`)
+   — speech would be silent.
 
 10. **Idempotency check** — re-run step 4; it must complete with no errors and the page must
     stay green (`curl` 200 again).
@@ -114,7 +119,8 @@ is **≤ 10 minutes** and every check above is green. Logs: `sudo journalctl -u 
 **Without a domain (fallback):** `sudo bash scripts/install-ubuntu.sh` generates a
 self-signed certificate; browsers/OBS will warn and the `wss` probe will reject the
 certificate (the ws client validates the chain) — document it, do not use it for the gate.
-**LAN alternative:** firewall-allow 3000/tcp + 3001/tcp and use
+**LAN alternative:** install with `WHALE_ALLOW_LAN=1` (the server socket is loopback-only
+by default), firewall-allow 3000/tcp + 3001/tcp and use
 `http://<server-ip>:3000?ws=ws://<server-ip>:3001` (direct TCP, no nginx).
 
 ## P3 tunnel smoke (owner, optional advanced mode)
@@ -151,6 +157,42 @@ Deployed by the agent over SSH (rsync + remote commands); the owner then ran
   systemd cgroup accounting reports 18.4M / 16.9M.
 - Not recorded: the <=10-min wall-clock gate time (the owner ran the install interactively)
   and a domain/certbot certificate (no domain was given; the self-signed fallback ran).
+- 2026-10-23 ~17:14: a stray newer python writer connected as role=python through the WS,
+  displaced the systemd brain (close 4001) and the unit stayed dead — `Restart=on-failure`
+  does not revive a clean exit. Fixed to `Restart=always` (review round 1). Until the fixed
+  installer is re-run on the box, a temporary user-level brain keeps the page animated
+  (`nohup .venv/bin/python control_whale.py`, WHALE_MODE=live).
+
+## Review round 1 (2026-10-23, independent reviewer)
+Verdict: FIX REQUIRED (4 major, 10 minor); all fixed in the follow-up commit.
+
+| Finding | Fix |
+| --- | --- |
+| MAJOR 1: stock Ubuntu npm missing -> `npm ci` dies | apt installs `npm`; preflight + `--check` |
+| MAJOR 2: ACME webroot unreadable by www-data (repo under a 750 home) | webroot /var/www/whale-girl-acme (0755) for nginx + certbot |
+| MAJOR 3: docs claimed `?ws=` is optional (frontend defaults to ws://localhost:3001) | docs now state `?ws=wss://<domain>/ws` is REQUIRED |
+| MAJOR 4: raw :3000/:3001 exposed; role=python needs no Origin | server unit loopback-only (`IPAddressAllow=localhost`), `WHALE_ALLOW_LAN=1` opt-out; brain unit unrestricted for TTS |
+| MINOR 5: units run as root | documented as accepted risk (README security notes) |
+| MINOR 6: deploy wrapper default /opt + unquoted domain + 100644 | home-relative default, validated + %q-quoted domain, docs use `bash` |
+| MINOR 7: tunnel --dry-run skipped the port preflight; no ExitOnForwardFailure | preflight in both modes (warning in dry-run); option added |
+| MINOR 8: gate recipe omitted the host | recipes pass `ubuntu@203.0.113.9` |
+| MINOR 9: main lacks the scripts pre-merge | runbook names the feature branch (clone -b) |
+| MINOR 10: docs paths/firewall/--check wording | README firewall line + `cd whale-girl-server`; plan wording fixed |
+| MINOR 11: re-run without the domain downgraded TLS; self-signed never renewed | remembered domain (/etc/whale-girl/domain); openssl -checkend expiry check |
+| MINOR 12: trio/roadmap stale text | scope bullet, final-printout bullet, roadmap name fixed |
+| MINOR 13: nginx started before `nginx -t` | `-t` first; previous site restored on failure |
+| MINOR 14: origin guard never exercised by the probe | `WS_ORIGIN` + `WS_EXPECT=reject`; evidence below |
+| NEW (review host evidence): the brain stayed dead after a stray writer displaced it (Restart=on-failure, driver exits 0) | brain unit Restart=always |
+
+Re-checks after the fixes (2026-10-23, all green):
+- `bash -n` on the three scripts; `install-ubuntu.sh --check` exit 0 — node v25.2.0, npm 10.5.2,
+  ACME webroot /var/www/whale-girl-acme, loopback-only server unit rendered.
+- `ubuntu-tunnel.sh --dry-run` — warns about the busy local ports (the owner's tunnel was up),
+  then prints the ssh command with `ExitOnForwardFailure=yes`; `deploy-ubuntu.sh --dry-run`
+  prints the rsync + the remote install (domain validated/quoted; invalid domain exits 1).
+- Origin guard through the tunnel: no Origin -> **PASS 30.4 fps**; matching Origin
+  (`http://localhost:3000`) -> **PASS 29.9 fps**; mismatched Origin
+  (`http://evil.example`) -> **close 1008, PASS (expected rejection)**.
 
 ## Already verified, do NOT re-run
 | Item | Evidence |

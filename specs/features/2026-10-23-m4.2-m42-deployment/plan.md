@@ -7,7 +7,7 @@
 1. **Spec trio + branch** — this folder + `feature/whale-girl-m42-deployment`.
    Check: trio exists; `git status` shows only new files.
 2. **whale-girl-server/scripts/install-ubuntu.sh** — idempotent Ubuntu 24.04 installer:
-   preflight (root, OS, repo layout) → apt deps → `npm ci` → venv + pip → systemd units
+   preflight (root, OS, repo layout) → apt deps (incl. nodejs + npm) → `npm ci` → venv + pip → systemd units
    (server + brain) → nginx site → TLS (certbot ACME with a domain, self-signed fallback
    without) → ufw →
    final URL printout. `--check` dry-run (no root, no mutations).
@@ -23,9 +23,10 @@
    decision log); specs/tech-stack.md (server-side system packages + the placement/TLS
    decisions); AGENTS.md (M4.2 gate recipes).
    Check: diff limited to docs + scripts + trio; runtime files untouched.
-6. **ws_probe.js WS_URL knob** — one line (`process.env.WS_URL || 'ws://localhost:3001?role=web'`)
-   plus a comment; default unchanged.
-   Checks: default probe PASS; explicit `WS_URL` PASS.
+6. **ws_probe.js knobs** — `WS_URL` (endpoint override), `WS_ORIGIN` (Origin header) and
+   `WS_EXPECT=reject` (expect close 1008); the default endpoint is unchanged.
+   Checks: default probe PASS; explicit `WS_URL` PASS; matching Origin PASS; mismatched
+   Origin -> close 1008 PASS.
 7. **Verification** — automatic half on the Mac (script syntax, --check/--dry-run, the full
    probe set, RSS, ports); the ≤10-minute gate runbook and the manual pass written into
    validation.md first-time-user style; measured numbers recorded with absolute paths.
@@ -40,37 +41,46 @@
   and site templates embed absolute paths, so the repo may live anywhere.
 - Phases with `set -euo pipefail` + `die()`/actionable messages: (0) preflight — EUID 0,
   Ubuntu 24.04 assert, repo layout, optional `--check`; (1) apt: nginx, certbot,
-  python3-certbot-nginx, python3-venv, python3-pip, ufw; verify node ≥ 18 / python3 ≥ 3.9;
+  python3-certbot-nginx, python3-venv, python3-pip, ufw, nodejs + npm; verify node ≥ 18,
+  npm present / python3 ≥ 3.9;
   (2) `npm ci` in whale-girl-server; (3) venv (created only when missing) + pip install;
   (4) systemd units `whale-girl.service` (WorkingDirectory=<repo>/whale-girl-server,
-  ExecStart=<resolved node> server.js, PORT/WS_PORT env) and `whale-girl-brain.service`
-  (`<repo>/whale-girl-server/.venv/bin/python control_whale.py`, `WHALE_MODE=live`,
-  `WHALE_WS=ws://127.0.0.1:<WS_PORT>?role=python` — the brain shares the host because say
-  audio is page-relative), both Restart=on-failure + journald →
-  daemon-reload → enable → restart; (5) nginx: `conf.d/whale-girl-ws-upgrade.conf` (map
+  ExecStart=<resolved node> server.js, PORT/WS_PORT env, loopback-only via
+  IPAddressAllow=localhost unless WHALE_ALLOW_LAN=1, Restart=on-failure) and
+  `whale-girl-brain.service` (`<repo>/whale-girl-server/.venv/bin/python control_whale.py`,
+  `WHALE_MODE=live`, `WHALE_WS=ws://127.0.0.1:<WS_PORT>?role=python` — the brain shares the
+  host because say audio is page-relative, Restart=always since a displaced driver exits 0),
+  both journald → daemon-reload → enable → restart; (5) nginx: `conf.d/whale-girl-ws-upgrade.conf` (map
   upgrade) + `sites-available/whale-girl` (80 → node :3000, /ws → node :3001 with
   Upgrade/Connection headers + `proxy_set_header Host $host`; TLS mode adds a 443 block
-  and an 80 redirect that still serves `/.well-known/acme-challenge/`); certbot
-  `certonly --webroot -w <frontend> -d <domain>` only when the cert is absent; default-site
-  cleanup; `nginx -t` + reload; ufw `allow 'Nginx Full'` only when ufw is active; (6)
-  final printout: https URL, Mac browser-source URL, driver command, journal pointer.
-- Idempotency: apt/systemctl/pip are naturally idempotent; unit + site files are written
+  and an 80 redirect that still serves `/.well-known/acme-challenge/`); the ACME webroot is
+  /var/www/whale-girl-acme (0755); certbot `certonly --webroot -w <acme> -d <domain>` only
+  when the cert is absent, and the domain is written to /etc/whale-girl/domain; default-site
+  cleanup; `nginx -t` runs BEFORE enable/start and restores the previous site on failure,
+  then reload; ufw `allow 'Nginx Full'` only when ufw is active; (6) final printout: page
+  URL, Mac browser-source URL with the required ?ws=, brain journal pointer, network mode.
+- Idempotency: apt/systemctl/pip are naturally idempotent; unit + site files are rewritten
   from templates on every run (deterministic content — the TLS block is derived from the
   cert's presence, so a re-run cannot wipe certbot's config); certbot is skipped when the
-  cert directory exists; `systemctl restart` is the only visible action on a re-run.
-- `--check`: repo layout + resolved paths + domain resolution + rendered unit/site printed;
+  cert directory exists; a re-run also refreshes npm/pip deps and restarts both units (the
+  README's "re-run after git pull" procedure). A remembered domain keeps Let's Encrypt TLS.
+- `--check`: repo layout + resolved paths + the domain argument (or the remembered one) + rendered unit/site printed;
   missing apt/systemctl/nginx degrade to warnings (so it runs on the Mac); exit 0/1.
 - No secrets: https clone, certbot `--register-unsafely-without-email`.
 
 ### ubuntu-tunnel.sh
 - `bash ubuntu-tunnel.sh [--dry-run] [user@]host` (`WHALE_SSH_HOST`/`WHALE_SSH_USER`
-  fallbacks); preflights ssh + local ports 3000/3001; prints the unchanged
-  http://localhost:3000 URL and the driver line; `--dry-run` prints the exact command.
+  fallbacks); preflights ssh + local ports 3000/3001 in BOTH modes (a busy port is a warning
+  in --dry-run, fatal otherwise); `-o ExitOnForwardFailure=yes`; prints the unchanged
+  http://localhost:3000 URL; `--dry-run` prints the exact command.
 
 ### deploy-ubuntu.sh
 - `bash deploy-ubuntu.sh [--dry-run] [user@]host [remote-dir] [domain]`; rsync -az with
   excludes (node_modules, .venv, .git, audio, logs) — the model folder IS included, which
   is the point for SSH users; then the remote `sudo bash scripts/install-ubuntu.sh <domain>`.
+  The remote dir defaults to `whale-girl-monorepo` relative to the SSH user's home (a stock
+  box's /opt is root-owned); the domain is validated and printf-%q-quoted before it reaches
+  the remote root shell; the copy has no .git, so updates re-run the wrapper.
 - Documented as a convenience; pattern 2 works without it.
 
 ### Docs
@@ -96,6 +106,29 @@
   speech-broken in the split, so the brain now ships as `whale-girl-brain.service` on the
   box and the docs make that the default. The Mac placement stays documented for dev and
   motion-only setups. Owner sign-off is owed at review.
+
+## Review round 1 fixes (2026-10-23)
+- MAJOR 1: apt installs npm (+ preflight and --check).
+- MAJOR 2: ACME webroot /var/www/whale-girl-acme (0755) instead of the repo path.
+- MAJOR 3: README/validation now state that ?ws=wss://<domain>/ws is REQUIRED (the frontend
+  default is ws://localhost:3001).
+- MAJOR 4: the server unit is loopback-only (IPAddressAllow=localhost) unless
+  WHALE_ALLOW_LAN=1; nginx + tunnels keep working; the brain unit stays unrestricted (TTS).
+- MINOR 5: root services documented as accepted risk (README security notes).
+- MINOR 6: deploy wrapper defaults to a home-relative dir, validates/quotes the domain, and
+  the docs invoke it with bash.
+- MINOR 7: tunnel preflights ports in both modes + ExitOnForwardFailure=yes.
+- MINOR 8: gate recipes pass a host.
+- MINOR 9: validation notes the branch pre-merge (clone -b) for the runbook.
+- MINOR 10: README firewall prerequisite + cd-correct tunnel path; plan --check wording fixed.
+- MINOR 11: remembered domain (/etc/whale-girl/domain) + self-signed expiry check;
+  idempotency wording corrected.
+- MINOR 12: trio scope/plan/roadmap text corrected to the shipped truth.
+- MINOR 13: nginx -t before enable/start, restore on failure.
+- MINOR 14: ws_probe WS_ORIGIN/WS_EXPECT=reject; origin-guard evidence recorded in
+  validation.md.
+- Also fixed from the review's evidence: the brain unit is Restart=always (a displaced driver
+  exits 0; on-failure left the box brain dead).
 
 ## Constraints
 - No new runtime dependencies; no per-frame work; budgets unchanged (server ≤ 60 MB,

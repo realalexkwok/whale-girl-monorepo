@@ -240,16 +240,20 @@ On a fresh Ubuntu 24.04 VM, in the provider's web console:
     cd whale-girl-monorepo/whale-girl-server
     sudo bash scripts/install-ubuntu.sh whale.example.com   # your domain, A record -> the VM
 
-`install-ubuntu.sh` installs the system packages, both systemd units (server + brain), the
-venv, and an nginx TLS site; certbot obtains the certificate. It is idempotent — after
-`git pull`, run it again. Run it without a domain to fall back to a self-signed certificate
-(browsers will warn; the wss probe rejects it). Then in OBS on the Mac:
+Open **80/tcp and 443/tcp in the provider firewall** before this step (certbot needs port 80
+to validate the domain). `install-ubuntu.sh` installs the system packages (including nodejs
+and npm), both systemd units (server + brain), the venv, and an nginx TLS site; certbot
+obtains the certificate. It is idempotent — after `git pull`, run it again; it remembers the
+domain, so a re-run without the argument keeps Let's Encrypt TLS. Run it without a domain to
+fall back to a self-signed certificate (browsers will warn; the wss probe rejects it). Then
+in OBS on the Mac:
 
     https://whale.example.com/?ws=wss://whale.example.com/ws
 
-(or just `https://whale.example.com/` — without `?ws=` the page derives the same host).
-The page and the WebSocket must share one hostname (the origin guard rejects a mismatch
-with close code 1008); nginx passes the page's Host, so this is already handled.
+**The `?ws=` override is required** in a split: without it the page connects to
+`ws://localhost:3001` (the dev default), i.e. the Mac's own localhost, not the server. The
+page and the WebSocket must share one hostname (the origin guard rejects a mismatch with
+close code 1008); nginx passes the page's Host, so that part is handled.
 
 The brain runs on the server box by design: a speech line's audio file is fetched from the
 page origin, so it must live next to the server (`whale-girl-brain.service`). You can stop
@@ -260,22 +264,33 @@ placeholder until then:
 
     rsync -az whale-girl-frontend/model/ you@whale.example.com:whale-girl-monorepo/whale-girl-frontend/model/
 
-(adjust the remote path to wherever the repo was cloned; `scripts/deploy-ubuntu.sh` copies
-the model automatically when used).
+(adjust the remote path to wherever the repo was cloned; the deploy wrapper below copies the
+model automatically).
 
 Logs: `sudo journalctl -u whale-girl -f` (server), `sudo journalctl -u whale-girl-brain -f`
-(brain). Operators who already use SSH can run `scripts/deploy-ubuntu.sh user@host` instead
-of hand-syncing (rsync + the remote install; optional, never required). LAN alternative:
-open 3000/tcp + 3001/tcp and use `http://<server-ip>:3000?ws=ws://<server-ip>:3001`.
+(brain). Operators who already use SSH can run
+`bash whale-girl-server/scripts/deploy-ubuntu.sh user@host` from the repo root instead of
+hand-syncing (rsync + the remote install; optional, never required). LAN alternative:
+install with `WHALE_ALLOW_LAN=1` (the server socket is loopback-only by default), open
+3000/tcp + 3001/tcp, and use `http://<server-ip>:3000?ws=ws://<server-ip>:3001`.
 
 ### Pattern 3 — SSH port forwarding (OPTIONAL advanced mode)
 The page and the WS proxy stay on localhost through a tunnel; no ports are opened:
 
-    bash scripts/ubuntu-tunnel.sh ubuntu@whale.example.com
+    cd whale-girl-server && bash scripts/ubuntu-tunnel.sh ubuntu@whale.example.com
 
 Leave it running (Ctrl-C closes it); the browser source keeps pointing at
 http://localhost:3000 with no `?ws=` needed. The brain still runs on the server box (for
 speech), and the model upload from pattern 2 applies.
+
+### Security notes
+- The server unit binds loopback only (`IPAddressAllow=localhost`): nginx and SSH tunnels
+  reach it, but the raw :3000/:3001 sockets are not exposed. `WHALE_ALLOW_LAN=1` at install
+  time disables that for the LAN-direct pattern.
+- Both units run as root (systemd default) — accepted for a home box; use a dedicated
+  `User=` if you need stronger isolation.
+- The WS origin guard rejects browser origins that do not match the page host (close 1008);
+  the CLI and probes send no Origin. There is no auth token yet (V3 work).
 
 ### Splitting — configuration only
 No runtime code path changes in a split: the `?ws=` override, `PORT`/`WS_PORT`, `WHALE_WS`

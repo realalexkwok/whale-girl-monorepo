@@ -17,8 +17,10 @@ usage() {
   printf '%s\n' \
     'Usage: bash scripts/deploy-ubuntu.sh [--dry-run] [user@]host [remote-dir] [domain]' \
     '' \
-    'Defaults: remote-dir /opt/whale-girl-monorepo; domain empty (self-signed TLS).' \
-    'Env: WHALE_SSH_HOST, WHALE_SSH_USER, WHALE_REMOTE_DIR, WHALE_DOMAIN.'
+    'Defaults: remote-dir whale-girl-monorepo (relative to the SSH user home;' \
+    'pass an absolute path for a root-owned dir); domain empty (self-signed TLS).' \
+    'Env: WHALE_SSH_HOST, WHALE_SSH_USER, WHALE_REMOTE_DIR, WHALE_DOMAIN.' \
+    'The copy has no .git (excluded): update it by re-running this wrapper.'
 }
 
 DRY=0
@@ -33,8 +35,15 @@ for arg in "$@"; do
 done
 
 HOST_ARG="${ARGS[0]:-${WHALE_SSH_HOST:-}}"
-REMOTE_DIR="${ARGS[1]:-${WHALE_REMOTE_DIR:-/opt/whale-girl-monorepo}}"
+# Relative to the SSH user's home by default: /opt is root-owned on a stock box,
+# so a normal user cannot create it. Pass an absolute path for a root-owned dir.
+REMOTE_DIR="${ARGS[1]:-${WHALE_REMOTE_DIR:-whale-girl-monorepo}}"
 DOMAIN="${ARGS[2]:-${WHALE_DOMAIN:-}}"
+if [ -n "$DOMAIN" ]; then
+  case "$DOMAIN" in
+    *[!A-Za-z0-9.-]*) die "invalid domain '$DOMAIN' (letters, digits, dots and dashes only)" ;;
+  esac
+fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOST=""
@@ -55,11 +64,15 @@ RSYNC_ARGS=(-az
   --exclude node_modules --exclude .venv --exclude .git
   --exclude audio --exclude logs --exclude run
   "$REPO_ROOT/" "$USER_NAME@$HOST:$REMOTE_DIR/")
-REMOTE_CMD="cd '$REMOTE_DIR/whale-girl-server' && sudo bash scripts/install-ubuntu.sh $DOMAIN"
+# Both values are passed to a remote root shell: validate the domain above and
+# quote both with printf %q so no metacharacter reaches the remote shell raw.
+DIR_Q="$(printf '%q' "$REMOTE_DIR")"
+DOMAIN_Q="$(printf '%q' "$DOMAIN")"
+REMOTE_CMD="cd $DIR_Q/whale-girl-server && sudo bash scripts/install-ubuntu.sh $DOMAIN_Q"
 
 if [ "$DRY" -eq 1 ]; then
   say "would run: rsync ${RSYNC_ARGS[*]}"
-  say "would run: ssh -t $USER_NAME@$HOST \"$REMOTE_CMD\""
+  say "would run: ssh -t $USER_NAME@$HOST '$REMOTE_CMD'"
   exit 0
 fi
 

@@ -62,7 +62,7 @@
       pattern 1 same-machine — the dev loop as-is, zero SSH (DEFAULT for normal
       users); pattern 2 cloud server — git pull + install-ubuntu.sh + systemd +
       nginx TLS snippet (manual steps via the provider's web console; optional
-      deploy.sh wrapper for operators who already use SSH); pattern 3 SSH port
+      deploy-ubuntu.sh wrapper for operators who already use SSH); pattern 3 SSH port
       forwarding — OPTIONAL advanced mode (scripts/ubuntu-tunnel.sh). Frontend ?ws=
       override — config only, no code rewrite
 - [ ] M4.2 validation gate: a fresh Ubuntu VM reaches the streaming state in ≤10 min

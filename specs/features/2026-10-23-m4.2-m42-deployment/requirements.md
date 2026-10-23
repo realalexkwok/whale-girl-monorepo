@@ -18,9 +18,9 @@
      `ssh -N -L` pair; the browser keeps pointing at http://localhost:3000.
 - Frontend `?ws=` remote endpoint: configuration only, no code rewrite — the mechanism
   already exists in index.html (M1 handoff satisfied by existing code).
-- Driver placement: stays on the Mac by default
-  (`WHALE_WS=wss://<domain>/ws?role=python`); moving it to Ubuntu is documented as
-  supported, not shipped as a systemd unit.
+- Brain placement: in the split patterns the brain runs on the server host (see decision 2 —
+  the say-audio contract forces it); `whale-girl-brain.service` ships with the installer.
+  Running the driver on the Mac stays documented for dev/motion-only (speech silent).
 - TLS: certbot ACME with a real domain on the first pass; IP-only self-signed is a
   documented fallback, not the gate path.
 - Target distro: **Ubuntu 24.04 LTS**.
@@ -50,15 +50,23 @@
 8. nginx proxies HTTP to node :3000 (express static + the /audio mount) and /ws to :3001;
    one source of truth for the page, nginx only terminates TLS.
 9. Server-side system packages (nginx, certbot, python3-certbot-nginx, python3-venv,
-   python3-pip, ufw) are recorded in specs/tech-stack.md; they are not runtime JS/Python
-   dependencies.
+   python3-pip, ufw, nodejs + npm, lsof) are recorded in specs/tech-stack.md; they are not
+   runtime JS/Python dependencies. (Stock Ubuntu 24.04 `nodejs` does not pull npm.)
 10. No secrets in scripts (git over https; certbot registered without an email).
-11. systemd units (server + brain): Restart=on-failure, journald logs
-    (`journalctl -u whale-girl` / `-u whale-girl-brain`); a failed unit prints the journal
-    pointer.
+11. systemd units: the server uses Restart=on-failure; the brain uses Restart=always (a
+    displaced driver exits 0 on 4001 — on-failure would leave the box brain dead). The
+    server unit is loopback-only (`IPAddressAllow=localhost`) unless `WHALE_ALLOW_LAN=1`;
+    journald logs (`journalctl -u whale-girl` / `-u whale-girl-brain`); a failed unit prints
+    the journal pointer.
 12. Model-asset note: whale-girl-frontend/model/ is gitignored (4.3 MB), so a git-only
     cloud deploy serves the placeholder until the folder is uploaded once;
     deploy-ubuntu.sh (rsync) brings it automatically. Documented in the README.
+13. Review round 1 (2026-10-23) corrections: apt installs npm; the ACME webroot is
+    /var/www/whale-girl-acme (0755) because www-data cannot read a repo under a 750 home;
+    the domain is remembered in /etc/whale-girl/domain (a re-run without the argument keeps
+    Let's Encrypt TLS); nginx -t runs before enable/start and restores the previous site on
+    failure; deploy-ubuntu.sh defaults to a home-relative remote dir and quotes the domain;
+    ws_probe gains WS_ORIGIN / WS_EXPECT=reject for the origin-guard check.
 
 ## Context
 - Budgets unchanged: server ≤ 60 MB / driver ≤ 30 MB RSS (measured on the Mac; one RSS
@@ -92,4 +100,4 @@ Gate/manual half:
   https 200 → ws_probe PASS via the public wss:// URL → (optional) model upload renders the
   whale. Recorded wall time ≤ 10 minutes; certificate valid; idempotent re-run passes.
 - Pattern acceptance: P1 = the unchanged dev loop (already green; not re-run); P2 = the gate;
-  P3 = tunnel smoke (browser stays at http://localhost:3000, driver on the Mac).
+  P3 = tunnel smoke (browser stays at http://localhost:3000; the box brain drives it).

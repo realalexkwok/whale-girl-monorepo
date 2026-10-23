@@ -7,21 +7,33 @@
 #   bash scripts/install-ubuntu.sh --check         # dry-run: print the resolved config
 #
 # What it does (idempotent — safe to re-run after "git pull"):
-#   1. apt: nginx, certbot, python3-certbot-nginx, python3-venv, python3-pip, ufw, nodejs
+#   1. apt: nginx, certbot, python3-certbot-nginx, python3-venv, python3-pip, ufw,
+#      curl, ca-certificates, lsof, nodejs, npm
 #   2. npm ci (server dependencies)
 #   3. python venv + pip install (brain dependencies)
-#   4. systemd: whale-girl (server) + whale-girl-brain (parameter driver), enabled
+#   4. systemd: whale-girl (server, loopback-only by default) + whale-girl-brain
+#      (parameter driver), both enabled
 #   5. nginx: HTTP -> node :3000, /ws -> node :3001 (upgraded); TLS via certbot
-#      (domain) or a self-signed certificate (no domain)
+#      (domain) or a self-signed certificate (no domain). The ACME challenge is
+#      served from /var/www/whale-girl-acme (0755) so www-data can read it.
 #   6. ufw 'Nginx Full' when ufw is active
 #
-# Notes:
+# Security notes:
+# - The server unit (whale-girl.service) is restricted to loopback with
+#   IPAddressAllow=localhost + IPAddressDeny=any: nginx and SSH tunnels reach it
+#   on 127.0.0.1, but the raw :3000/:3001 sockets are not exposed. The brain unit
+#   stays unrestricted (edge-tts needs outbound HTTPS). Set WHALE_ALLOW_LAN=1 to
+#   omit the restriction and use the documented LAN-direct pattern.
+# - Both units run as root (systemd default) — accepted risk for a home box; the
+#   process needs no privileged ports. Harden with a dedicated User= if you care.
 # - The brain runs on this host: say frames carry "/audio/<file>" URLs that the
 #   browser fetches from the page origin, so the audio files must live next to
 #   the server. Stop whale-girl-brain and run the driver elsewhere only if you
 #   accept silent speech.
 # - The WebSocket origin guard compares the page host with the WS host, so the
 #   site passes "proxy_set_header Host $host" and the page + WS share one hostname.
+#   The page needs an explicit ?ws=wss://<domain>/ws in a split deploy (the
+#   frontend default is ws://localhost:3001, for dev only).
 # - No secrets in this script (git over https; certbot without an email).
 set -euo pipefail
 
@@ -34,9 +46,13 @@ WS_PORT="${WHALE_WS_PORT:-3001}"
 NODE_BIN="$(command -v node || true)"
 CERT_DIR="/etc/letsencrypt/live"
 SELFSIGNED_DIR="/etc/ssl/whale-girl"
+DOMAIN_FILE="/etc/whale-girl/domain"
+ACME_WEBROOT="/var/www/whale-girl-acme"
+ALLOW_LAN="${WHALE_ALLOW_LAN:-0}"
 
 CHECK=0
 DOMAIN=""
+DOMAIN_SRC="none"
 
 say()  { printf '[install-ubuntu] %s\n' "$*"; }
 warn() { printf '[install-ubuntu] WARN: %s\n' "$*" >&2; }
@@ -49,8 +65,11 @@ usage() {
     '  sudo bash scripts/install-ubuntu.sh            # no domain: self-signed certificate' \
     '  bash scripts/install-ubuntu.sh --check         # dry-run: print the resolved config' \
     '' \
-    'Env: WHALE_DOMAIN (alternative to the positional domain), WHALE_PORT (default 3000),' \
-    '     WHALE_WS_PORT (default 3001). The script is idempotent: re-run after git pull.'
+    'Env: WHALE_DOMAIN (alternative to the positional domain; a previous domain is' \
+    '     remembered in /etc/whale-girl/domain), WHALE_PORT (default 3000),' \
+    '     WHALE_WS_PORT (default 3001), WHALE_ALLOW_LAN=1 (omit the loopback-only' \
+    '     restriction on the server unit for the LAN-direct pattern).' \
+    '     The script is idempotent: re-run after git pull.'
 }
 
 for arg in "$@"; do
@@ -62,6 +81,16 @@ for arg in "$@"; do
   esac
 done
 DOMAIN="${DOMAIN:-${WHALE_DOMAIN:-}}"
+
+# A previous install remembers its domain: re-running without the argument must
+# not silently downgrade a Let's Encrypt certificate to self-signed.
+if [ -n "$DOMAIN" ]; then
+  DOMAIN_SRC="argument"
+fi
+if [ -z "$DOMAIN" ] && [ -s "$DOMAIN_FILE" ]; then
+  DOMAIN="$(tr -d '\n' < "$DOMAIN_FILE")"
+  DOMAIN_SRC="remembered in $DOMAIN_FILE"
+fi
 
 # --- repo layout ------------------------------------------------------------
 for f in "$SERVER_DIR/server.js" "$SERVER_DIR/package.json" "$SERVER_DIR/package-lock.json" \
@@ -105,6 +134,11 @@ NGINXMAP
 }
 
 render_unit_server() {
+  local net=""
+  if [ "$ALLOW_LAN" != "1" ]; then
+    net="IPAddressAllow=localhost
+IPAddressDeny=any"
+  fi
   cat <<EOF
 [Unit]
 Description=Whale Girl server (static :$PORT, WebSocket proxy :$WS_PORT)
@@ -120,6 +154,7 @@ ExecStart=$NODE_BIN server.js
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=yes
+$net
 StandardOutput=journal
 StandardError=journal
 
@@ -137,11 +172,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# Unrestricted network: edge-tts needs outbound HTTPS; the WS target is loopback.
 WorkingDirectory=$SERVER_DIR
 Environment=WHALE_MODE=live
 Environment=WHALE_WS=ws://127.0.0.1:$WS_PORT?role=python
 ExecStart=$SERVER_DIR/.venv/bin/python control_whale.py
-Restart=on-failure
+# Restart=always: a displaced driver exits 0 (4001); on-failure would leave the
+# box brain dead. Stop this unit before running a manual driver on the same server.
+Restart=always
 RestartSec=2
 NoNewPrivileges=yes
 StandardOutput=journal
@@ -155,7 +193,7 @@ EOF
 render_site() {
   local server_name="_"
   [ -n "$DOMAIN" ] && server_name="$DOMAIN"
-  local acme_location="location /.well-known/acme-challenge/ { root $FRONTEND_DIR; }"
+  local acme_location="location /.well-known/acme-challenge/ { root $ACME_WEBROOT; }"
   if [ "$TLS_MODE" = "none" ]; then
     cat <<EOF
 server {
@@ -222,11 +260,16 @@ if [ "$CHECK" -eq 1 ]; then
   say "check: repo     $REPO_ROOT"
   say "check: server   $SERVER_DIR"
   say "check: frontend $FRONTEND_DIR"
-  say "check: domain   ${DOMAIN:-<none: self-signed fallback>}"
+  say "check: domain   ${DOMAIN:-<none: self-signed fallback>} (${DOMAIN_SRC})"
   if [ -n "$NODE_BIN" ]; then
     say "check: node     $("$NODE_BIN" -v)"
   else
     warn "check: node not found (the Ubuntu host needs node >= 18)"
+  fi
+  if command -v npm >/dev/null 2>&1; then
+    say "check: npm      $(npm -v)"
+  else
+    warn "check: npm not found (the Ubuntu host needs npm — the installer apt-installs it)"
   fi
   if command -v python3 >/dev/null 2>&1; then
     say "check: python3  $(python3 -V 2>&1)"
@@ -236,6 +279,12 @@ if [ "$CHECK" -eq 1 ]; then
   for b in apt-get systemctl nginx certbot openssl ufw curl; do
     command -v "$b" >/dev/null 2>&1 || warn "check: $b not on this machine (fine on macOS — the Ubuntu host provides it)"
   done
+  say "check: acme     $ACME_WEBROOT (0755, served by nginx for certbot)"
+  if [ "$ALLOW_LAN" = "1" ]; then
+    say "check: network  LAN mode — the server unit is NOT loopback-restricted"
+  else
+    say "check: network  loopback-only server unit (WHALE_ALLOW_LAN=1 disables)"
+  fi
   resolve_tls
   if [ "$TLS_MODE" = "none" ]; then
     if [ -n "$DOMAIN" ]; then
@@ -275,7 +324,8 @@ step_apt() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
   apt-get install -y --no-install-recommends \
-    nginx certbot python3-certbot-nginx python3-venv python3-pip ufw curl ca-certificates lsof nodejs
+    nginx certbot python3-certbot-nginx python3-venv python3-pip ufw curl \
+    ca-certificates lsof nodejs npm
   NODE_BIN="$(command -v node || true)"
   [ -n "$NODE_BIN" ] || die "node is missing after apt; on Ubuntu 24.04 the 'nodejs' package provides it — check the apt output above"
   local v
@@ -284,12 +334,13 @@ step_apt() {
     v1[89].*|v[2-9][0-9].*) ;;
     *) die "node $v is too old (need >= 18)" ;;
   esac
+  command -v npm >/dev/null 2>&1 || die "npm is missing after apt (Ubuntu: 'apt-get install npm') — re-run this installer"
   v="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
   case "$v" in
     3.9|3.1[0-9]) ;;
     *) die "python3 $v is too old (need >= 3.9)" ;;
   esac
-  say "step 1/6 done: node $("$NODE_BIN" -v), python3 $v"
+  say "step 1/6 done: node $("$NODE_BIN" -v), npm $(npm -v), python3 $v"
 }
 
 step_npm() {
@@ -331,47 +382,76 @@ step_systemd() {
   say "step 4/6 done: both units active"
 }
 
-step_nginx() {
-  say "step 5/6: nginx site + TLS"
-  local map_file=/etc/nginx/conf.d/whale-girl-ws-upgrade.conf
+# Render + install the site, test it BEFORE touching the running service, and
+# restore the previous file if nginx rejects the new one (a bad site left in
+# sites-enabled would break nginx on the next boot).
+apply_site() {
   local site=/etc/nginx/sites-available/whale-girl
   local enabled=/etc/nginx/sites-enabled/whale-girl
-  render_ws_map > "$map_file.tmp"
-  install -m 0644 "$map_file.tmp" "$map_file"
-  rm -f "$map_file.tmp"
-
+  local out
   resolve_tls
   render_site > "$site.tmp"
   install -m 0644 "$site.tmp" "$site"
   rm -f "$site.tmp"
   ln -sfn "$site" "$enabled"
+  if ! out="$(nginx -t 2>&1)"; then
+    printf '%s\n' "$out" >&2
+    if [ -f "$site.bak" ]; then
+      install -m 0644 "$site.bak" "$site"
+      nginx -t >/dev/null 2>&1 || warn "the previous site also fails nginx -t — check the config manually"
+    else
+      rm -f "$enabled" "$site"
+    fi
+    die "nginx config test failed — the previous site was restored"
+  fi
+}
+
+step_nginx() {
+  say "step 5/6: nginx site + TLS"
+  local map_file=/etc/nginx/conf.d/whale-girl-ws-upgrade.conf
+  local site=/etc/nginx/sites-available/whale-girl
+  render_ws_map > "$map_file.tmp"
+  install -m 0644 "$map_file.tmp" "$map_file"
+  rm -f "$map_file.tmp"
+
+  mkdir -p "$ACME_WEBROOT"
+  chmod 0755 "$ACME_WEBROOT"
+  [ -f "$site" ] && cp -a "$site" "$site.bak"
+
   rm -f /etc/nginx/sites-enabled/default
+  apply_site
   systemctl enable --now nginx
-  nginx -t || die "nginx config test failed (see above)"
   systemctl reload nginx
 
   if [ -n "$DOMAIN" ] && [ ! -f "$CERT_DIR/$DOMAIN/fullchain.pem" ]; then
     say "requesting a Let's Encrypt certificate for $DOMAIN (needs its A record and port 80)"
-    certbot certonly --webroot -w "$FRONTEND_DIR" -d "$DOMAIN" \
+    certbot certonly --webroot -w "$ACME_WEBROOT" -d "$DOMAIN" \
       --non-interactive --agree-tos --register-unsafely-without-email \
       --deploy-hook "systemctl reload nginx" \
-      || die "certbot failed: check that $DOMAIN resolves to this server and that port 80 is open"
+      || die "certbot failed: check that $DOMAIN resolves to this server and that port 80 is open (the ACME webroot is $ACME_WEBROOT)"
+    mkdir -p "$(dirname "$DOMAIN_FILE")"
+    printf '%s\n' "$DOMAIN" > "$DOMAIN_FILE"
   fi
-  if [ -z "$DOMAIN" ] && [ ! -f "$SELFSIGNED_DIR/selfsigned.crt" ]; then
-    say "no domain given: creating a self-signed certificate (browsers will warn)"
-    mkdir -p "$SELFSIGNED_DIR"
-    openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
-      -subj "/CN=whale-girl" \
-      -keyout "$SELFSIGNED_DIR/selfsigned.key" \
-      -out "$SELFSIGNED_DIR/selfsigned.crt" >/dev/null 2>&1 \
-      || die "openssl could not create the self-signed certificate"
+  if [ -z "$DOMAIN" ]; then
+    local need_ss=0
+    if [ ! -f "$SELFSIGNED_DIR/selfsigned.crt" ]; then
+      need_ss=1
+    elif ! openssl x509 -in "$SELFSIGNED_DIR/selfsigned.crt" -checkend 2592000 -noout >/dev/null 2>&1; then
+      say "the self-signed certificate expires within 30 days — regenerating it"
+      need_ss=1
+    fi
+    if [ "$need_ss" -eq 1 ]; then
+      say "no domain given: creating a self-signed certificate (browsers will warn)"
+      mkdir -p "$SELFSIGNED_DIR"
+      openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+        -subj "/CN=whale-girl" \
+        -keyout "$SELFSIGNED_DIR/selfsigned.key" \
+        -out "$SELFSIGNED_DIR/selfsigned.crt" >/dev/null 2>&1 \
+        || die "openssl could not create the self-signed certificate"
+    fi
   fi
 
-  resolve_tls
-  render_site > "$site.tmp"
-  install -m 0644 "$site.tmp" "$site"
-  rm -f "$site.tmp"
-  nginx -t || die "nginx config test failed after TLS setup (see above)"
+  apply_site
   systemctl reload nginx
 
   local code
@@ -394,6 +474,11 @@ step_ufw() {
   else
     say "step 6/6 done: ufw inactive — open 80/tcp + 443/tcp in the provider firewall if it filters"
   fi
+  if [ "$ALLOW_LAN" = "1" ]; then
+    say "note: LAN mode — the raw :$PORT/:$WS_PORT sockets are reachable on the LAN"
+  else
+    say "note: the raw :$PORT/:$WS_PORT sockets are loopback-only (WHALE_ALLOW_LAN=1 for LAN-direct)"
+  fi
 }
 
 final_report() {
@@ -409,10 +494,13 @@ final_report() {
 
 [install-ubuntu] done — Whale Girl is deployed.
   page:         $page/
-  browser/OBS:  $page/?ws=$ws_scheme://$ws_host/ws
+  browser/OBS:  $page/?ws=$ws_scheme://$ws_host/ws   <- the ?ws= override is required
   brain:        runs on this host (systemd whale-girl-brain); journalctl -u whale-girl-brain -f
   server logs:  journalctl -u whale-girl -f
-  update:       cd $REPO_ROOT && git pull && sudo bash whale-girl-server/scripts/install-ubuntu.sh $DOMAIN
+  network:      $([ "$ALLOW_LAN" = "1" ] && echo "LAN-direct (raw :$PORT/:$WS_PORT open)" || echo "loopback-only server socket; nginx + SSH tunnels reach it")
+  domain:       $([ -n "$DOMAIN" ] && echo "$DOMAIN (remembered in $DOMAIN_FILE)" || echo "none (self-signed TLS)")
+  update:       cd $REPO_ROOT && git pull && sudo bash whale-girl-server/scripts/install-ubuntu.sh ${DOMAIN:-(remembered)}
+  (an rsync-deployed copy has no .git — re-run scripts/deploy-ubuntu.sh from your Mac)
 EOF
   if [ "$TLS_MODE" = "selfsigned" ]; then
     cat <<'EOF'
