@@ -80,7 +80,10 @@
   /spec-expressions accelerates M3.2 planning (text/emotion -> expression
   presets, hybrid routing table, cooldown/priority, zero new deps);
   /spec-perf accelerates M4.1 planning (<180 MB steady-state OBS extra-memory
-  measurement protocol, lever audit, leak-soak verification, reconnect hardening).
+  measurement protocol, lever audit, leak-soak verification, reconnect hardening);
+  /spec-deploy accelerates M4.2 planning (three deployment patterns, idempotent
+  install-ubuntu.sh + systemd + nginx TLS, fresh-VM <=10-min gate, SSH tunnel
+  optional).
 
 ## 3. Owner decisions (binding)
 1. M1 stops before the real model/audio/DSH work; the owner switches the session AI
@@ -116,11 +119,19 @@
     Design drafts: docs/drafts/ai-agent-notifier/.
 
 ## 4. In-flight / next
-- NOTHING is in flight. M4.1 is fully closed (2026-10-23): merged into main and
-  pushed; its local feature branch was deleted. NEXT: M4.2 (deployment for general
-  users — install-ubuntu.sh + systemd + nginx TLS + the optional tunnel script;
-  same-machine localhost stays the default) via /spec-plan, re-reading the M4.1
-  handoff (nothing new is deferred to it — the deployment surface is config only).
+- **M4.2 IN FLIGHT** (branch feature/whale-girl-m42-deployment, 2026-10-23): deployment
+  for general users — scripts/install-ubuntu.sh (idempotent; ships the whale-girl server
+  and whale-girl-brain units, nginx TLS, certbot ACME or self-signed),
+  scripts/ubuntu-tunnel.sh (optional ssh -N -L), scripts/deploy-ubuntu.sh (optional
+  rsync); README "Deployment for general users"; ws_probe WS_URL knob. Automatic half
+  GREEN (2026-10-23): bash -n, --check, --dry-run x2, ws 30.0 fps, role 1008, cmd 63/63,
+  say 13/13, expr 22/22, curl 200, RSS 50,256 / 16,656 KB. Spec trio:
+  specs/features/2026-10-23-m4.2-m42-deployment/. Owner owes the manual half: the
+  <=10-min fresh-Ubuntu VM gate + the P3 tunnel smoke (validation.md). Implementation
+  correction flagged for sign-off: the brain runs on the box in the split (say audio is
+  page-relative), not on the Mac as the plan first said.
+- M4.1 is fully closed (2026-10-23): merged into main and pushed; its local feature
+  branch was deleted.
 - M3.2 is fully closed (2026-10-22): merged into main and pushed; its local
   feature branch was deleted.
 - M2.2 is fully closed (2026-10-21): merged into main and pushed; its local
@@ -138,9 +149,9 @@
   (M3.2; WHALE_EXPR_TAGS must be set for both the driver and the CLI).
 - Scripts: ws_probe, ws_role_probe, say_probe (M2.2, 13 checks), cmd_probe (M3.1,
   63 checks), expr_probe (M3.2, 22 checks), validate_model; mem_probe, traffic_mix,
-  obs_toggle, obs_fake, perf_probe and stack (M4.1); whale_cmd.py (DSH
-  motion/say/pose/mode/express), expr_tags.py (tag -> preset table) and
-  tts_synth.py (edge-tts helper).
+  obs_toggle, obs_fake, perf_probe and stack (M4.1); install-ubuntu, ubuntu-tunnel,
+  deploy-ubuntu (M4.2); whale_cmd.py (DSH motion/say/pose/mode/express), expr_tags.py
+  (tag -> preset table) and tts_synth.py (edge-tts helper).
 - CDN URLs pinned in tech-stack.md, all verified 200 on 2026-10-19.
 - Live2D asset installed at whale-girl-frontend/model/ (4.3 MB, gitignored;
   DS鲸鱼娘, moc3 v4); gate it with node scripts/validate_model.js.
