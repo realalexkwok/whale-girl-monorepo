@@ -56,11 +56,10 @@ no port forwarding.
 
 1. **Open the provider console** and log into the new VM (the console usually drops you in
    as root or a sudo user).
-2. **Clone the repo** (~1 min). Until M4.2 is merged to main, clone the feature branch
-   (`git clone -b feature/whale-girl-m42-deployment ...`); after the close, `main` contains
-   the scripts and the plain clone below is correct:
+2. **Clone the repo** (~1 min). Until M4.2 is merged to main the block clones the feature
+   branch; after the close, drop `-b` (main then contains the scripts):
 
-       git clone https://github.com/realalexkwok/whale-girl-monorepo.git
+       git clone -b feature/whale-girl-m42-deployment https://github.com/realalexkwok/whale-girl-monorepo.git
        cd whale-girl-monorepo
 
 3. **Point your domain at the VM** (before the install, so certbot can validate): create an
@@ -120,11 +119,12 @@ no port forwarding.
 Record the wall-clock time from step 2 through step 6 (and step 8). The gate passes when it
 is **≤ 10 minutes** and every check above is green. Logs: `sudo journalctl -u whale-girl -f`.
 
-**Without a domain (fallback):** `sudo bash scripts/install-ubuntu.sh` generates a
-self-signed certificate; browsers/OBS will warn and the `wss` probe will reject the
-certificate (the ws client validates the chain) — document it, do not use it for the gate.
-**LAN alternative:** install with `WHALE_ALLOW_LAN=1` (the server socket is loopback-only
-by default), firewall-allow 3000/tcp + 3001/tcp and use
+**Without a domain (fallback):** `sudo bash scripts/install-ubuntu.sh --no-domain`
+generates a self-signed certificate; browsers/OBS will warn and the `wss` probe will reject
+the certificate (the ws client validates the chain) — document it, do not use it for the
+gate.
+**LAN alternative:** install with `--allow-lan` (the server socket is loopback-only by
+default), firewall-allow 3000/tcp + 3001/tcp and use
 `http://<server-ip>:3000?ws=ws://<server-ip>:3001` (direct TCP, no nginx).
 
 ## P3 tunnel smoke (owner, optional advanced mode)
@@ -220,7 +220,7 @@ Verdict: FIX REQUIRED (1 major, 9 minor); all fixed in the follow-up commit.
 
 Re-checks after round 2 (2026-10-23):
 - `bash -n` + `--check` exit 0; `--check --allow-lan` renders the server unit WITHOUT the IP
-  restriction; `--check --no-domain` reports `(source: --no-domain)`.
+  restriction; `--check --no-domain` reports `(--no-domain)`.
 - NodeSource apt simulation on the box: the installer's package list WITHOUT npm resolves
   (`0 upgraded, 0 newly installed ...`); `apt-get install -s npm` alone is unsatisfiable
   (`node-ms: Depends: nodejs:any` -> "Unable to correct problems") — the guard is required.

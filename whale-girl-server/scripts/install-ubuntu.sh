@@ -63,8 +63,8 @@ usage() {
   printf '%s\n' \
     'Usage:' \
     '  sudo bash scripts/install-ubuntu.sh <domain>   # TLS via certbot (recommended)' \
-    '  sudo bash scripts/install-ubuntu.sh            # no domain: self-signed certificate' \
-    '  sudo bash scripts/install-ubuntu.sh --no-domain  # forget the remembered domain' \
+    '  sudo bash scripts/install-ubuntu.sh            # no arg: reuse the remembered domain' \
+    '  sudo bash scripts/install-ubuntu.sh --no-domain  # forget it: self-signed certificate' \
     '  sudo bash scripts/install-ubuntu.sh --allow-lan  # LAN-direct: no loopback restriction' \
     '  bash scripts/install-ubuntu.sh --check         # dry-run: print the resolved config' \
     '' \
@@ -292,7 +292,7 @@ if [ "$CHECK" -eq 1 ]; then
   if [ "$ALLOW_LAN" = "1" ]; then
     say "check: network  LAN mode — the server unit is NOT loopback-restricted"
   else
-    say "check: network  loopback-only server unit (WHALE_ALLOW_LAN=1 disables)"
+    say "check: network  loopback-only server unit (--allow-lan or WHALE_ALLOW_LAN=1 disables)"
   fi
   resolve_tls
   if [ "$TLS_MODE" = "none" ]; then
@@ -316,6 +316,12 @@ fi
 
 # --- install phases ---------------------------------------------------------
 [ "$(id -u)" -eq 0 ] || die "run as root: sudo bash scripts/install-ubuntu.sh ${DOMAIN:-<domain>}"
+
+# --no-domain must forget the remembered domain even if a later phase fails.
+if [ "$FORGET_DOMAIN" -eq 1 ]; then
+  rm -f "$DOMAIN_FILE"
+  say "forgot the remembered domain — using self-signed TLS"
+fi
 
 assert_ubuntu() {
   [ -r /etc/os-release ] || die "cannot read /etc/os-release (this installer targets Ubuntu 24.04 LTS)"
@@ -341,7 +347,7 @@ step_apt() {
   if ! command -v npm >/dev/null 2>&1; then
     pkgs+=(npm)
   fi
-  apt-get install -y --no-install-recommends "@@{pkgs[@]}"
+  apt-get install -y --no-install-recommends "${pkgs[@]}"
   NODE_BIN="$(command -v node || true)"
   [ -n "$NODE_BIN" ] || die "node is missing after apt; on Ubuntu 24.04 the 'nodejs' package provides it — check the apt output above"
   local v
@@ -436,11 +442,6 @@ step_nginx() {
   chmod 0755 "$ACME_WEBROOT"
   rm -f "$site.bak"   # pre-round-2 backup name; harmless if absent
 
-  if [ "$FORGET_DOMAIN" -eq 1 ]; then
-    rm -f "$DOMAIN_FILE"
-    say "forgot the remembered domain — using self-signed TLS"
-  fi
-
   rm -f /etc/nginx/sites-enabled/default
   apply_site
   systemctl enable --now nginx
@@ -529,7 +530,7 @@ final_report() {
   server logs:  journalctl -u whale-girl -f
   network:      $([ "$ALLOW_LAN" = "1" ] && echo "LAN-direct (raw :$PORT/:$WS_PORT open)" || echo "loopback-only server socket; nginx + SSH tunnels reach it")
   domain:       $([ -n "$DOMAIN" ] && echo "$DOMAIN (remembered in $DOMAIN_FILE)" || echo "none (self-signed TLS)")
-  update:       cd $REPO_ROOT && git pull && sudo bash whale-girl-server/scripts/install-ubuntu.sh ${DOMAIN:-(remembered)}
+  update:       cd $REPO_ROOT && git pull && sudo bash whale-girl-server/scripts/install-ubuntu.sh $([ -n "$DOMAIN" ] && printf '%s' "$DOMAIN" || printf '%s' '--no-domain')
   (an rsync-deployed copy has no .git — re-run scripts/deploy-ubuntu.sh from your Mac)
 EOF
   if [ "$TLS_MODE" = "selfsigned" ]; then

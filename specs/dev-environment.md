@@ -206,6 +206,7 @@ localhost. Nothing else to configure.
 ### Pattern 2 — cloud server via git + install script (no SSH knowledge required)
 1. On the server (provider web console or any shell):
 
+       # until M4.2 is merged (and the branch deleted): add -b feature/whale-girl-m42-deployment
        git clone https://github.com/realalexkwok/whale-girl-monorepo.git
        cd whale-girl-monorepo/whale-girl-server
        sudo bash scripts/install-ubuntu.sh <domain>   # --no-domain: self-signed TLS
