@@ -234,10 +234,22 @@ function fail(error) {
   // largest mouth curve, 5 s) must not mask the speech mouth while a say plays.
   // The model marks ParamMouthOpenY as the LipSync group, so the say wins.
   probeWs.send(JSON.stringify({ type: 'motion', group: 'Ketchup', index: 0 }));
-  await sleep(600);
-  const motionCmd = await chrome.evaluate(
-    '(window.whaleModel && window.whaleModel.cmdState) ? window.whaleModel.cmdState.last : ""'
-  );
+  // cmdState.last is set before playMotion resolves; wait for the OUTCOME too so a
+  // rejected motion cannot make this guard pass vacuously. (The lip-sync numbers
+  // below remain the real guard for the mouth itself.)
+  let motionOk = false;
+  try {
+    await waitFor(async () => {
+      const st = await chrome.evaluate(
+        '(window.whaleModel && window.whaleModel.cmdState) ? ' +
+        'JSON.stringify({ last: window.whaleModel.cmdState.last, ok: window.whaleModel.cmdState.ok }) : ""'
+      );
+      if (!st) return false;
+      const s = JSON.parse(st);
+      motionOk = s.last === 'motion: Ketchup/0' && s.ok === true;
+      return motionOk;
+    }, 8000, 'Ketchup command accepted during the say');
+  } catch (err) { /* recorded as a failure below */ }
   await waitFor(async () => (await chrome.evaluate(
     '!window.whaleSpeech.state().active'
   )) === true, 30000, 'say playback finished');
@@ -257,8 +269,8 @@ function fail(error) {
   const duration = say.duration || 0;
   record('decoded PCM < 10 MB', (say.bufferBytes || 0) < 10 * 1024 * 1024,
     (say.bufferBytes || 0) + ' bytes, duration ' + duration.toFixed(2) + ' s');
-  record('motion during the say played', /^motion: Ketchup/.test(motionCmd),
-    'cmdState=' + (motionCmd || 'none'));
+  record('motion command applied during the say', motionOk,
+    'cmdState = motion: Ketchup/0, ok=' + motionOk);
   record('page say matches frame', say.engine === (ENGINE === 'say' ? 'say' : 'edge-tts'),
     'engine=' + say.engine);
   record('words timeline present', ENGINE === 'say' ? words.length === 0 : words.length > 0,

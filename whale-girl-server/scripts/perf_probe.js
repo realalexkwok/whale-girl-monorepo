@@ -320,8 +320,9 @@ async function trafficCommand() {
   } else {
     const srv = rssKb(server.pid);
     const drv = rssKb(driver.pid);
-    record('server RSS <= 60 MB', srv <= 60 * 1024, srv + ' KB');
-    record('driver RSS <= 30 MB', drv <= 30 * 1024, drv + ' KB');
+    // A 0 KB reading means the process is already gone: fail instead of passing 0.
+    record('server RSS <= 60 MB', srv > 0 && srv <= 60 * 1024, srv + ' KB (alive: ' + (srv > 0) + ')');
+    record('driver RSS <= 30 MB', drv > 0 && drv <= 30 * 1024, drv + ' KB (alive: ' + (drv > 0) + ')');
   }
 
   chrome.close();

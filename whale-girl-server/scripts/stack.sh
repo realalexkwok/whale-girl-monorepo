@@ -133,7 +133,7 @@ case "${1:-}" in
     done
     DP="$(driver_pid)"
     if [ -n "$DP" ]; then
-      echo "stack.sh: UP — server :$PORT, driver pid $DP. Page: http://localhost:$PORT/?debug=1"
+      echo "stack.sh: UP — server :$PORT, brain pid $DP. Page: http://localhost:$PORT/?debug=1"
       exit 0
     fi
     echo "stack.sh: server is up but the driver did not appear — check $LOG_FILE" >&2
@@ -189,7 +189,7 @@ case "${1:-}" in
     supervise
     ;;
   *)
-    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+    awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"
     exit 2
     ;;
 esac

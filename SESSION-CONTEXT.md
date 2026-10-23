@@ -66,8 +66,8 @@
   DSH tool surface, Live2D playback semantics, mock-behind-a-flag);
   /spec-expressions accelerates M3.2 planning (text/emotion -> expression
   presets, hybrid routing table, cooldown/priority, zero new deps);
-  /spec-perf accelerates M4.1 planning (<100MB OBS extra-memory measurement
-  protocol, lever audit, leak-soak verification, reconnect hardening).
+  /spec-perf accelerates M4.1 planning (<180 MB steady-state OBS extra-memory
+  measurement protocol, lever audit, leak-soak verification, reconnect hardening).
 
 ## 3. Owner decisions (binding)
 1. M1 stops before the real model/audio/DSH work; the owner switches the session AI
@@ -103,20 +103,17 @@
     Design drafts: docs/drafts/ai-agent-notifier/.
 
 ## 4. In-flight / next
-- M4.1 IMPLEMENTED (2026-10-22) on feature/whale-girl-m41-memory-perf, UNCOMMITTED:
-  TG1–TG5 done. Gate amended by the owner to < 180 MB steady state (measured: final
-  steady delta 114.8 MB PASS, full-phase 126.9 MB; baseline cold-OBS 163.5 MB);
-  perf probe PASS (60 fps, p95 18.6 ms, heap +0.31 MB post-GC, server mean 28 MB /
-  driver 14 MB), cmd 63/63 (BubbleGum leftover guard), expr 22/22, say 13/13 ×2
-  (Ketchup-during-say guard),
-  ws 30.0 fps, role 1008, curl 200, inline 41,005 B. The owner's manual OBS pass
-  is complete; the
-  obs-websocket config was restored and OBS quit after the measurement. The OWNER
-  MANUAL PASS is COMPLETE (2026-10-23, all 9 steps passed); it found and drove two
-  late fixes: the say-mouth regression guard (Ketchup during a say) and the
-  motion-leftover reset (the BubbleGum bubble no longer sticks until a refresh —
-  cmd_probe 63/63 guards it). The review-fix loop starts next; the tree is
-  committed on feature/whale-girl-m41-memory-perf (round 1).
+- M4.1 IMPLEMENTED + MANUAL PASS PASSED (2026-10-23) on
+  feature/whale-girl-m41-memory-perf — committed: ac4834f (implementation),
+  13ab13e (review round-1 fixes); the review-fix loop is closing (reviewer verdict:
+  APPROVE). TG1–TG5 done; gate amended by the owner to < 180 MB steady state (final
+  steady delta 114.8 MB PASS, full-phase 126.9 MB; cold-OBS baseline 163.5 MB);
+  perf 60 fps, p95 17.4–18.6 ms, heap +0.31–0.34 MB post-GC, server mean 27–28 MB,
+  driver 14–16 MB; cmd 63/63 (BubbleGum leftover guard), expr 22/22, say 13/13 ×2
+  (Ketchup-during-say guard), ws 30.0 fps, role 1008, curl 200, inline 41,005 B.
+  The owner's nine manual steps all passed; the pass found and drove two late fixes
+  (the say-mouth guard and the motion-leftover reset). The obs-websocket config was
+  restored and OBS quit after the measurement. /spec-close remains.
 - M3.2 is fully closed (2026-10-22): merged into main and pushed; its local
   feature branch was deleted.
 - M2.2 is fully closed (2026-10-21): merged into main and pushed; its local
@@ -132,8 +129,9 @@
   knobs PORT, WS_PORT, WHALE_WS, WHALE_MODE, WHALE_CMD_WS,
   WHALE_MODEL_MANIFEST, WHALE_EXPR_TAGS/WHALE_EXPR_COOLDOWN/WHALE_EXPR_IDLE
   (M3.2; WHALE_EXPR_TAGS must be set for both the driver and the CLI).
-- Scripts: ws_probe, ws_role_probe, say_probe (M2.2), cmd_probe (M3.1, 61
-  checks), expr_probe (M3.2, 22 checks), validate_model; whale_cmd.py (DSH
+- Scripts: ws_probe, ws_role_probe, say_probe (M2.2, 13 checks), cmd_probe (M3.1,
+  63 checks), expr_probe (M3.2, 22 checks), validate_model; mem_probe, traffic_mix,
+  obs_toggle, obs_fake, perf_probe and stack (M4.1); whale_cmd.py (DSH
   motion/say/pose/mode/express), expr_tags.py (tag -> preset table) and
   tts_synth.py (edge-tts helper).
 - CDN URLs pinned in tech-stack.md, all verified 200 on 2026-10-19.

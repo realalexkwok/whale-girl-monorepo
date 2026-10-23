@@ -2,9 +2,10 @@
 
 > Confirmed by the owner (2026-10-22, grouped ask round 1a/2a/3a — all three
 > "Recommended" options). Grouped per the SDD ask-round convention.
-> Status: PLANNING COMPLETE — implementation intentionally paused so the owner can
-> switch the session AI model to V4-Flash; code work starts only on the owner's
-> go-ahead (see plan.md stop point).
+> Status: IMPLEMENTED + MANUAL PASS PASSED (2026-10-23); the review-fix loop closed
+> with APPROVE. See validation.md for the evidence (the counts below are the
+> planning-time acceptance criteria; the implemented probes report cmd 63/63 and
+> say 13/13).
 
 ## Scope
 - The hard gate: the OBS browser source's steady-state EXTRA memory < 180 MB on
@@ -82,7 +83,8 @@
 - mem_probe final PASS: gate + stability numbers recorded; per-lever table with
   values + commit ids in validation.md.
 - perf_probe PASS: mean fps ≥ 25, frame-time p95 ≤ 40 ms, no heap growth.
-- All existing probes green: cmd_probe 61/61, expr_probe 22/22, say_probe 12/12,
+- All existing probes green: cmd_probe 61/61 (implemented: 63/63), expr_probe
+  22/22, say_probe 12/12 (implemented: 13/13),
   ws_probe 20–40 fps increasing f, ws_role_probe close 1008, curl 200, node --check
   on the inline script, server/driver RSS budgets, ports released.
 - Manual (owner, at the close): a real OBS 32.2.2 session on this Mac — smoothness,

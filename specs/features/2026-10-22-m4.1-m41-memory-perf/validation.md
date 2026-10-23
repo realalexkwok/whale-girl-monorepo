@@ -16,13 +16,13 @@ both phases are compared as well (the tech-stack steady-state principle).
 
 | Phase | Samples | Mean | Min | Max | Slope | Drift |
 | --- | --- | --- | --- | --- | --- | --- |
-| A — source visible + traffic (`logs/mem-20261022-171318-baseline-a.csv`) | 168 | 237.9 MB | 181.8 MB | 331.6 MB | −5.21 MB/min | −93.4 MB |
-| B — source hidden and unloaded (`logs/mem-20261022-174401-baseline-b.csv`) | 168 | 46.9 MB | 31.3 MB | 84.2 MB | −1.88 MB/min | −34.2 MB |
+| A — source visible + traffic (`/Users/superguo/Projects/whale-girl-monorepo/whale-girl-server/logs/mem-20261022-171318-baseline-a.csv`) | 168 | 237.9 MB | 181.8 MB | 331.6 MB | −5.21 MB/min | −93.4 MB |
+| B — source hidden and unloaded (`/Users/superguo/Projects/whale-girl-monorepo/whale-girl-server/logs/mem-20261022-174401-baseline-b.csv`) | 168 | 46.9 MB | 31.3 MB | 84.2 MB | −1.88 MB/min | −34.2 MB |
 
 - Full-phase delta (A − B): **191.0 MB**.
 - Steady-state delta (last 10 min: 197.2 − 33.7): **163.5 MB**.
-- Stability: no growth — both phases shrink (negative slope); the page is leak-free
-  over the 30-min soak.
+- Stability: no growth detected — both phases shrink (negative slope) over the
+  30-min soak; the data show no net growth, which is not the same as a proof of no leak.
 - End-of-phase breakdown (process: RSS) — A: page renderer 94,224 KB + second CEF
   renderer 15,216 KB + GPU 36,320 KB + utilities 19,632/10,544/19,856 KB = 195,792
   KB; B: GPU 10,240 KB + utilities 6,720/5,600/11,536 KB = 34,096 KB. The page
@@ -45,14 +45,23 @@ Measurement gotchas found and handled:
 
 | Phase | Samples | Mean | Min | Max | Slope | Drift |
 | --- | --- | --- | --- | --- | --- | --- |
-| A — source visible + traffic (`logs/mem-20261022-184843-final-a.csv`) | 168 | 165.6 MB | 130.4 MB | 219.2 MB | −1.53 MB/min | −28.8 MB |
-| B — source hidden and unloaded (`logs/mem-20261022-191859-final-b.csv`) | 168 | 38.6 MB | 33.4 MB | 43.4 MB | −0.14 MB/min | −3.0 MB |
+| A — source visible + traffic (`/Users/superguo/Projects/whale-girl-monorepo/whale-girl-server/logs/mem-20261022-184843-final-a.csv`) | 168 | 165.6 MB | 130.4 MB | 219.2 MB | −1.53 MB/min | −28.8 MB |
+| B — source hidden and unloaded (`/Users/superguo/Projects/whale-girl-monorepo/whale-girl-server/logs/mem-20261022-191859-final-b.csv`) | 168 | 38.6 MB | 33.4 MB | 43.4 MB | −0.14 MB/min | −3.0 MB |
 
 - Steady-state delta (last 10 min: 151.5 − 36.7): **114.8 MB → PASS** against the
   amended < 180 MB gate (within the internal target ≤ 160 MB).
 - Full-phase delta: 126.9 MB (reported for transparency).
-- Stability: no monotonic growth (slope negative in both phases; drift negative) —
-  the page is leak-free over the 30-min soak.
+- Stability: no monotonic growth detected (slope negative in both phases; drift
+  negative) — the data show no net growth, not a proof of no leak.
+- Provenance (recorded 2026-10-23): the four CSVs were captured 2026-10-22
+  18:48–19:49, i.e. before the 2026-10-23 motion-leftover reset — one O(nParams)
+  reset per commanded motion (~12 per 30-min mix), no per-frame work, no retained
+  allocation. The post-fix perf probe passes (60.0 fps, p95 18.0 ms, heap +0.34 MB)
+  and the margin is 65 MB (114.8 vs 180), so the reviewer judged a re-soak
+  unnecessary; the owner's manual pass on the final tree passed all nine steps.
+- Composition caveat: the baseline A phase ran 6 CEF processes (2 renderers, the
+  second 15,216 KB) while the final A ran 5 (1 renderer) — a warm-OBS difference.
+  Counting that extra renderer against the final tree still gives 129.8 MB < 180 MB.
 - Baseline vs final variance: the baseline ran on a cold OBS start (first CEF load)
   at 163.5 MB steady; the final ran on a warm OBS at 114.8 MB. The amendment used
   the conservative (cold) figure; both are recorded.
@@ -67,14 +76,14 @@ Measurement gotchas found and handled:
 | --- | --- | --- |
 | OBS gate (baseline) | bash scripts/mem_probe.sh | **FAIL as written**: full-phase delta 191.0 MB / steady delta 163.5 MB vs the <100 MB gate — owner decision pending (see above) |
 | OBS gate (final) | bash scripts/mem_probe.sh --compare ... --steady | **PASS** — steady delta 114.8 MB < 180 MB (amended gate; internal target ≤ 160 MB met); full-phase 126.9 MB |
-| Stability (slope + drift) | mem_probe assertions | **PASS** — final A slope −1.53 MB/min, B −0.14; drift −28.8 / −3.0 MB (growth-only rule) |
+| Stability (slope + drift) | mem_probe assertions | **PASS** — final A slope −1.53 MB/min, B −0.14; drift −28.8 / −3.0 MB (growth-only rule; since review round 2 BOTH phases are asserted — a growing baseline can no longer shrink the delta into a false PASS) |
 | CPU/GPU profile | node scripts/perf_probe.js | **PASS** — 60.0 fps over 62 s, frame-time p95 17.4–18.6 ms, JS heap growth 0.31–0.33 MB post-GC (the pre-GC 6.22 MB was garbage, not a leak). Post-fix re-run (2026-10-23): 60 fps, p95 17.4 ms, heap +0.33 MB, server 23/27/46 MB, driver 15/16/17 MB |
 | M3.1 gate | node scripts/cmd_probe.js | **PASS 63/63** (30.0 fps stream; server max 48,720 KB, driver max 19,760 KB; ports released; the two new checks are the BubbleGum exit + the motion-leftover guard) |
 | M3.2 gate | node scripts/expr_probe.js | **PASS 22/22** (server end 32,960 KB, driver end 16,176 KB; ports released) |
-| M2.2 regression | node scripts/say_probe.js (both passes) | **PASS 13/13 + 13/13** — edge: 53/53 in-word, gap max 0.108, latency mean 19 / max 29 ms; say: amplitude max 1.00, loud mean 0.88; both passes inject Ketchup (a mouth-curve motion) during the say and keep 100% lip sync |
+| M2.2 regression | node scripts/say_probe.js (both passes) | **PASS 13/13 + 13/13** — edge: 53–54/54 in-word, gap max 0.108, latency mean 19–20 / max 29–35 ms; say: amplitude max 0.99–1.00, loud mean 0.88; both passes inject Ketchup (a mouth-curve motion) during the say, assert `cmdState.ok`, and keep 100% lip sync |
 | WS probes | node scripts/ws_probe.js / ws_role_probe.js | **PASS** — 30.0 fps over 2.00 s, 61 frames, monotonic f; role probe close 1008 |
 | HTTP smoke | curl :3000 | **200** |
-| Inline script syntax | node --check on the extracted script | **PASS** — 39,153 B |
+| Inline script syntax | node --check on the extracted script | **PASS** — 41,005 B (the 1,852 B delta over the pre-fix 39,153 B is the motion-leftover hunk) |
 | Server/driver RSS (10-min post-traffic soak) | ps RSS multi-sample (perf_probe) | **PASS** — server min 21 / mean 28 / max 46 MB, driver min 13 / mean 14 / max 17 MB over 60 samples (budgets ≤ 60 / ≤ 30 MB) |
 | Shutdown | lsof after SIGTERM | **PASS** — ports 3000/3001 free, no stray node/python/OBS CEF processes |
 
@@ -229,6 +238,28 @@ Also in round 1 (self-audit): stale `< 100 MB` references updated (roadmap item 
 replan note, SESSION-CONTEXT decision 8, README milestone line, plan memory
 discipline, mem_probe header, spec-perf skill note); `stack.sh` now records its
 ports (`run/ports`) so `status`/`stop` target the running instance.
+
+### Round 2 (2026-10-23) — final sweep (reviewer verdict: APPROVE, evidence corrections)
+- Evidence corrected: inline size **41,005 B** (the 1,852 B delta is the
+  motion-leftover hunk); final-soak **provenance** recorded (CSVs 2026-10-22
+  18:48–19:49, before the 2026-10-23 reset; one O(nParams) reset per commanded
+  motion, no per-frame cost; post-fix perf probe passes; 65 MB margin) plus the
+  warm-OBS composition caveat (baseline 6 CEF processes/2 renderers vs final 5/1;
+  even counting the extra 15.2 MB renderer: 129.8 < 180 MB); "leak-free" reworded to
+  "no growth detected"; CSV paths made absolute.
+- Guards strengthened: say_probe waits for `cmdState.ok` (a rejected motion can no
+  longer pass vacuously); mem_probe asserts phase B stability too (synthetic
+  +2 MB/min B → exit 4); perf_probe fails on a 0 KB (dead) server/driver; the fake
+  obs-websocket double is committed as `scripts/obs_fake.js`.
+- Cosmetic: `--help` prints the header block (no shell code) for mem_probe,
+  traffic_mix and stack.sh; steady means label their full-window min/max.
+- Docs sweep: SESSION-CONTEXT (commit state, probe counts, script list, skill gate),
+  README + dev-environment (driver default mock vs stack.sh live), plan Files +
+  3-min A/B refinement, requirements status, AGENTS (OBS 32.2.2), dev-environment
+  compare example.
+- Re-ran: say_probe 13/13 ×2 (edge 54/54 in-word, gap 0.108; say amplitude 0.99);
+  perf_probe 7/7 (60.0 fps, p95 18.4 ms, heap +1.07 MB, server 22 MB / driver
+  13.6 MB alive); mem_probe synthetic PASS/FAIL/exit-code matrix.
 
 ## Handoff to dependant milestones
 - M4.2 owns: nothing new — the deployment surface is unchanged (config only). The

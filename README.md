@@ -35,9 +35,10 @@ the eyes/mouth/head 30 times per second and decides when she breathes and speaks
 older docs call it the "driver"). Without the brain the page freezes on its last
 frame and commands are refused with "the server has no brain connected" — that is
 the safety working, not a bug. `stack.sh` supervises both and restarts either half
-if it exits. In the default mock mode the brain rehearses canned Chinese lines by
-itself (that is intentional); `WHALE_MODE=live bash scripts/stack.sh start` keeps
-her silent unless a command tells her to speak.
+if it exits. The driver's own default is **mock** (the brain rehearses canned
+Chinese lines by itself); `stack.sh` starts it in **live** mode — silent unless a
+command tells her to speak — and `WHALE_MODE=mock bash scripts/stack.sh start`
+brings the rehearsal back.
 
 Manual two-terminal path:
 

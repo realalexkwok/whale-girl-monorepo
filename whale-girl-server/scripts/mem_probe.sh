@@ -72,7 +72,7 @@ while [ $# -gt 0 ]; do
     --no-gate) NO_GATE=1; shift ;;
     --steady) STEADY=1; shift ;;
     --list) LIST_ONLY=1; shift ;;
-    -h|--help) sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"; exit 0 ;;
     *) echo "mem_probe: unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -184,9 +184,9 @@ run_compare() {
   delta_mb="$(awk -v a="$mean_a_kb" -v b="$mean_b_kb" 'BEGIN { printf "%.1f", (a - b) / 1024 }')"
   echo ""
   echo "  phase A ($a)"
-  echo "    samples $NA  mean ${mean_a_mb} MB  min $(fm_mb "$MIN_A")  max $(fm_mb "$MAX_A") MB"
+  echo "    samples $NA  mean ${mean_a_mb} MB  full-window min $(fm_mb "$MIN_A")  max $(fm_mb "$MAX_A") MB"
   echo "  phase B ($b)"
-  echo "    samples $NB  mean ${mean_b_mb} MB  min $(fm_mb "$MIN_B")  max $(fm_mb "$MAX_B") MB"
+  echo "    samples $NB  mean ${mean_b_mb} MB  full-window min $(fm_mb "$MIN_B")  max $(fm_mb "$MAX_B") MB"
   echo ""
   local scope_tag=""
   [ "$STEADY" = 1 ] && scope_tag=" [steady: last ${DRIFT}s of each phase]"
@@ -196,12 +196,17 @@ run_compare() {
     echo "  delta (A - B): ${delta_mb} MB   gate < ${GATE_MB} MB (target ≤ ${TARGET_MB} MB)${scope_tag}"
   fi
   echo "  stability A: slope ${SLOPE_A} MB/min (limit ≤ 0.1), drift ${DRIFT_A} MB (limit ≤ 5; windows ${DRIFT}s, samples ${FW_A}/${LW_A})"
+  echo "  stability B: slope ${SLOPE_B} MB/min (limit ≤ 0.1), drift ${DRIFT_B} MB (limit ≤ 5; windows ${DRIFT}s, samples ${FW_B}/${LW_B})"
   local gate_ok=1 stab_ok=1
   if [ "$NO_GATE" = 0 ]; then
     awk -v d="$delta_mb" -v g="$GATE_MB" 'BEGIN { exit !(d < g) }' || gate_ok=0
   fi
   awk -v s="$SLOPE_A" 'BEGIN { exit !(s <= 0.1) }' || stab_ok=0
   awk -v d="$DRIFT_A" 'BEGIN { exit !(d <= 5) }' || stab_ok=0
+  # Phase B must be stable too: a growing baseline would shrink the delta and let
+  # a leaking page pass the gate on the subtraction alone.
+  awk -v s="$SLOPE_B" 'BEGIN { exit !(s <= 0.1) }' || stab_ok=0
+  awk -v d="$DRIFT_B" 'BEGIN { exit !(d <= 5) }' || stab_ok=0
   if [ "$gate_ok" = 1 ] && [ "$stab_ok" = 1 ]; then
     echo "  RESULT: PASS"
     [ "$NO_GATE" = 0 ] && awk -v d="$delta_mb" -v t="$TARGET_MB" 'BEGIN { exit !(d <= t) }' \

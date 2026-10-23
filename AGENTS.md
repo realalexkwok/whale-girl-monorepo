@@ -59,7 +59,7 @@ must be answered by the user.
 - M3.2 gate: node scripts/expr_probe.js (per-tag expression routing, cooldown,
   neutral fallback, idle/mode reset — needs the DS model) plus the CLI
   `scripts/whale_cmd.py express <tag> [text]`.
-- M4.1 gate (OBS extra memory, amended < 180 MB steady state): OBS 32.2 must run
+- M4.1 gate (OBS extra memory, amended < 180 MB steady state): OBS 32.2.2 must run
   with the whale Browser source; toggle it with node scripts/obs_toggle.js
   info|on|off|shutdown-on-hide (obs-websocket :4455, auth from the OBS config),
   drive traffic with bash scripts/traffic_mix.sh --minutes 30 --interval 30 --verbose,

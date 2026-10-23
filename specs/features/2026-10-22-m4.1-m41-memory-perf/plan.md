@@ -29,8 +29,10 @@
   keep window.whaleSpeech.probeStats valid); timer/DOM reuse audit.
 - Apply only on measured benefit + owner visual OK; record value + commit id per
   lever; full 2 × 30-min soak only at baseline and final.
-- Checks: say_probe stays 12/12 after any audio change; ws_probe fps ≥ 25 after any
+- Checks: say_probe stays 13/13 after any audio change; ws_probe fps ≥ 25 after any
   ticker/resolution change; node --check; A/B numbers recorded in validation.md.
+- Implemented refinement: 3-min A/B windows (the measured noise floor is ±5–10 MB,
+  so longer windows do not resolve the levers either), not the planned 5 min.
 
 ### TG3 — Hardening + late fixes (EDIT index.html)
 - WS reconnect: assert single-timer invariant; clear any pending wsTimer on open; on
@@ -78,9 +80,11 @@
   discipline from AGENTS.md.
 
 ## Files
-- NEW whale-girl-server/scripts/{mem_probe.sh, traffic_mix.sh, perf_probe.js}
-- EDIT whale-girl-frontend/index.html (levers + hardening + whalePerf hook)
-- EDIT .gitignore (logs/), README.md, AGENTS.md, specs/dev-environment.md,
+- NEW whale-girl-server/scripts/{mem_probe.sh, traffic_mix.sh, obs_toggle.js,
+  obs_fake.js, perf_probe.js, stack.sh}
+- EDIT whale-girl-frontend/index.html (levers + hardening + motion-leftover reset;
+  no whalePerf hook — the perf probe injects its sampler via CDP)
+- EDIT .gitignore (logs/ + run/), README.md, AGENTS.md, specs/dev-environment.md,
   specs/tech-stack.md (amendment-only)
 - This trio: specs/features/2026-10-22-m4.1-m41-memory-perf/
 

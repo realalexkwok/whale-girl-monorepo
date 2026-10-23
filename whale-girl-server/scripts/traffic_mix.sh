@@ -8,8 +8,10 @@
 # survive a transient TTS error).
 #
 # Usage:
-#   scripts/traffic_mix.sh [--minutes 30] [--interval 30]
+#   scripts/traffic_mix.sh [--minutes 30] [--interval 30] [--verbose]
 #   WHALE_TTS_TEXT="..." scripts/traffic_mix.sh      # override the say line
+# Options: --minutes N (default 30), --interval S (default 30), --verbose (log
+# every ok).
 # Exit codes: 0 completed, 1 bad argument or missing venv/CLI, 2 driver not
 # connected (no brain — commands would be refused).
 set -u
@@ -27,7 +29,7 @@ while [ $# -gt 0 ]; do
     --minutes) MINUTES="$2"; shift 2 ;;
     --interval) INTERVAL="$2"; shift 2 ;;
     --verbose) VERBOSE=1; shift ;;
-    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"; exit 0 ;;
     *) echo "traffic_mix: unknown argument: $1" >&2; exit 1 ;;
   esac
 done

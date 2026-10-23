@@ -25,8 +25,9 @@ the split deployment only moves the server + brain to Ubuntu and points the page
   (auto-restart), prints both pids; `stack.sh status | stop | logs`. The brain is a
   SEPARATE program: without it the page freezes on its last frame and commands are
   refused with "the server has no brain connected" (by design — the CLI refuses
-  rather than pretending). Mock mode makes the brain rehearse canned lines by itself;
-  `WHALE_MODE=live bash scripts/stack.sh start` keeps her silent unless commanded.
+  rather than pretending). The driver's own default is mock (canned rehearsal);
+  `stack.sh` starts it in live mode unless `WHALE_MODE=mock` is set — live keeps her
+  silent unless commanded.
 - Manual two-terminal path:
 - Terminal 1 — server:
 
@@ -173,13 +174,15 @@ the split deployment only moves the server + brain to Ubuntu and points the page
 - Run (the stack must be up: npm start + control_whale.py):
 
       cd whale-girl-server
-      node scripts/obs_toggle.js info          # scene item state + CEF sanity
+      node scripts/obs_toggle.js info          # scene/item state (strict: exit 3 if missing)
       node scripts/obs_toggle.js on            # Phase A: page visible
       bash scripts/traffic_mix.sh --minutes 30 --interval 30 --verbose &
       bash scripts/mem_probe.sh --phase a --minutes 30 --label final-a
       node scripts/obs_toggle.js off           # hide → page unloads (Phase B)
       bash scripts/mem_probe.sh --phase b --minutes 30 --label final-b
-      bash scripts/mem_probe.sh --compare logs/final-a.csv logs/final-b.csv --steady
+      bash scripts/mem_probe.sh --compare \
+        "$(ls -t logs/mem-*-final-a.csv | head -1)" \
+        "$(ls -t logs/mem-*-final-b.csv | head -1)" --steady
 
 - CPU/GPU profile: node scripts/perf_probe.js --seconds 60 --rss-minutes 10 (it
   boots its own server + Chrome + driver — stop the dev stack first; the RSS soak
