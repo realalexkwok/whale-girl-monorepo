@@ -1,7 +1,8 @@
 // Smoke probe: connects as a web client and measures the motion frame rate.
 // Usage: node scripts/ws_probe.js
 const WebSocket = require('ws');
-const ws = new WebSocket('ws://localhost:3001?role=web');
+// WS_URL overrides the endpoint (M4.2: WS_URL='wss://<domain>/ws?role=web' for the split).
+const ws = new WebSocket(process.env.WS_URL || 'ws://localhost:3001?role=web');
 let frames = 0;
 let first = null;
 let last = null;

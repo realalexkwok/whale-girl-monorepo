@@ -214,22 +214,73 @@ See specs/dev-environment.md for the full protocol, prerequisites and gotchas.
   WebSocket host (origin guard). Serve the page and the WS from the same
   hostname (localhost and 127.0.0.1 are both accepted), or point `?ws=` at the
   same host as the page.
+- Deployed page shows the placeholder whale: the model asset is gitignored — copy
+  whale-girl-frontend/model/ to the server once (see Deployment below).
+- Deployed page or speech broken: check the certificate and the HTTP->HTTPS redirect,
+  then `sudo journalctl -u whale-girl -f` and `sudo journalctl -u whale-girl-brain -f`.
+- Certificate warning in the browser: the install ran without a domain (self-signed) —
+  re-run `sudo bash scripts/install-ubuntu.sh <domain>` with a domain pointing at the box.
 - Command has no effect: run the whale_cmd.py examples from whale-girl-server —
   "cannot reach the server" means npm start is not running; "unknown motion
   group" lists the available groups; ?debug=1 shows the last command + mode.
 
-## Deployment patterns (M4.2)
+## Deployment for general users (M4.2)
 
-- Same machine (DEFAULT for normal users): the quick start above IS the
-  deployment — server + driver + browser/OBS all on one computer, zero SSH.
-- Cloud server, no SSH knowledge: git pull + bash install-ubuntu.sh + systemd
-  (ships in M4.2); manual steps runnable through the provider's web console;
-  optional deploy.sh wrapper for operators who already use SSH.
-- SSH port forwarding (OPTIONAL advanced mode): scripts/ubuntu-tunnel.sh for
-  operators who prefer no open ports (ships in M4.2).
-- Remaining work is configuration only — the one host dependency is the
-  WebSocket origin guard (the page host must match the WS host; the nginx proxy
-  must pass `proxy_set_header Host $host`).
+Three patterns, easiest first. Pattern 1 is the default; pattern 2 keeps the stream
+running while your Mac sleeps; pattern 3 is for operators who prefer no open ports.
+
+### Pattern 1 — same machine (DEFAULT, zero SSH)
+The quick start above IS the deployment: server + brain + browser/OBS on one computer.
+Nothing else to configure.
+
+### Pattern 2 — cloud server (no SSH knowledge needed)
+On a fresh Ubuntu 24.04 VM, in the provider's web console:
+
+    git clone https://github.com/realalexkwok/whale-girl-monorepo.git
+    cd whale-girl-monorepo/whale-girl-server
+    sudo bash scripts/install-ubuntu.sh whale.example.com   # your domain, A record -> the VM
+
+`install-ubuntu.sh` installs the system packages, both systemd units (server + brain), the
+venv, and an nginx TLS site; certbot obtains the certificate. It is idempotent — after
+`git pull`, run it again. Run it without a domain to fall back to a self-signed certificate
+(browsers will warn; the wss probe rejects it). Then in OBS on the Mac:
+
+    https://whale.example.com/?ws=wss://whale.example.com/ws
+
+(or just `https://whale.example.com/` — without `?ws=` the page derives the same host).
+The page and the WebSocket must share one hostname (the origin guard rejects a mismatch
+with close code 1008); nginx passes the page's Host, so this is already handled.
+
+The brain runs on the server box by design: a speech line's audio file is fetched from the
+page origin, so it must live next to the server (`whale-girl-brain.service`). You can stop
+that unit and run the driver on the Mac for a motion-only setup — speech would be silent.
+
+The whale model asset is not in git (4.3 MB, licensed). Copy it once — the page shows the
+placeholder until then:
+
+    rsync -az whale-girl-frontend/model/ you@whale.example.com:whale-girl-monorepo/whale-girl-frontend/model/
+
+(adjust the remote path to wherever the repo was cloned; `scripts/deploy-ubuntu.sh` copies
+the model automatically when used).
+
+Logs: `sudo journalctl -u whale-girl -f` (server), `sudo journalctl -u whale-girl-brain -f`
+(brain). Operators who already use SSH can run `scripts/deploy-ubuntu.sh user@host` instead
+of hand-syncing (rsync + the remote install; optional, never required). LAN alternative:
+open 3000/tcp + 3001/tcp and use `http://<server-ip>:3000?ws=ws://<server-ip>:3001`.
+
+### Pattern 3 — SSH port forwarding (OPTIONAL advanced mode)
+The page and the WS proxy stay on localhost through a tunnel; no ports are opened:
+
+    bash scripts/ubuntu-tunnel.sh ubuntu@whale.example.com
+
+Leave it running (Ctrl-C closes it); the browser source keeps pointing at
+http://localhost:3000 with no `?ws=` needed. The brain still runs on the server box (for
+speech), and the model upload from pattern 2 applies.
+
+### Splitting — configuration only
+No runtime code path changes in a split: the `?ws=` override, `PORT`/`WS_PORT`, `WHALE_WS`
+and `WHALE_MODE` knobs already exist. The one host dependency is the WebSocket origin
+guard — page and WS on the same hostname, nginx passing `proxy_set_header Host $host`.
 
 ## Milestones
 

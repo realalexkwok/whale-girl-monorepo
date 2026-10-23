@@ -219,3 +219,13 @@
   (100 commands per fixed 1 s window, a 4002 close when no python writer is
   connected, a best-effort same-origin guard, and the pose id grammar +
   frame-size guard) — see requirements.md decision 4.
+- 2026-10-23 (M4.2, implementation): deployment ships as scripts/install-ubuntu.sh
+  (idempotent, --check dry-run), scripts/deploy-ubuntu.sh (optional rsync wrapper)
+  and scripts/ubuntu-tunnel.sh (optional); server-side SYSTEM packages (nginx,
+  certbot, python3-certbot-nginx, python3-venv, python3-pip, ufw) are allowed on the
+  Ubuntu host — they are not runtime JS/Python dependencies and do not enter the app
+  budgets. Target: Ubuntu 24.04 LTS (distro nodejs 18.19, python3 3.12). Brain
+  placement in the split patterns: on the server host (say audio is page-relative;
+  whale-girl-brain.service ships) — driver-on-Mac remains supported for
+  dev/motion-only. Verification knob: ws_probe accepts WS_URL (default
+  ws://localhost:3001?role=web) for probing the public wss URL.

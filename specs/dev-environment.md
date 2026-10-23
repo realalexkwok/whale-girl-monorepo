@@ -191,7 +191,7 @@ the split deployment only moves the server + brain to Ubuntu and points the page
   page's RSS decays for ~20 min after every reload — use the full 30-min phases and
   the --steady reading for the gate, and treat 3-min windows as sanity checks only.
 
-## Deployment patterns (M4.2 consumes this — config only, no code rewrite)
+## Deployment patterns (M4.2 — shipped 2026-10-23; config only, no code rewrite)
 
 > Origin note: the WS origin guard compares the page's Origin host with the WS
 > host, so a split-host setup (the page served from one hostname and ?ws=
@@ -207,27 +207,39 @@ localhost. Nothing else to configure.
 1. On the server (provider web console or any shell):
 
        git clone https://github.com/realalexkwok/whale-girl-monorepo.git
-       cd whale-girl-monorepo/whale-girl-server && bash install-ubuntu.sh
-       sudo systemctl enable --now whale-girl
+       cd whale-girl-monorepo/whale-girl-server
+       sudo bash scripts/install-ubuntu.sh <domain>   # no domain -> self-signed TLS
 
-2. install-ubuntu.sh (ships in M4.2) does: apt deps (nodejs ≥18, python3 ≥3.9),
-   npm install, the venv + pip install, a systemd unit, and an nginx TLS snippet
-   serving the frontend at https://<server>/ with the WS upgraded at /ws; the Mac
-   browser source then points at https://<server>/?ws=wss://<server>/ws.
+2. install-ubuntu.sh (shipped, idempotent — re-run after git pull) does: apt deps
+   (nodejs >= 18, python3 >= 3.9, nginx, certbot), npm ci, the venv + pip install,
+   two systemd units (whale-girl server + whale-girl-brain driver, both
+   Restart=on-failure + journald), and an nginx TLS site: HTTP -> node :3000
+   (express static + /audio) and /ws -> node :3001 (upgraded, with
+   proxy_set_header Host $host); certbot ACME with a domain, self-signed fallback
+   without one. `bash scripts/install-ubuntu.sh --check` is the no-root dry-run
+   (validates paths/config and renders both units + the site). The Mac browser
+   source then points at https://<domain>/?ws=wss://<domain>/ws.
 3. Optional for operators who already use SSH: scripts/deploy-ubuntu.sh wraps
-   scp/rsync + remote commands — a convenience, never a requirement.
+   rsync + the remote install (--dry-run supported) — a convenience, never a
+   requirement.
 4. LAN alternative: firewall-allow 3000/tcp + 3001/tcp and use
    http://<server-ip>:3000?ws=ws://<server-ip>:3001.
 
 ### Pattern 3 — SSH port forwarding (OPTIONAL advanced mode)
-For operators who prefer no open ports: scripts/ubuntu-tunnel.sh (ships in M4.2)
-runs ssh -N -L 3000:localhost:3000 -L 3001:localhost:3001 user@<server-ip> on the
-Mac; the browser source keeps pointing at http://localhost:3000 unchanged.
+For operators who prefer no open ports: scripts/ubuntu-tunnel.sh runs
+ssh -N -L 3000:localhost:3000 -L 3001:localhost:3001 user@<server-ip> on the Mac
+(--dry-run prints the command; local 3000/3001 must be free); the browser source
+keeps pointing at http://localhost:3000 unchanged. Page + WS come from the box, so
+the pattern-2 model upload applies.
 
-### Driver placement in patterns 2 and 3
-WHALE_WS=ws://<server-ip>:3001?role=python (direct/TLS) or
-WHALE_WS=ws://localhost:3001?role=python (through the tunnel); the driver may keep
-running on the Mac or move to Ubuntu — both work by design.
+### Brain placement in patterns 2 and 3 (corrected 2026-10-23)
+The brain runs on the server box — the say-audio contract makes it mandatory for
+speech: a say frame carries "/audio/<file>", the browser fetches it from the page
+origin, so the audio files must live next to the server. install-ubuntu.sh ships
+whale-girl-brain.service (WHALE_MODE=live, WHALE_WS=ws://127.0.0.1:<WS_PORT>?role=python).
+Running the driver on the Mac stays supported for dev and motion-only setups
+(WHALE_WS=ws://<server-ip>:3001?role=python, or through the tunnel) — speech is
+silent in that mode because the audio request 404s at the page origin.
 
 ## Decision log
 - #1 (2026-10-19): two processes on two ports (express :3000, ws :3001) instead of one
@@ -242,3 +254,7 @@ running on the Mac or move to Ubuntu — both work by design.
   by edge-tts (word timestamps; macOS say fallback) and the frontend plays the
   audio via Web Audio while driving the mouth from the word timeline; no loopback
   device involved.
+- #6 (2026-10-23, M4.2): in the split patterns the brain runs on the server host —
+  say audio is page-relative, so the files must live next to the server;
+  whale-girl-brain.service ships with install-ubuntu.sh. Driver-on-Mac remains
+  supported for dev/motion-only (speech silent).
