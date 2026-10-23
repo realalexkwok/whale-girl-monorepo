@@ -7,9 +7,9 @@
 1. **Spec trio + branch** — this folder + `feature/whale-girl-m42-deployment`.
    Check: trio exists; `git status` shows only new files.
 2. **whale-girl-server/scripts/install-ubuntu.sh** — idempotent Ubuntu 24.04 installer:
-   preflight (root, OS, repo layout) → apt deps (incl. nodejs + npm) → `npm ci` → venv + pip → systemd units
-   (server + brain) → nginx site → TLS (certbot ACME with a domain, self-signed fallback
-   without) → ufw →
+   preflight (root, OS, repo layout) → apt deps (incl. nodejs, and npm only when absent) →
+   `npm ci` → venv + pip → systemd units (server + brain) → **ufw (before certbot)** →
+   nginx site → TLS (certbot ACME with a domain, self-signed fallback without) →
    final URL printout. `--check` dry-run (no root, no mutations).
    Checks: `bash -n`; `--check` on the Mac; the fresh-VM gate; re-run idempotency.
 3. **whale-girl-server/scripts/ubuntu-tunnel.sh** — the optional `ssh -N -L` pair with
@@ -47,7 +47,7 @@
   (2) `npm ci` in whale-girl-server; (3) venv (created only when missing) + pip install;
   (4) systemd units `whale-girl.service` (WorkingDirectory=<repo>/whale-girl-server,
   ExecStart=<resolved node> server.js, PORT/WS_PORT env, loopback-only via
-  IPAddressAllow=localhost unless WHALE_ALLOW_LAN=1, Restart=on-failure) and
+  IPAddressAllow=localhost unless --allow-lan / WHALE_ALLOW_LAN=1, Restart=on-failure) and
   `whale-girl-brain.service` (`<repo>/whale-girl-server/.venv/bin/python control_whale.py`,
   `WHALE_MODE=live`, `WHALE_WS=ws://127.0.0.1:<WS_PORT>?role=python` — the brain shares the
   host because say audio is page-relative, Restart=always since a displaced driver exits 0),
@@ -57,9 +57,11 @@
   and an 80 redirect that still serves `/.well-known/acme-challenge/`); the ACME webroot is
   /var/www/whale-girl-acme (0755); certbot `certonly --webroot -w <acme> -d <domain>` only
   when the cert is absent, and the domain is written to /etc/whale-girl/domain; default-site
-  cleanup; `nginx -t` runs BEFORE enable/start and restores the previous site on failure,
-  then reload; ufw `allow 'Nginx Full'` only when ufw is active; (6) final printout: page
-  URL, Mac browser-source URL with the required ?ws=, brain journal pointer, network mode.
+  cleanup; `nginx -t` runs BEFORE enable/start and restores the last accepted site on
+  failure, then reload; the firewall step (`ufw allow 'Nginx Full'` when ufw is active) runs
+  BEFORE this phase, so an already-active firewall has 80/443 open for certbot; (6) final
+  printout: page URL, Mac browser-source URL with the required ?ws=, brain journal pointer,
+  network mode.
 - Idempotency: apt/systemctl/pip are naturally idempotent; unit + site files are rewritten
   from templates on every run (deterministic content — the TLS block is derived from the
   cert's presence, so a re-run cannot wipe certbot's config); certbot is skipped when the
@@ -108,7 +110,7 @@
   box and the docs make that the default. The Mac placement stays documented for dev and
   motion-only setups. Owner sign-off is owed at review.
 
-## Review round 1 fixes (2026-10-23)
+## Review rounds 1–3 fixes (2026-10-23)
 - MAJOR 1: apt installs npm (+ preflight and --check).
 - MAJOR 2: ACME webroot /var/www/whale-girl-acme (0755) instead of the repo path.
 - MAJOR 3: README/validation now state that ?ws=wss://<domain>/ws is REQUIRED (the frontend
@@ -130,6 +132,22 @@
   validation.md.
 - Also fixed from the review's evidence: the brain unit is Restart=always (a displaced driver
   exits 0; on-failure left the box brain dead).
+
+### Round 2
+- npm is appended to the apt list only when `command -v npm` is absent (NodeSource's nodejs
+  Provides/Conflicts: npm; the distro npm package is unsatisfiable there).
+- `apply_site` keeps the last nginx-accepted site as `whale-girl.prev` and restores it on
+  failure (accurate message when no previous site exists).
+- The domain is persisted whenever the certificate exists (not only after a new request).
+- The firewall step runs before nginx/certbot; the runbook clone block uses `-b` pre-merge;
+  the origin-guard gate checks `wss://<domain>/ws` with `WS_ORIGIN` through nginx.
+- `--allow-lan` and `--no-domain` flags (sudo-safe; the env var may not survive sudo).
+
+### Round 3
+- The apt array actually expands (`"${pkgs[@]}"`; the literal placeholder is gone).
+- `--no-domain` forgets the domain right after the root check (install mode only), so an
+  earlier phase failure cannot leave it remembered.
+- Usage and the final update line no longer claim a remembered domain when there is none.
 
 ## Constraints
 - No new runtime dependencies; no per-frame work; budgets unchanged (server ≤ 60 MB,
