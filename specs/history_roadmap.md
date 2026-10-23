@@ -303,3 +303,53 @@ with a no-monotonic-growth rule so a leak fails even under the threshold.
 - Handoffs: M4.2 owns nothing new (the deployment surface is unchanged, config
   only); M5.1/M5.2 own nothing new (the new scripts are verification tooling, not
   runtime; whale_say/whale_express stay the announcement seams).
+
+## M4.2 deployment for general users
+- Scope: three deployment patterns — P1 same-machine (DEFAULT, zero SSH); P2 cloud via
+  git clone + idempotent install-ubuntu.sh + two systemd units + nginx TLS, with an
+  optional deploy-ubuntu.sh rsync wrapper for SSH operators; P3 optional
+  scripts/ubuntu-tunnel.sh (ssh -N -L pair). Config-only: no runtime file changed
+  (the only JS touched is the ws_probe tooling knob).
+- Shipped: `install-ubuntu.sh` (Ubuntu 24.04; apt deps incl. nodejs and npm only when
+  absent; npm ci; venv + pip; whale-girl.service loopback-only via
+  IPAddressAllow=localhost unless --allow-lan, Restart=on-failure;
+  whale-girl-brain.service WHALE_MODE=live, Restart=always; nginx HTTP -> node :3000
+  (static + /audio) and /ws -> :3001 with proxy_set_header Host $host; ACME webroot
+  /var/www/whale-girl-acme (0755); certbot ACME with a domain or self-signed fallback;
+  the domain remembered in /etc/whale-girl/domain; --check dry-run; the last
+  nginx-accepted site kept as .prev; ufw before certbot; --no-domain/--allow-lan),
+  `ubuntu-tunnel.sh` (port preflight in both modes, ExitOnForwardFailure),
+  `deploy-ubuntu.sh` (home-relative default, %q-quoted domain),
+  ws_probe WS_URL/WS_ORIGIN/WS_EXPECT="reject", README "Deployment for general users"
+  + security notes, dev-environment patterns + decisions #6/#7, tech-stack amendment,
+  AGENTS recipe, and the spec trio.
+- Evidence: automatic half (close re-run 2026-10-23) — ws 30.0 fps x3 (incl. matching
+  Origin), role 1008, origin mismatch 1008, curl 200, inline 41,002 B, cmd_probe 63/63,
+  say_probe 13/13, expr_probe 22/22, local RSS 57,088 / 25,104 KB, ports released; all
+  scripts `bash -n` x3, --check, --dry-run x2. Real Ubuntu host (superguo-SQM2270,
+  24.04.4): the owner ran install-ubuntu.sh; whale-girl + whale-girl-brain + nginx
+  enabled/active; server loopback-only (IPAddressAllow=::1/128 127.0.0.0/8,
+  IPAddressDeny=::/0 0.0.0.0/0); brain Restart=always (NRestarts=1 after a 4001
+  handover); box RSS 31,160 / 26,460 KB; box:3000 200; edge-tts speech end-to-end (two
+  commanded lines, /audio 200); the owner's ssh -L forwards gave localhost:3000 200 +
+  ws 30.2 fps earlier.
+- Review: one persistent reviewer subagent, four rounds, final verdict APPROVE. Blockers
+  fixed: npm missing on stock 24.04 (NodeSource masked it); the ACME webroot unreadable
+  by www-data; the false "no ?ws= needed" docs; the exposed raw ports (loopback-only
+  unit); the literal "@@{pkgs[@]}" apt typo; the 2 s readiness race (now a 20 s poll).
+  ~24 minor doc/edge fixes.
+- Owner decisions 2026-10-23: the <=10-min fresh-VM validation gate is DROPPED (M4.2
+  closes on the automatic half, the real-host systemd run and the owner's page/OBS
+  check); the brain-placement correction (brain on the server host; say audio is
+  page-relative) is accepted at the close. The loopback-only default was the
+  recommended option after the consent question timed out.
+- Commits: fb9fea1 (merge main), 1b65402 (review round 1), 7516e02 (round 1 docs),
+  4e89818 (round 2), eeb6361 (round 3), 06026f2 (round 4 plan), 261b784 (readiness
+  poll), plus the close-bookkeeping commit. Spec trio:
+  specs/features/2026-10-23-m4.2-m42-deployment/.
+- Deferred (recorded; no later milestone owns them): WS auth token and host monitoring
+  (V3 vision); IP-only TLS beyond the self-signed fallback (no plan); hosting the
+  gitignored model asset (documented upload step); the dropped <=10-min fresh-VM gate;
+  the Linux/node-22 RSS variance (recorded).
+- Handoffs: M5.1/M5.2 own nothing new (the notifier runs in the same stack; the
+  deployment scripts are host-level, not runtime).

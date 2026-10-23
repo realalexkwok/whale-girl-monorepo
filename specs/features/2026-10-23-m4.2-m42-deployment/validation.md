@@ -1,8 +1,9 @@
 # M4.2 — Deployment for General Users — Validation
 
-> Status: implementation complete 2026-10-23; review round 1 fixed (4 major + 10 minor —
-> see "Review round 1" below). The manual/gate half (the ≤10-minute fresh-Ubuntu runbook
-> below, plus the P3 tunnel smoke) is the owner's acceptance step.
+> **Status: CLOSED 2026-10-23.** Implementation complete; review rounds 1–4 (final verdict
+> APPROVE); automatic half green (close re-run below). The owner **dropped the ≤10-minute
+> fresh-VM gate** on 2026-10-23 and instructed the close — see the decision note in the
+> criteria section.
 
 ## Success criteria (from the ask round)
 Automatic half (Mac):
@@ -20,6 +21,12 @@ Gate/manual half:
 - Pattern acceptance: P1 = the unchanged dev loop (already green; not re-run); P2 = the gate;
   P3 = tunnel smoke (browser stays at http://localhost:3000; the brain keeps running on the
   box — a Mac driver is the motion-only alternative).
+
+> **Owner decision 2026-10-23 — the ≤10-minute fresh-VM gate is DROPPED.** M4.2 closes on
+> the automatic half, the real-Ubuntu systemd run (units, loopback, speech, tunnel) and the
+> owner's page/OBS check. The gate's remaining unknown (stock-24.04 npm, ACME webroot) is
+> fixed and documented; the runbook below is kept as an optional deployment recipe, not a
+> close gate.
 
 ## Automatic verification results (2026-10-23)
 
@@ -48,11 +55,34 @@ own server and REFUSE a busy port 3000 — stop the stack before running them.
 Runtime code paths untouched (config-only claim): `git status` shows no change to
 server.js, index.html or control_whale.py; the only JS touched is the ws_probe tooling knob.
 
-## The ≤10-minute fresh-Ubuntu gate (first-time-user runbook)
+## Close re-run (2026-10-23)
 
-Run this on a brand-new Ubuntu 24.04 VM. The only tools you need are a web browser and the
-provider's web console (the "Terminal" / "Console" button on the VM page) — no SSH client,
-no port forwarding.
+All checks re-run from the committed tree; the owner's `ssh -L 3000/3001` tunnel was down
+at close time, so the live probes ran against the local stack (the earlier tunnel evidence is
+in the review-round section) and the box was checked over SSH.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Motion probe | `node whale-girl-server/scripts/ws_probe.js` | PASS — 30.0 fps over 2.00 s, 61 frames |
+| Motion probe (WS_URL) | `WS_URL='ws://localhost:3001?role=web' ...` | PASS — 30.0 fps, 61 frames |
+| Role rejection | `node whale-girl-server/scripts/ws_role_probe.js` | PASS — close 1008 |
+| Origin guard (match) | `WS_ORIGIN='http://localhost:3000' ... ws_probe` | PASS — 30.0 fps, 61 frames |
+| Origin guard (mismatch) | `WS_ORIGIN='http://evil.example' WS_EXPECT=reject ...` | PASS — close 1008 |
+| HTTP smoke | `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/` | 200 |
+| Inline frontend | extract lines 59–1048 → `node --check` | PASS — 41,002 B |
+| Scripts | `bash -n` x3; `install-ubuntu.sh --check`; both `--dry-run`s | PASS |
+| M3.1 gate | `node whale-girl-server/scripts/cmd_probe.js` | PASS 63/63 |
+| M2.2 regression | `node whale-girl-server/scripts/say_probe.js` | PASS 13/13 |
+| M3.2 gate | `node whale-girl-server/scripts/expr_probe.js` | PASS 22/22 |
+| Stack RSS (local) | `ps -axo pid,rss,command` | node 57,088 KB; brain 25,104 KB (budgets 60/30 MB) |
+| Box units / RSS | `ssh superguo-SQM2270 ...` | whale-girl + whale-girl-brain + nginx active; node 31,160 KB; brain 26,460 KB; box:3000 **200** |
+| Ports released | `lsof -nP -iTCP:3000 -iTCP:3001 -sTCP:LISTEN` after `stack.sh stop` and after each self-contained probe | free every time |
+
+## Fresh-Ubuntu runbook (optional — the ≤10-minute gate was dropped 2026-10-23)
+
+Use this if you deploy to a cloud VM: it is the supported recipe, not a close gate. The
+only tools you need are a web browser and the provider's web console (the
+"Terminal" / "Console" button on the VM page) — no SSH client, no port forwarding.
 
 1. **Open the provider console** and log into the new VM (the console usually drops you in
    as root or a sudo user).
@@ -251,8 +281,8 @@ the failure message). Verified afterwards: `systemctl show` -> server
 | Pattern | Acceptance | Result |
 | --- | --- | --- |
 | P1 same machine (DEFAULT) | the unchanged dev loop — already verified by the M4.1 close re-run; not re-run here | PASS by prior evidence |
-| P2 cloud server (gate) | partial: the systemd install ran on a real Ubuntu 24.04 host (units enabled, https 200 self-signed, speech verified); the ≤10-min fresh-VM timing + a domain/certbot certificate remain owed | owner: partial |
-| P3 SSH tunnel (optional) | PASS — the owner's `ssh -f -N -L 3000/3001` forwards gave localhost:3000 200 + `ws_probe` PASS 30.2 fps, with the box brain driving it (2026-10-23) | owner: PASS |
+| P2 cloud server | PASS on a real Ubuntu 24.04 host: systemd units enabled/active, loopback-only server, `Restart=always` brain, edge-tts speech verified; the ≤10-min fresh-VM gate was dropped by the owner 2026-10-23 | PASS (closed) |
+| P3 SSH tunnel (optional) | PASS — the owner's `ssh -f -N -L 3000/3001` forwards gave localhost:3000 200 + `ws_probe` PASS 30.2 fps, with the box brain driving it (2026-10-23); the tunnel was down at close time — restart it when needed | PASS |
 
 ## Implementation corrections (owner sign-off owed)
 - **2026-10-23 — brain placement.** The approved plan defaulted the brain to the Mac
@@ -264,6 +294,21 @@ the failure message). Verified afterwards: `systemctl show` -> server
   keeping driver-on-the-Mac supported for dev and motion-only setups. Sign-off is owed at
   the owner's review.
 
+## Manual pass (owner, 2026-10-23)
+Self-contained; what the owner actually did and reported this close:
+1. Installed on the Ubuntu host with `sudo bash scripts/install-ubuntu.sh` (no domain →
+   self-signed); the deployment is live under systemd.
+2. Opened `http://localhost:3000` through their SSH forwards in the Mac browser and in OBS
+   and confirmed the page is visible (2026-10-23).
+3. Verified speech end-to-end at the server level (a `whale_cmd.py say` line was synthesized
+   on the box and `/audio` served 200; a second line was commanded from the Mac through the
+   forwarded WS) — page playback is the M2.2 path verified in the M2.2/M4.1 manual passes.
+4. Instructed the close (2026-10-23), accepting the shipped deployment and the
+   brain-placement correction.
+Not re-run (already green, do not repeat): the M4.1 manual pass (nine steps, 2026-10-23),
+
+the pipeline probes (close re-run above), the systemd unit checks.
+
 ## Handoff to dependant milestones
 - M5.1/M5.2 own nothing new from M4.2 (the notifier runs in the same stack; the deployment
   scripts are host-level, not runtime).
@@ -272,3 +317,8 @@ the failure message). Verified afterwards: `systemctl show` -> server
   Ubuntu host (V3), IP-only TLS beyond the self-signed fallback (no plan), hosting the
   gitignored model asset (documented upload step only).
 - The committed model assets stay out of git by design; the owner keeps the local copy.
+- The ≤10-minute fresh-VM gate was dropped by the owner on 2026-10-23 (recorded above); no
+  later milestone owns it.
+- The Ubuntu host (`superguo-SQM2270`) runs the shipped units from the repo working tree;
+  after future installer changes, re-run `sudo bash scripts/install-ubuntu.sh` there (the
+  owner's sudo step).

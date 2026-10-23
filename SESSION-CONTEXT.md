@@ -14,7 +14,7 @@
 - Branch rules: feature/whale-girl-<item>; close = merge into main → push → delete
   local branch. Agents never git commit / git push without the owner's instruction.
 
-## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20); M2.2 CLOSED (2026-10-21); M3.1 CLOSED (2026-10-22); M3.2 CLOSED (2026-10-22); M4.1 CLOSED (2026-10-23)
+## 2. State — M1 CLOSED (2026-10-19); M2.1 CLOSED (2026-10-20); M2.2 CLOSED (2026-10-21); M3.1 CLOSED (2026-10-22); M3.2 CLOSED (2026-10-22); M4.1 CLOSED (2026-10-23); M4.2 CLOSED (2026-10-23)
 - M1: server (express :3000 + ws proxy :3001), frontend (PixiJS 7.4.3 + cubism4,
   transparent canvas, placeholder fallback), mock driver (30 FPS blink/talk/gaze/sway),
   probes and docs. Evidence: motion probe PASS at 30.0 fps (twice), role rejection
@@ -52,6 +52,19 @@
   PASS 114.8 vs 180; manual pass all nine steps (owner). Review: one reviewer, two
   rounds, final APPROVE. Full detail:
   specs/features/2026-10-22-m4.1-m41-memory-perf/validation.md.
+- M4.2: deployment for general users — three patterns (P1 same-machine default; P2 cloud
+  via git clone + install-ubuntu.sh + two systemd units + nginx TLS; P3 optional
+  ubuntu-tunnel.sh) plus the optional deploy-ubuntu.sh rsync wrapper; config-only (no
+  runtime file changed). install-ubuntu.sh ships whale-girl.service (loopback-only,
+  --allow-lan opt-out) and whale-girl-brain.service (Restart=always), an ACME webroot at
+  /var/www/whale-girl-acme, certbot/self-signed TLS, a remembered domain
+  (/etc/whale-girl/domain), --check and --no-domain. Evidence: close re-run 2026-10-23 —
+  ws 30.0 fps, role 1008, origin match PASS / mismatch 1008, curl 200, inline 41,002 B,
+  cmd 63/63, say 13/13, expr 22/22, RSS 57,088 / 25,104 KB; real Ubuntu host
+  (superguo-SQM2270) units active, server loopback-only, speech end-to-end, box:3000 200.
+  Review: one reviewer, four rounds, final APPROVE. The <=10-min fresh-VM gate was
+  DROPPED by the owner 2026-10-23. Full detail:
+  specs/features/2026-10-23-m4.2-m42-deployment/validation.md.
 - M3.1: DSH command surface — v1 frames (motion/expression/say/pose/mode) relayed
   as {"relay":...} to the driver, which executes say/pose/mode and forwards
   motion/expression; whale_cmd.py (motion|say|pose|mode) is the DSH tool; the
@@ -119,17 +132,12 @@
     Design drafts: docs/drafts/ai-agent-notifier/.
 
 ## 4. In-flight / next
-- **M4.2 IN FLIGHT** (branch feature/whale-girl-m42-deployment, 2026-10-23): deployment
-  for general users — scripts/install-ubuntu.sh (idempotent; ships the whale-girl server
-  and whale-girl-brain units, nginx TLS, certbot ACME or self-signed),
-  scripts/ubuntu-tunnel.sh (optional ssh -N -L), scripts/deploy-ubuntu.sh (optional
-  rsync); README "Deployment for general users"; ws_probe WS_URL knob. Automatic half
-  GREEN (2026-10-23): bash -n, --check, --dry-run x2, ws 30.0 fps, role 1008, cmd 63/63,
-  say 13/13, expr 22/22, curl 200, RSS 50,256 / 16,656 KB. Spec trio:
-  specs/features/2026-10-23-m4.2-m42-deployment/. Owner owes the manual half: the
-  <=10-min fresh-Ubuntu VM gate + the P3 tunnel smoke (validation.md). Implementation
-  correction flagged for sign-off: the brain runs on the box in the split (say audio is
-  page-relative), not on the Mac as the plan first said.
+- NOTHING is in flight. M4.2 is fully closed (2026-10-23): merged into main and pushed;
+  its feature branch was deleted. The <=10-min fresh-VM gate was DROPPED by the owner
+  (decision 2026-10-23); M4.2 closed on the automatic half, the real-Ubuntu systemd run
+  (superguo-SQM2270: units active, loopback-only server, Restart=always brain, speech
+  end-to-end) and the owner's page/OBS check. NEXT: M5.1 (notifier session integration)
+  via /spec-plan M5.1.
 - M4.1 is fully closed (2026-10-23): merged into main and pushed; its local feature
   branch was deleted.
 - M3.2 is fully closed (2026-10-22): merged into main and pushed; its local
@@ -143,7 +151,9 @@
 - Node v25.2.0, npm 10.5.2; whale-girl-server/node_modules installed.
 - Python 3.9.10; whale-girl-server/.venv with websockets 15.0.1 (newest supporting
   3.9; 16.0 needs 3.10+, 17.x needs 3.11+).
-- Ports 3000/3001 free at last check (the close left the stack stopped); env
+- Ports 3000/3001 free on the Mac at the close (the stack was stopped; the owner's
+  ssh -L tunnel was down — restart it for the live view); the Ubuntu box serves
+  3000/3001 + nginx 80/443. Env
   knobs PORT, WS_PORT, WHALE_WS, WHALE_MODE, WHALE_CMD_WS,
   WHALE_MODEL_MANIFEST, WHALE_EXPR_TAGS/WHALE_EXPR_COOLDOWN/WHALE_EXPR_IDLE
   (M3.2; WHALE_EXPR_TAGS must be set for both the driver and the CLI).
@@ -152,6 +162,13 @@
   obs_toggle, obs_fake, perf_probe and stack (M4.1); install-ubuntu, ubuntu-tunnel,
   deploy-ubuntu (M4.2); whale_cmd.py (DSH motion/say/pose/mode/express), expr_tags.py
   (tag -> preset table) and tts_synth.py (edge-tts helper).
+- M4.2 deployment on the Ubuntu host superguo-SQM2270 (24.04.4 LTS, node v22.23.4,
+  python3 3.12.3): repo at /home/superguo/Projects/whale-girl-monorepo/ (git checkout of
+  main); systemd whale-girl (loopback-only: IPAddressAllow=::1/128 127.0.0.0/8,
+  IPAddressDeny=::/0 0.0.0.0/0) + whale-girl-brain (WHALE_MODE=live, Restart=always) +
+  nginx (self-signed TLS at /etc/ssl/whale-girl/). The owner reaches it through
+  ssh -f -N -L 3000/3001 forwards when running; re-run sudo bash scripts/install-ubuntu.sh
+  after installer changes (needs the owner's sudo).
 - CDN URLs pinned in tech-stack.md, all verified 200 on 2026-10-19.
 - Live2D asset installed at whale-girl-frontend/model/ (4.3 MB, gitignored;
   DS鲸鱼娘, moc3 v4); gate it with node scripts/validate_model.js.
@@ -177,10 +194,12 @@
 ## 7. Git state
 - Remote: origin = git@github.com:realalexkwok/whale-girl-monorepo.git; main tracks
   origin/main.
-- main carries M1, M2.1, M2.2, M3.1, M3.2 and M4.1. The M4.1 series:
-  ac4834f (implementation), 13ab13e (review round 1), 0bfa4a5 (round 2), 4d4c53a
-  (close-out) and the close-bookkeeping commit. The ff merge fast-forwarded main and
-  the push published it; the local feature/whale-girl-m41-memory-perf branch was
-  deleted; working tree clean; on main. The earlier M3.1 (main at 499d75f), M2.2
-  (6261a9c) and M3.2 (0326545) histories are preserved in
-  specs/history_roadmap.md.
+- main carries M1, M2.1, M2.2, M3.1, M3.2, M4.1 and M4.2. The M4.2 series: fb9fea1
+  (merge main), 1b65402 (review round 1), 7516e02 (round 1 docs), 4e89818 (round 2),
+  eeb6361 (round 3), 06026f2 (round 4 plan), 261b784 (readiness poll) and the
+  close-bookkeeping commit. The close ff-merged the feature branch into main, pushed it
+  and deleted the local feature/whale-girl-m42-deployment branch; working tree clean; on
+  main. The Ubuntu host's checkout follows main (it pulled to the close commit; its local
+  feature branch was deleted at the close). The earlier M4.1
+  (ac4834f/13ab13e/0bfa4a5/4d4c53a), M3.1 (main at 499d75f), M2.2 (6261a9c) and M3.2
+  (0326545) histories are preserved in specs/history_roadmap.md.

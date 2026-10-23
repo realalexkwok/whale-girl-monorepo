@@ -1,6 +1,6 @@
 # Whale Girl — Roadmap
 
-> **Status: M1 complete (2026-10-19); M2.1 closed (2026-10-20); M2.2 closed (2026-10-21); M3.1 closed (2026-10-22); M3.2 closed (2026-10-22).** V1 (M1–M5) is the
+> **Status: M1 complete (2026-10-19); M2.1 closed (2026-10-20); M2.2 closed (2026-10-21); M3.1 closed (2026-10-22); M3.2 closed (2026-10-22); M4.1 closed (2026-10-23); M4.2 closed (2026-10-23).** V1 (M1–M5) is the
 > commitment; V2/V3 are directional vision. Order is strict — execute items
 > top-to-bottom; no skipping or reordering without owner approval. One branch per item
 > (or small item group). Completed-item detail lives in
@@ -58,16 +58,17 @@
       sizing, reconnect hardening, CPU/GPU profile on target streaming hardware
       (absorbs the pre-replan M2.5) — closed 2026-10-23;
       [detail](history_roadmap.md#m41-memoryasset-optimization-and-the-obs-memory-gate)
-- [ ] M4.2 deployment for general users (2026-10-20 amendment, owner 1a/2a/3a):
+- [x] M4.2 deployment for general users (2026-10-20 amendment, owner 1a/2a/3a):
       pattern 1 same-machine — the dev loop as-is, zero SSH (DEFAULT for normal
       users); pattern 2 cloud server — git pull + install-ubuntu.sh + systemd +
       nginx TLS snippet (manual steps via the provider's web console; optional
       deploy-ubuntu.sh wrapper for operators who already use SSH); pattern 3 SSH port
       forwarding — OPTIONAL advanced mode (scripts/ubuntu-tunnel.sh). Frontend ?ws=
-      override — config only, no code rewrite
-- [ ] M4.2 validation gate: a fresh Ubuntu VM reaches the streaming state in ≤10 min
-      following only the README and the shipped scripts — no SSH or port-forwarding
-      knowledge required
+      override — config only, no code rewrite — closed 2026-10-23;
+      [detail](history_roadmap.md#m42-deployment-for-general-users)
+- [x] M4.2 validation gate (≤10 min fresh VM) — DROPPED by owner decision 2026-10-23:
+      M4.2 closed on the automatic half, the real-Ubuntu systemd run and the owner's
+      page/OBS check; [detail](history_roadmap.md#m42-deployment-for-general-users)
 
 ### M5 — AI agent progress notifier (DSH-first; drafts: ../docs/drafts/ai-agent-notifier/)
 - [ ] M5.1 session integration: per-session MCP attach/detach + session naming +
