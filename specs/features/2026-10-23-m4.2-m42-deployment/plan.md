@@ -110,7 +110,7 @@
   box and the docs make that the default. The Mac placement stays documented for dev and
   motion-only setups. Owner sign-off is owed at review.
 
-## Review rounds 1–3 fixes (2026-10-23)
+## Review rounds 1–4 fixes (2026-10-23)
 - MAJOR 1: apt installs npm (+ preflight and --check).
 - MAJOR 2: ACME webroot /var/www/whale-girl-acme (0755) instead of the repo path.
 - MAJOR 3: README/validation now state that ?ws=wss://<domain>/ws is REQUIRED (the frontend
@@ -148,6 +148,13 @@
 - `--no-domain` forgets the domain right after the root check (install mode only), so an
   earlier phase failure cannot leave it remembered.
 - Usage and the final update line no longer claim a remembered domain when there is none.
+
+### Round 4
+- APPROVE. The only note was plan ordering/notes (fixed: ufw step reordered, flags named).
+- Real run (18:22): the systemd readiness check polled once after `sleep 2` and sampled the
+  ~2 s window in which a leftover manual brain displaced the unit's brain (4001, clean
+  exit) before `Restart=always` brought it back; the check now polls both units for up to
+  20 s.
 
 ## Constraints
 - No new runtime dependencies; no per-frame work; budgets unchanged (server ≤ 60 MB,

@@ -165,9 +165,10 @@ Deployed by the agent over SSH (rsync + remote commands); the owner then ran
   and a domain/certbot certificate (no domain was given; the self-signed fallback ran).
 - 2026-10-23 ~17:14: a stray newer python writer connected as role=python through the WS,
   displaced the systemd brain (close 4001) and the unit stayed dead — `Restart=on-failure`
-  does not revive a clean exit. Fixed to `Restart=always` (review round 1). Until the fixed
-  installer is re-run on the box, a temporary user-level brain keeps the page animated
-  (`nohup .venv/bin/python control_whale.py`, WHALE_MODE=live).
+  does not revive a clean exit. Fixed to `Restart=always` (review round 1). A temporary
+  user-level brain kept the page animated until the fixed installer was re-run.
+  Resolved 18:22: the fixed units were installed; the unit brain now owns the connection
+  and the temporary brain exited on 4001.
 
 ## Review round 1 (2026-10-23, independent reviewer)
 Verdict: FIX REQUIRED (4 major, 10 minor); all fixed in the follow-up commit.
@@ -225,6 +226,19 @@ Re-checks after round 2 (2026-10-23):
   (`0 upgraded, 0 newly installed ...`); `apt-get install -s npm` alone is unsatisfiable
   (`node-ms: Depends: nodejs:any` -> "Unable to correct problems") — the guard is required.
 - Still owed: a full re-run of the fixed installer on the box (sudo) and the domain gate.
+
+## Real-run finding (2026-10-23 18:22, superguo-SQM2270)
+The owner re-ran the fixed installer. `step_systemd`'s fixed `sleep 2` readiness sample
+reported "whale-girl-brain did not start" — but the deployment was fine: the unit's brain
+started and connected at 18:22:22, the leftover manual driver (from the earlier session)
+reconnected as the newest writer and displaced it at 18:22:23 ("replaced by a newer
+instance"), the unit exited 0, `Restart=always` restarted it at 18:22:25, it displaced the
+manual driver, and it has run at 30–31 fps since. The check happened to sample the ~2 s gap.
+Fix: `step_systemd` now polls both units for up to 20 s (and names the displacement cause in
+the failure message). Verified afterwards: `systemctl show` -> server
+`IPAddressAllow=::1/128 127.0.0.0/8`, `IPAddressDeny=::/0 0.0.0.0/0` (loopback-only),
+`Restart=on-failure`; brain `Restart=always`, `NRestarts=1`; `localhost:3000` **200** and
+`ws_probe` **PASS 30.2 fps** through the owner's tunnel.
 
 ## Already verified, do NOT re-run
 | Item | Evidence |

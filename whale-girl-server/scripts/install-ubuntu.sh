@@ -398,10 +398,19 @@ step_systemd() {
   systemctl enable whale-girl whale-girl-brain
   systemctl restart whale-girl
   systemctl restart whale-girl-brain
-  sleep 2
+  # Readiness is a poll, not a single sleep: a leftover manual brain can connect
+  # first and displace the unit's brain (4001 -> clean exit); Restart=always brings
+  # it back within a couple of seconds, and the unit then owns the connection.
+  local i
+  for i in $(seq 1 20); do
+    if systemctl is-active --quiet whale-girl && systemctl is-active --quiet whale-girl-brain; then
+      say "step 4/6 done: both units active"
+      return 0
+    fi
+    sleep 1
+  done
   systemctl is-active --quiet whale-girl || die "whale-girl did not start — run: journalctl -u whale-girl -n 50 --no-pager"
-  systemctl is-active --quiet whale-girl-brain || die "whale-girl-brain did not start — run: journalctl -u whale-girl-brain -n 50 --no-pager"
-  say "step 4/6 done: both units active"
+  die "whale-girl-brain did not start within 20 s (a second manual driver can displace it; the unit retries) — run: journalctl -u whale-girl-brain -n 50 --no-pager"
 }
 
 # Render + install the site, test it BEFORE touching the running service, and
