@@ -86,8 +86,8 @@
 
 ## Memory discipline
 - Budgets unchanged: server ≤ 60 MB / driver ≤ 30 MB steady state; OBS gate
-  < 100 MB (target ≤ 90 MB); no new dependencies; no per-frame allocations or
-  logging; the whalePerf hook is allocation-free and gated behind ?debug=1.
+  < 180 MB steady state (amended 2026-10-22; originally 100/90); no new
+  dependencies; no per-frame allocations or logging; verification tooling only.
 
 ## Stop point
 Implementation begins only after the owner switches the session model to V4-Flash

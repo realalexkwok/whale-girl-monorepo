@@ -53,8 +53,18 @@ function req(requestType, requestData) {
   });
 }
 
+let identified = false;
 ws = new WebSocket('ws://127.0.0.1:' + PORT, { handshakeTimeout: 5000 });
 ws.on('error', (err) => fail('websocket error: ' + err.message + ' — is OBS running with the WebSocket server enabled?'));
+// A close BEFORE identification means the handshake failed (e.g. 4009 = wrong
+// password). Without this handler node would exit 0 and the caller would believe
+// the source was toggled.
+ws.on('close', (code, reason) => {
+  if (identified) return;
+  const why = reason ? String(reason) : '';
+  fail('connection closed before identification (code ' + code + (why ? ', ' + why : '') + ')' +
+    (code === 4009 ? ' — check the password in OBS Tools → WebSocket Server Settings' : ''));
+});
 ws.on('message', (raw) => {
   let msg;
   try { msg = JSON.parse(raw); } catch (err) { return; }
@@ -69,6 +79,7 @@ ws.on('message', (raw) => {
     return;
   }
   if (msg.op === 2) { // Identified
+    identified = true;
     run().then(() => process.exit(0), (err) => fail(err.message));
     return;
   }
@@ -85,12 +96,29 @@ ws.on('message', (raw) => {
   }
 });
 
+function failNotFound(message) {
+  console.error('[obs] ' + message);
+  process.exit(3); // header contract: 3 = scene/item not found
+}
+
 async function findItem() {
   const list = await req('GetSceneList');
   const scenes = (list.scenes || []).map((s) => s.sceneName);
-  const scene = SCENE && scenes.indexOf(SCENE) >= 0 ? SCENE : list.currentProgramSceneName;
+  let scene = list.currentProgramSceneName;
+  if (SCENE) {
+    if (scenes.indexOf(SCENE) < 0) {
+      failNotFound('scene "' + SCENE + '" not found (available: ' + (scenes.join(', ') || 'none') + ')');
+    }
+    scene = SCENE;
+  }
   const items = (await req('GetSceneItemList', { sceneName: scene })).sceneItems || [];
-  const item = items.find((i) => i.sourceName === SOURCE) || items[0];
+  // NEVER fall back to another item: hiding the wrong source in a live scene is
+  // exactly the kind of silent mistake this helper must refuse to make.
+  const item = items.find((i) => i.sourceName === SOURCE);
+  if (!item) {
+    failNotFound('source "' + SOURCE + '" not found in scene "' + scene + '" (items: ' +
+      (items.map((i) => i.sourceName).join(', ') || 'none') + ')');
+  }
   return { scene, scenes, items, item };
 }
 

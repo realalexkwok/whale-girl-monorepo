@@ -235,4 +235,4 @@ See specs/dev-environment.md for the full protocol, prerequisites and gotchas.
 - [x] M1 骨架与静音渲染: repo skeleton, WS proxy, mock driver, Live2D frontend + placeholder — closed 2026-10-19
 - [x] M2 模型与口型同步: real model drop-in + TTS-driven lip sync (explicit words → speech → mouth animates to the words) — M2.1 closed 2026-10-20, M2.2 closed 2026-10-21
 - [x] M3 DSH 互动大脑: M3.1 command surface (motion/say/pose/mode/expression, mock behind a flag) — closed 2026-10-22; M3.2 LLM-driven expressions — closed 2026-10-22
-- [ ] M4 内存压榨与部署: <100MB OBS extra memory + deployment patterns (same-machine / cloud scripts / optional SSH tunnel)
+- [ ] M4 内存压榨与部署: <180MB steady-state OBS extra memory (gate amended 2026-10-22; originally <100MB) + deployment patterns (same-machine / cloud scripts / optional SSH tunnel)

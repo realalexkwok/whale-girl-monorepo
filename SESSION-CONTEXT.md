@@ -86,7 +86,8 @@
    specified words are synthesized (edge-tts primary, macOS say fallback) and played
    in the browser via Web Audio; the mouth animates to the words (word-level
    envelope + amplitude fallback). Loopback capture retired.
-8. M4.1 hard gate: OBS browser-source extra memory < 100 MB on the Mac.
+8. M4.1 hard gate: OBS browser-source steady-state extra memory < 180 MB on the Mac
+   (amended 2026-10-22 after the measured baseline; originally < 100 MB).
 9. M4.2 deployment (amended 2026-10-20, owner 1a/2a/3a): same-machine localhost is
    the DEFAULT for normal users; cloud deploys use git pull + install-ubuntu.sh +
    systemd (no SSH knowledge); SSH port forwarding is an OPTIONAL advanced mode.

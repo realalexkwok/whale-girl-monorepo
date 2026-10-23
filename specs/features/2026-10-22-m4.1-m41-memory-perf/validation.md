@@ -28,9 +28,9 @@ both phases are compared as well (the tech-stack steady-state principle).
   KB; B: GPU 10,240 KB + utilities 6,720/5,600/11,536 KB = 34,096 KB. The page
   renderer alone is ~94 MB — a Chromium page cannot bring the TOTAL CEF delta under
   100 MB.
-- Verdict against the gate as written (< 100 MB): **FAIL** — an owner decision is
-  pending (amend the gate / keep it with an exemption / redefine the metric /
-  measure the structural floor first).
+- Verdict against the gate as written (< 100 MB): **FAIL** — the owner amended the
+  gate to < 180 MB steady state on 2026-10-22 (tech-stack.md); the final soak below
+  scores PASS against the amended gate.
 
 Measurement gotchas found and handled:
 - The owner's browser source had "Shutdown source when not visible" OFF: hiding it
@@ -121,7 +121,8 @@ the owner.
    `stack.sh: UP — server :3000, brain pid …`. The stack starts **silent** (live
    mode: idle motion only) — the canned rehearsal lines appear only with
    `WHALE_MODE=mock bash scripts/stack.sh start`. Check with `bash scripts/stack.sh
-   status`: both halves listed, the brain with its RSS.
+   status`: both halves listed, the brain with its RSS. (Review round 1 fixed a
+   WHALE_MODE export bug that made the supervised driver fall back to mock.)
 2. Browser check — open http://localhost:3000/?debug=1: the whale girl appears on a
    transparent background, the status line shows `ws connected` and a rising frame
    number, the console has no errors.
@@ -209,11 +210,31 @@ the owner.
   not mask the speech mouth; say_probe injects Ketchup during every say as a
   permanent guard (13 checks, both engine passes).
 
+## Review rounds
+
+### Round 1 (2026-10-23) — two major findings, fixed
+1. **MAJOR — `stack.sh` never exported `WHALE_MODE`**: the supervisor re-launches
+   itself and the driver child inherited no mode, so `control_whale.py` fell back to
+   MOCK — the "silent by default" promise was false (verified by the reviewer:
+   `stack.sh start` logged `mode: mock`). Fix: `export WHALE_MODE="$STATE"`;
+   verified `mode: live` with no env and `mode: mock` with `WHALE_MODE=mock`.
+2. **MAJOR (safety) — `obs_toggle.js` fell back to `items[0]`** when the named
+   source was missing: it hid the wrong source in the scene and exited 0. It also
+   exited 0 when the websocket closed before identification (e.g. 4009 = wrong
+   password). Fix: strict scene/source matching (exit 3, never a fallback), a
+   close-before-identify handler (exit 2 with the code), and a fake obs-websocket
+   test suite — missing source → exit 3 + 0 toggles; present source → exit 0 + 1
+   toggle; auth failure → exit 2.
+Also in round 1 (self-audit): stale `< 100 MB` references updated (roadmap item +
+replan note, SESSION-CONTEXT decision 8, README milestone line, plan memory
+discipline, mem_probe header, spec-perf skill note); `stack.sh` now records its
+ports (`run/ports`) so `status`/`stop` target the running instance.
+
 ## Handoff to dependant milestones
 - M4.2 owns: nothing new — the deployment surface is unchanged (config only). The
   memory gate protocol itself is documentation, not a deployment dependency.
 - M5.1/M5.2 own: nothing new — the new scripts (mem_probe/traffic_mix/obs_toggle/
   perf_probe) are verification tooling, not runtime; `whale_say`/`whale_express`
   stay the announcement seams.
-- Owner action: the manual pass above is owed at the close (2026-10-22 or later);
-  the roadmap tick + history archive happen in /spec-close.
+- The owner's manual pass is COMPLETE (2026-10-23, all nine steps passed — see the
+  owner record above); the roadmap tick + history archive happen in /spec-close.

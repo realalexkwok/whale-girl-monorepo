@@ -9,7 +9,8 @@
 #             checked, or the source deleted from the scene)
 #
 # Each phase samples ps every --interval seconds and writes a CSV under
-# whale-girl-server/logs/ (gitignored). --compare scores the <100 MB gate and the
+# whale-girl-server/logs/ (gitignored). --compare scores the configured gate
+# (default < 180 MB — tech-stack amendment 2026-10-22) and the
 # stability rule (slope ≤ +0.1 MB/min over the phase, ≤ 5 MB first/last-window
 # drift), so a leaking page fails even when its absolute RSS is small.
 #

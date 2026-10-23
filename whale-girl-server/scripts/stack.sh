@@ -32,8 +32,22 @@ WS_URL="${WHALE_WS:-ws://localhost:$WS_PORT?role=python}"
 CMD_URL="${WHALE_CMD_WS:-ws://localhost:$WS_PORT?role=web}"
 export PORT WS_PORT WHALE_WS="$WS_URL" WHALE_CMD_WS="$CMD_URL"
 STATE="${WHALE_MODE:-live}"   # silent by default; WHALE_MODE=mock re-enables the rehearsal
+# Export it: the supervisor re-launches itself, and control_whale.py defaults to
+# MOCK when WHALE_MODE is absent — without this the "silent by default" promise
+# is false and the whale starts rehearsing canned lines.
+export WHALE_MODE="$STATE"
 
 mkdir -p "$RUN_DIR"
+PORTS_FILE="$RUN_DIR/ports"
+
+# A RUNNING stack's ports are authoritative for status/stop (it may have been
+# started with PORT/WS_PORT overrides); start/supervise keep the caller's env.
+if [ -f "$PORTS_FILE" ] && [ "${1:-}" != "start" ] && [ "${1:-}" != "supervise" ]; then
+  read -r PORT WS_PORT < "$PORTS_FILE" || true
+  WS_URL="ws://localhost:$WS_PORT?role=python"
+  CMD_URL="ws://localhost:$WS_PORT?role=web"
+  export PORT WS_PORT WHALE_WS="$WS_URL" WHALE_CMD_WS="$CMD_URL"
+fi
 
 port_busy() {
   lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
@@ -106,6 +120,7 @@ case "${1:-}" in
     : > "$LOG_FILE"
     nohup bash "$0" supervise >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
+    printf '%s %s\n' "$PORT" "$WS_PORT" > "$PORTS_FILE"
     echo "stack.sh: starting server :$PORT + driver (mode $STATE); log $LOG_FILE"
     for _ in $(seq 1 40); do
       curl -s -o /dev/null "http://localhost:$PORT/" && break
@@ -130,7 +145,7 @@ case "${1:-}" in
       if port_busy "$PORT" || port_busy "$WS_PORT"; then
         echo "  ports still in use — those processes were started elsewhere (Ctrl+C their terminals)" >&2
       fi
-      rm -f "$PID_FILE"
+      rm -f "$PID_FILE" "$PORTS_FILE"
       exit 1
     fi
     pid="$(cat "$PID_FILE")"
@@ -140,7 +155,7 @@ case "${1:-}" in
       sleep 0.5
     done
     kill -KILL "$pid" 2>/dev/null
-    rm -f "$PID_FILE"
+    rm -f "$PID_FILE" "$PORTS_FILE" "$SERVER_PID_FILE" "$DRIVER_PID_FILE"
     for _ in $(seq 1 20); do
       port_busy "$PORT" || port_busy "$WS_PORT" || break
       sleep 0.5

@@ -5,9 +5,14 @@ description: Plan the Whale Girl M4.1 memory/performance hardening item — defi
 
 # Spec-Driven Memory/Perf Planning (Whale Girl, M4.1)
 
-This skill ACCELERATES /spec-plan for M4.1: the <100 MB OBS extra-memory hard
-gate, scene sizing, reconnect hardening, and the CPU/GPU profile on the target
-Mac. (M4.1 involves no DSH commands — the DSH note does not apply here.)
+This skill ACCELERATES /spec-plan for M4.1: the OBS extra-memory hard gate, scene
+sizing, reconnect hardening, and the CPU/GPU profile on the target Mac. (M4.1
+involves no DSH commands — the DSH note does not apply here.)
+
+> AMENDMENT (2026-10-22, measured): the gate is **< 180 MB steady state**, not
+> < 100 MB — the baseline measured 163.5 MB (cold OBS) and the final tree 114.8 MB;
+> the page renderer alone is ~94 MB, so the original figure could not pass. See
+> specs/tech-stack.md. Everything below still applies, with 180 substituted for 100.
 
 ## 1. Read first
 - specs/roadmap.md (M4.1 line), specs/tech-stack.md (budgets: server ≤ 60 MB,

@@ -31,7 +31,8 @@
 > The roadmap was restructured by merging the advisor's milestone plan (minus the
 > danmaku milestone, explicitly rejected) with this repo's item-level discipline:
 > M2 = 模型与口型同步 (model + TTS lip sync), M3 = DSH 互动大脑 (replaces danmaku),
-> M4 = 内存压榨与部署 (<100MB OBS gate + SSH tunnel). Remapping from the pre-replan
+> M4 = 内存压榨与部署 (OBS gate: <180 MB steady state after the 2026-10-22
+> owner amendment, originally <100MB + SSH tunnel). Remapping from the pre-replan
 > draft: old M2.3 → M3.1, old M2.4 → M4.2, old M2.5 → M4.1, the V2 "LLM-driven
 > expressions" line → M3.2. Pre-replan draft IDs are retired and never reused.
 >
@@ -51,9 +52,11 @@
       V2 vision list at the 2026-10-20 replan) — closed 2026-10-22; [detail](history_roadmap.md#m32-llm-driven-expressions)
 
 ### M4 — 内存压榨与部署 (memory squeeze + deployment)
-- [ ] M4.1 memory/asset optimization: browser-source extra memory < 100 MB on the Mac
-      (hard gate, re-measured after every change), scene sizing, reconnect hardening,
-      CPU/GPU profile on target streaming hardware (absorbs the pre-replan M2.5)
+- [ ] M4.1 memory/asset optimization: browser-source steady-state extra memory
+      < 180 MB on the Mac (hard gate, amended by the owner 2026-10-22 after the
+      measured baseline; originally < 100 MB; re-measured after every change), scene
+      sizing, reconnect hardening, CPU/GPU profile on target streaming hardware
+      (absorbs the pre-replan M2.5)
 - [ ] M4.2 deployment for general users (2026-10-20 amendment, owner 1a/2a/3a):
       pattern 1 same-machine — the dev loop as-is, zero SSH (DEFAULT for normal
       users); pattern 2 cloud server — git pull + install-ubuntu.sh + systemd +
