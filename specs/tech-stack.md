@@ -128,6 +128,18 @@
   treated as one host; DNS rebinding and non-browser clients that omit Origin are
   not covered, and auth remains V3 work). Non-browser clients (CLI/probes) are
   unaffected.
+- Motion leftovers (M4.1 fix, 2026-10-23): a commanded motion animates its own
+  parameter tracks (e.g. the BubbleGum bubble props `chuipaopao*`) and the last
+  values used to stay until a page refresh. When a COMMANDED motion finishes, the
+  frontend now restores every parameter the driver does not drive to its default
+  (driver-owned parameters are untouched; one reset per motion end, no per-frame
+  cost).
+- Mouth priority: a live say owns the mouth. Verified 2026-10-22 (M4.1): the
+  model declares ParamMouthOpenY as its LipSync group, so a motion that lists it
+  (Hammer/Selfie/Ketchup) does not mask the speech mouth while a line plays —
+  say_probe injects Ketchup (the largest mouth curve) during a say as a permanent
+  regression guard. The BubbleGum motion's bubble prop covers the mouth for its
+  5 s — that is a visual prop, not a sync failure.
 - Driver semantics: WHALE_MODE=mock|live (default mock). Live pauses the mock
   talk bursts + canned phrases and zeroes the mock mouth; idle blink/gaze/sway
   continue; a mode flip clears the pose overlay and the frontend resets poses.
@@ -190,6 +202,16 @@
   baselines are: (1) same-machine localhost (default), (2) cloud server via git pull
   + install-ubuntu.sh + systemd + nginx TLS (no SSH knowledge needed); direct TCP
   remains a documented option.
+- 2026-10-22 (M4.1, owner decision after the measured baseline): the extra-memory
+  gate is AMENDED to **< 180 MB steady state** on the Mac (it supersedes the
+  2026-10-20 "< 100 MB" line for the extra-memory gate). Measured as the ps RSS
+  delta of OBS's CEF helper processes between Phase A (source visible + scripted
+  traffic) and Phase B (source hidden with "Shutdown source when not visible", page
+  unloaded), read over the last 10 minutes of each 30-min soak. Amendment basis:
+  163.5 MB (197.2 − 33.7; full-phase delta 191.0 MB) — the page renderer alone is
+  ~94 MB and Chromium's renderer/GPU baseline is structural (page-level levers
+  measured memory-neutral). The stability rule (no monotonic growth over the soak)
+  is the leak gate and is unchanged; the server/driver budgets are unchanged.
 - 2026-10-22 (M3.1 review rounds; recorded here for the owner's confirmation at
   the close): the server/driver RSS budgets are steady-state budgets — the
   ~60 MB server boot transient decays within a minute and is not part of the

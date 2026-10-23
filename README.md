@@ -24,6 +24,23 @@ the tree. Reference layout: the byterra-monorepo.
 
 ## Quick start (macOS, dev)
 
+One command (recommended) — starts the server AND the driver, keeps both alive:
+
+    cd whale-girl-server
+    bash scripts/stack.sh start     # status | stop | logs also work
+
+The whale needs TWO programs: the **server** (`npm start` — it only forwards
+messages) and the **brain** (`control_whale.py` — the Python program that computes
+the eyes/mouth/head 30 times per second and decides when she breathes and speaks;
+older docs call it the "driver"). Without the brain the page freezes on its last
+frame and commands are refused with "the server has no brain connected" — that is
+the safety working, not a bug. `stack.sh` supervises both and restarts either half
+if it exits. In the default mock mode the brain rehearses canned Chinese lines by
+itself (that is intentional); `WHALE_MODE=live bash scripts/stack.sh start` keeps
+her silent unless a command tells her to speak.
+
+Manual two-terminal path:
+
 Terminal 1 — server:
 
     cd whale-girl-server
@@ -95,6 +112,22 @@ neutral after the idle window. Motion names are validated
 against the model manifest, so a typo prints the available groups. ?debug=1
 shows the mode and the last motion/expression/mode command (the pose overlay is
 driver-side and not shown; during a say the line shows the current word).
+
+## Memory gate (M4.1)
+
+The OBS Browser source has a hard steady-state extra-memory gate: **< 180 MB**
+(owner amendment 2026-10-22; measured 163.5 MB — the original < 100 MB figure was
+set before the measurement). It is measured as the ps RSS delta of OBS's CEF helper
+processes between the source visible + scripted traffic and the source hidden and
+unloaded, read over the last 10 minutes of each 30-minute phase, with a
+no-monotonic-growth rule so a leak fails even under the threshold. Tools:
+
+    whale-girl-server/scripts/mem_probe.sh    # phase sampler + --compare --steady
+    whale-girl-server/scripts/traffic_mix.sh  # scripted say/motion/expression traffic
+    whale-girl-server/scripts/obs_toggle.js   # obs-websocket source toggle
+    whale-girl-server/scripts/perf_probe.js   # fps / frame-time / heap / RSS profile
+
+See specs/dev-environment.md for the full protocol, prerequisites and gotchas.
 
 ## Wire protocol (v0 + v1 commands)
 

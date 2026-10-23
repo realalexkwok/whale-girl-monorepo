@@ -3,7 +3,31 @@
 > Owner-approved record (2026-10-19, M1 session). The dev loop below is live and
 > verified. The Ubuntu split (M4.2) consumes the "split checklist" at the end.
 
-## The dev loop (verified at M1.5)
+## Who runs what (the three roles)
+
+| Role | What it is | Runs where (today) | How it starts |
+| --- | --- | --- | --- |
+| **server** | `server.js` — serves the page + relays frames/commands | Mac (same machine) | `npm start` (or `stack.sh start`) |
+| **brain** | `control_whale.py` — computes the face 30×/s, TTS, commands | Mac (same machine) | `stack.sh start` (supervised) |
+| **client** | the whale PAGE (PixiJS + Live2D) | a browser or the OBS Browser source | nothing to launch — open http://localhost:3000 (OBS: Browser source with that URL) |
+
+The client side runs **no script and no executable**: it is a URL. The page is
+downloaded from the server, renders with the browser's GPU, and connects back over
+WebSocket to `ws://localhost:3001?role=web`. The server and the brain are two
+programs on the SAME machine today (the "same-machine" pattern, the M4.2 default);
+the split deployment only moves the server + brain to Ubuntu and points the page's
+`?ws=` at it — the page itself never changes.
+
+## The dev loop (verified at M1.5; one-command path added 2026-10-22)
+
+- One-command (recommended): `bash scripts/stack.sh start` — starts the server AND
+  the brain (`control_whale.py`, historically called the "driver"), keeps them alive
+  (auto-restart), prints both pids; `stack.sh status | stop | logs`. The brain is a
+  SEPARATE program: without it the page freezes on its last frame and commands are
+  refused with "the server has no brain connected" (by design — the CLI refuses
+  rather than pretending). Mock mode makes the brain rehearse canned lines by itself;
+  `WHALE_MODE=live bash scripts/stack.sh start` keeps her silent unless commanded.
+- Manual two-terminal path:
 - Terminal 1 — server:
 
       cd whale-girl-server && npm install && npm start
@@ -130,6 +154,39 @@
       cd whale-girl-server
       node scripts/cmd_probe.js     # every frame type + malformed safety (prints its count)
       node scripts/expr_probe.js    # M3.2 per-tag expression routing
+
+## Memory gate (M4.1 — OBS browser source)
+
+- Definition: steady-state EXTRA memory = the ps RSS sum of OBS's CEF helpers
+  ("OBS Helper …", Renderer/GPU/utility) with the whale Browser source VISIBLE and
+  scripted traffic, minus the same processes with the source HIDDEN and unloaded.
+  Read over the last 10 min of each 30-min phase (the page's first-load decay spans
+  > 10 min, so the full-phase mean is reported but not gated).
+- Gate: **< 180 MB** (owner amendment 2026-10-22, measured 163.5 MB; the original
+  2026-10-20 figure was < 100 MB), plus the stability rule: no monotonic growth
+  (a leak fails even under the threshold).
+- Prerequisites: OBS 32.2 running with the whale Browser source
+  (http://localhost:3000/?debug=1); the built-in obs-websocket server enabled
+  (Tools → WebSocket Server Settings; localhost :4455 with auth) so the scripts can
+  toggle the source; the source property "Shutdown source when not visible" ON —
+  scripts/obs_toggle.js shutdown-on-hide sets it through the websocket.
+- Run (the stack must be up: npm start + control_whale.py):
+
+      cd whale-girl-server
+      node scripts/obs_toggle.js info          # scene item state + CEF sanity
+      node scripts/obs_toggle.js on            # Phase A: page visible
+      bash scripts/traffic_mix.sh --minutes 30 --interval 30 --verbose &
+      bash scripts/mem_probe.sh --phase a --minutes 30 --label final-a
+      node scripts/obs_toggle.js off           # hide → page unloads (Phase B)
+      bash scripts/mem_probe.sh --phase b --minutes 30 --label final-b
+      bash scripts/mem_probe.sh --compare logs/final-a.csv logs/final-b.csv --steady
+
+- CPU/GPU profile: node scripts/perf_probe.js --seconds 60 --rss-minutes 10 (it
+  boots its own server + Chrome + driver — stop the dev stack first; the RSS soak
+  reports min/mean/max for the server and driver).
+- Gotcha: short A/B windows cannot resolve lever effects (< ~10 MB) because the
+  page's RSS decays for ~20 min after every reload — use the full 30-min phases and
+  the --steady reading for the gate, and treat 3-min windows as sanity checks only.
 
 ## Deployment patterns (M4.2 consumes this — config only, no code rewrite)
 

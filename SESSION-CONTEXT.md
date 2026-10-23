@@ -65,7 +65,9 @@
   /spec-commands accelerates M3.1 planning (wire-protocol command surface,
   DSH tool surface, Live2D playback semantics, mock-behind-a-flag);
   /spec-expressions accelerates M3.2 planning (text/emotion -> expression
-  presets, hybrid routing table, cooldown/priority, zero new deps).
+  presets, hybrid routing table, cooldown/priority, zero new deps);
+  /spec-perf accelerates M4.1 planning (<100MB OBS extra-memory measurement
+  protocol, lever audit, leak-soak verification, reconnect hardening).
 
 ## 3. Owner decisions (binding)
 1. M1 stops before the real model/audio/DSH work; the owner switches the session AI
@@ -100,11 +102,22 @@
     Design drafts: docs/drafts/ai-agent-notifier/.
 
 ## 4. In-flight / next
-- NOTHING is in flight. M3.2 is fully closed (2026-10-22): merged into main and
-  pushed; its local feature branch was deleted. NEXT: M4.1 (memory/asset
-  optimization — the hard OBS < 100 MB gate) planning via /spec-plan, carrying
-  the M3.2 handoffs (re-measure with audio + commands + expressions active,
-  server RSS headroom at the OBS gate).
+- M4.1 IMPLEMENTED (2026-10-22) on feature/whale-girl-m41-memory-perf, UNCOMMITTED:
+  TG1–TG5 done. Gate amended by the owner to < 180 MB steady state (measured: final
+  steady delta 114.8 MB PASS, full-phase 126.9 MB; baseline cold-OBS 163.5 MB);
+  perf probe PASS (60 fps, p95 18.6 ms, heap +0.31 MB post-GC, server mean 28 MB /
+  driver 14 MB), cmd 63/63 (BubbleGum leftover guard), expr 22/22, say 13/13 ×2
+  (Ketchup-during-say guard),
+  ws 30.0 fps, role 1008, curl 200, inline 41,005 B. The owner's manual OBS pass
+  is complete; the
+  obs-websocket config was restored and OBS quit after the measurement. The OWNER
+  MANUAL PASS is COMPLETE (2026-10-23, all 9 steps passed); it found and drove two
+  late fixes: the say-mouth regression guard (Ketchup during a say) and the
+  motion-leftover reset (the BubbleGum bubble no longer sticks until a refresh —
+  cmd_probe 63/63 guards it). The review-fix loop starts next; the tree is
+  committed on feature/whale-girl-m41-memory-perf (round 1).
+- M3.2 is fully closed (2026-10-22): merged into main and pushed; its local
+  feature branch was deleted.
 - M2.2 is fully closed (2026-10-21): merged into main and pushed; its local
   feature branch was deleted.
 - M2.1 is fully closed: merged into main and pushed (2026-10-20); its local

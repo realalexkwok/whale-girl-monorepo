@@ -401,6 +401,44 @@ async function cmdState(chrome) {
   }, 8000, 'motion command with an index');
   record('motion index is forwarded and applied', true,
     'cmdState.last="motion: ' + MOTION + '/0"');
+
+  // 2b) M4.1: a commanded motion's own parameter tracks must not stay stuck
+  // after the motion ends (the BubbleGum bubble covered the mouth until a
+  // page refresh; the frontend now restores non-driver parameters on finish).
+  const cliBubble = spawnSync(PYTHON, [CLI, 'motion', 'BubbleGum'],
+    { cwd: ROOT, timeout: 15000, env: cliEnv() });
+  record('CLI BubbleGum exits 0', cliBubble.status === 0, 'exit ' + cliBubble.status);
+  await waitFor(async () => {
+    const st = await cmdState(chrome);
+    return st && st.last === 'motion: BubbleGum' && st.ok === true;
+  }, 8000, 'frontend applied motion BubbleGum');
+  await sleep(7000); // BubbleGum is 5 s; leave room for the finish reset
+  const leftovers = await chrome.evaluate(`(function () {
+    var m = window.whaleModel;
+    if (!m || !m.model) return { error: 'no model' };
+    var cm = m.model.internalModel.coreModel;
+    var ids = ['chuipaopao', 'chuipaopao1', 'chuipaopao2', 'chuipaopao3',
+      'chuipaopao4', 'chuipaopao5', 'chuipaopao6', 'chuipaopao7'];
+    var values = [];
+    var defaults = [];
+    for (var i = 0; i < ids.length; i++) {
+      var idx = cm.getParameterIndex(ids[i]);
+      if (idx < 0) { values.push(null); defaults.push(null); continue; }
+      values.push(cm.getParameterValueById(ids[i]));
+      defaults.push(cm.getParameterDefaultValue(idx));
+    }
+    return { values: values, defaults: defaults };
+  })()`);
+  // A leftover is a parameter away from its OWN default (chuipaopao1's is 1).
+  const left = (leftovers && leftovers.values && leftovers.defaults)
+    ? leftovers.values.filter((v, i) => v !== null && leftovers.defaults[i] !== null &&
+        Math.abs(v - leftovers.defaults[i]) > 0.001)
+    : [null];
+  record('a motion prop does not stay stuck after it ends',
+    !!leftovers && !leftovers.error && left.length === 0,
+    (leftovers && leftovers.error) ? leftovers.error
+      : 'left=' + left.length + ' values=' + JSON.stringify(leftovers && leftovers.values) +
+        ' defaults=' + JSON.stringify(leftovers && leftovers.defaults));
   const cliNoServer = spawnSync(PYTHON, [CLI, 'say', 'x'], {
     cwd: ROOT, timeout: 15000,
     env: Object.assign({}, process.env, { WHALE_CMD_WS: 'ws://localhost:1?role=web' }),

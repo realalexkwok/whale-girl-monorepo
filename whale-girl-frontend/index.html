@@ -217,6 +217,41 @@
           }
           return names;
         }
+        // A commanded motion animates its own parameter tracks, and the last
+        // values stay after it ends (the BubbleGum bubble kept covering the
+        // mouth until a page refresh). When the commanded motion finishes,
+        // restore every parameter the DRIVER does not drive to its default —
+        // the driver's own parameters are re-applied on the next frame anyway.
+        var commandedGroup = null;
+        function clearMotionLeftovers() {
+          var cm = m.internalModel && m.internalModel.coreModel;
+          if (!cm || typeof cm.getParameterCount !== 'function') return;
+          var keep = {};
+          lastParams.forEach(function (value, id) {
+            var idx = -1;
+            try { idx = cm.getParameterIndex(id); } catch (err) { idx = -1; }
+            if (idx >= 0) keep[idx] = 1;
+          });
+          var count = cm.getParameterCount();
+          for (var i = 0; i < count; i++) {
+            if (keep[i]) continue;
+            try {
+              cm.setParameterValueByIndex(i, cm.getParameterDefaultValue(i));
+            } catch (err) { break; } // older bundle: leave the rest alone
+          }
+        }
+        (function wireMotionFinish() {
+          var mm = motionManager();
+          if (!mm || typeof mm.on !== 'function') return;
+          mm.on('motionFinish', function () {
+            if (!commandedGroup) return;
+            var st = mm.state;
+            if (st && st.currentGroup && st.currentGroup !== commandedGroup) return;
+            commandedGroup = null;
+            clearMotionLeftovers();
+          });
+        })();
+
         window.whaleModel = {
           model: m,
           // v1 (M3.1): last command + outcome, for ?debug=1 and the probes.
@@ -234,7 +269,13 @@
                 (index === undefined || mm.state.currentIndex === index)) {
               if (typeof mm.stopAllMotions === 'function') mm.stopAllMotions();
             }
-            try { return m.motion(group, index, priority); } catch (err) { return Promise.reject(err); }
+            try {
+              var p = m.motion(group, index, priority);
+              Promise.resolve(p).then(function (ok) {
+                if (ok) commandedGroup = group; // reset when THIS motion finishes
+              }, function () { /* rejected: nothing to reset */ });
+              return p;
+            } catch (err) { return Promise.reject(err); }
           },
           playExpression: function (name) {
             try {
@@ -893,6 +934,11 @@
         ws = new WebSocket(WS_BASE + '?role=web');
         ws.onopen = function () {
           wsRetry = 0;
+          // A retry that raced the successful open must not fire again.
+          if (wsTimer) {
+            clearTimeout(wsTimer);
+            wsTimer = null;
+          }
           ws.send('{"type":"hello"}');
           setStatus(statusLine('ws connected'));
         };
@@ -973,6 +1019,23 @@
           connectWS();
         }, delay);
       }
+
+      // OBS hides a browser source when the scene changes and may throttle the
+      // page while hidden. On return: re-fit the scene (the viewport can change
+      // while suspended) and retry at once if the socket died while hidden —
+      // the capped backoff would otherwise add up to 10 s of dead overlay.
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState !== 'visible') return;
+        fitModel();
+        if (!ws || ws.readyState === 2 || ws.readyState === 3) {
+          if (wsTimer) {
+            clearTimeout(wsTimer);
+            wsTimer = null;
+          }
+          wsRetry = 0;
+          connectWS();
+        }
+      });
 
       connectWS();
     }

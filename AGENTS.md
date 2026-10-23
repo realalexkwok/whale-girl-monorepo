@@ -4,7 +4,8 @@
 You are an expert full-stack developer and architect operating in the Whale Girl
 monorepo — a low-memory Live2D interactive streaming system.
 ACTIVE PROJECT (this branch): **Whale Girl** (V1 M1–M5; M1, M2.1, M2.2, M3.1
-and M3.2 closed; M4–M5 pending).
+and M3.2 closed; M4.1 implemented 2026-10-22 pending its close; M4.2 and M5
+pending).
 Before writing any code, read the project constitution files first:
 specs/mission.md, tech-stack.md, roadmap.md, dev-environment.md.
 Before every write to disk, an ask-user-question round covering requirements
@@ -43,6 +44,9 @@ must be answered by the user.
   history_roadmap.md, and complete the validation.md handoff list.
 
 ### Run & test (working recipes, verified 2026-10-19)
+- Stack (server + driver, supervised): cd whale-girl-server && bash scripts/stack.sh
+  start|stop|status|logs — the driver is a separate program; without it commands are
+  refused ("no brain connected"), which is the safety, not a bug.
 - Server: cd whale-girl-server && npm start (env: PORT, WS_PORT).
 - Driver: cd whale-girl-server && .venv/bin/python control_whale.py (env: WHALE_WS,
   WHALE_DEBUG=1 for per-frame logs).
@@ -55,6 +59,13 @@ must be answered by the user.
 - M3.2 gate: node scripts/expr_probe.js (per-tag expression routing, cooldown,
   neutral fallback, idle/mode reset — needs the DS model) plus the CLI
   `scripts/whale_cmd.py express <tag> [text]`.
+- M4.1 gate (OBS extra memory, amended < 180 MB steady state): OBS 32.2 must run
+  with the whale Browser source; toggle it with node scripts/obs_toggle.js
+  info|on|off|shutdown-on-hide (obs-websocket :4455, auth from the OBS config),
+  drive traffic with bash scripts/traffic_mix.sh --minutes 30 --interval 30 --verbose,
+  sample with bash scripts/mem_probe.sh --phase a|b --minutes 30 --label <name>,
+  and score with bash scripts/mem_probe.sh --compare <a.csv> <b.csv> --steady.
+  CPU/GPU profile: node scripts/perf_probe.js --seconds 60 --rss-minutes 10.
 - Smoke: curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ → 200.
 - Ports: lsof -nP -iTCP:3000 -iTCP:3001 -sTCP:LISTEN (both must be free before start).
 - Memory: ps -axo pid,rss,command | grep -E 'node server.js|control_whale.py'.
@@ -71,6 +82,9 @@ must be answered by the user.
   mutated in place; frontend message handler avoids closures/spreads; server never
   JSON.parses frames).
 - No per-frame logging; aggregate logs only (server 5 s, driver 1 s).
+- OBS browser-source extra memory: steady-state CEF RSS delta < 180 MB (tech-stack
+  amendment 2026-10-22; measured 163.5 MB at the amendment) with no monotonic
+  growth over a 30-min soak — see the M4.1 gate recipes above.
 - No Electron, no heavy UI libraries, no new dependencies outside tech-stack.md.
 
 ### Quality gates
