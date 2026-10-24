@@ -20,3 +20,6 @@ whale-girl-server/audio/
 # M4.1 measurement traces (mem_probe.sh CSV samples) + stack supervisor state
 whale-girl-server/logs/
 whale-girl-server/run/
+
+# M5.1 notifier registry (agent session names live here — runtime state)
+whale-girl-server/data/

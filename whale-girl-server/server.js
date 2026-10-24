@@ -110,6 +110,19 @@ function relayCommandToPython(ws, data, isBinary) {
   cmdsRelayed++;
 }
 
+// M5.1: the notifier hub injects its announcement commands through this same
+// raw relay path. No new frame types, still no JSON parsing, and the frame-size
+// and stalled-brain guards apply. The hub has its own announcement rate cap, so
+// it deliberately does not consume the web flood window.
+function relayCommandText(text) {
+  if (typeof text !== 'string' || text.length > MAX_FRAME_BYTES) return false;
+  if (!pythonClient || pythonClient.readyState !== WebSocket.OPEN) return false;
+  if (pythonClient.bufferedAmount > MAX_BUFFERED_BYTES) return false;
+  pythonClient.send('{"relay":' + JSON.stringify(text) + '}');
+  cmdsRelayed++;
+  return true;
+}
+
 function hostnameOf(url) {
   try { return new URL(url).hostname; } catch (err) { return ''; }
 }
@@ -246,6 +259,10 @@ wss.on('error', (err) => {
   throw err;
 });
 
+// M5.1: the notifier hub (registry + /notify + /mcp) rides this process on its
+// own loopback listener. A hub failure (e.g. port in use) never stops the page.
+const hub = require('./hub.js').start({ relayCommand: relayCommandText });
+
 httpServer.listen(PORT, () => {
   console.log('[whale-girl] serving ' + FRONTEND_DIR + ' on http://localhost:' + PORT);
   console.log('[whale-girl] websocket proxy on ws://localhost:' + WS_PORT);
@@ -254,6 +271,7 @@ httpServer.listen(PORT, () => {
 function shutdown() {
   console.log('[whale-girl] shutting down...');
   clearInterval(heartbeat);
+  if (hub && typeof hub.stop === 'function') hub.stop();
   wss.close();
   httpServer.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 2000).unref();

@@ -1,0 +1,32 @@
+# Whale Girl notifier bundle (M5.1) — installs BOTH halves with one row pair:
+#   1. whale-notifier   in-process lifecycle hook: turn/end -> POST /notify
+#   2. mcp-whale-girl   MCP client for the hub: whale_attach / whale_detach /
+#                       whale_sessions appear in every session as
+#                       mcp__whale__whale_attach etc.
+# No hand-edited profile patch is needed: install this package (Plugins page,
+# the plugin_manager tool, or dsh plugin ... add) and the bundle layer applies.
+# The hub is the whale-girl server on loopback (WHALE_MCP_PORT, default 3200);
+# while it is down the MCP client keeps retrying and the hook's posts fail
+# silently at most once a minute, so nothing disturbs the agent session.
+
+- insert:
+    - id: whale-notifier
+      # Anchored beside this patch by the loader (file URL), so the hook
+      # resolves inside the installed package no matter how pnpm links it.
+      name: './index.mjs'
+      config:
+        hub: 'http://127.0.0.1:3200'
+
+    - id: mcp-whale-girl
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: whale
+        transport: streamable-http
+        url: 'http://127.0.0.1:3200/mcp'
+        toolCallTimeoutMs: 10000
+        failOnStartupError: false
+        reconnect:
+          enabled: true
+          initialDelayMs: 1000
+          maxDelayMs: 15000
+          maxAttempts: 1000

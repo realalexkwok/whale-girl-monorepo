@@ -416,6 +416,9 @@ async def send_say(ws, text, src="cmd"):
         "audio": "/audio/" + name,
         "words": words,
         "src": src,
+        # M5.1: additive field — the spoken text, so the notifier probe and the
+        # M5.4 notification history can verify what was said without the audio.
+        "text": text,
     })
     size = len(payload.encode("utf-8"))
     if size > MAX_FRAME_BYTES:

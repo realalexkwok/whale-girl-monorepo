@@ -1,0 +1,24 @@
+{
+  "name": "whale-girl-dsh-notifier",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Whale Girl notifier for DeepSeek Harness — announces finished agent rounds through the whale-girl hub (M5.1)",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "license": "UNLICENSED",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

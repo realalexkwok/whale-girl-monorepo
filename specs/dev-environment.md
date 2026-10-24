@@ -156,6 +156,64 @@ the split deployment only moves the server + brain to Ubuntu and points the page
       node scripts/cmd_probe.js     # every frame type + malformed safety (prints its count)
       node scripts/expr_probe.js    # M3.2 per-tag expression routing
 
+## Notifier hub (M5.1 — attach · name · round-finished)
+
+The whale announces a finished agent round: **主人，<会话名>有任务完成啦** (the
+name is spoken verbatim).
+
+- The hub starts with the server (`hub.js`) on loopback only:
+  `http://127.0.0.1:3200` — `/mcp` (MCP streamable HTTP: whale_attach /
+  whale_detach / whale_sessions), `/notify` (lifecycle hooks), `/health`.
+  Registry: `whale-girl-server/data/registry.json` (gitignored, 24 h TTL).
+- Install the DSH notifier bundle (NO hand-written profile patch): the
+  package is `whale-girl-server/notifier` (`dsh.bundle` + `cordis.patch.yml`,
+  two rows — the lifecycle hook and an MCP client for the hub). Pick one:
+  - DSH Web → Plugins → install the bundle from the absolute path to
+    `whale-girl-server/notifier` (installing enables it; restart DSH or let the
+    profile recompose);
+  - from an agent session (danger-full-access / approval):
+    `plugin_manager install_bundle { "target": "<absolute path to whale-girl-server/notifier>" }`;
+  - CLI: `dsh plugin --profile <name> add <absolute path>`, then enable the
+    bundle in the Plugins page.
+  The bundle's MCP client registers the hub's tools in every session as
+  `mcp__whale__whale_attach`, `mcp__whale__whale_detach`,
+  `mcp__whale__whale_sessions`. Alternatively mount the hub per session via
+  ACP `session/new` `mcpServers` (unprefixed tool names):
+
+      {"whale-girl": {"url": "http://127.0.0.1:3200/mcp"}}
+
+- Attach from inside the session (its id is in the environment):
+
+      printenv DSH_SESSION_ID      # e.g. 4c54de86-176a-4605-a55e-780373ca7ca3
+      # then the model calls the MCP tool:
+      whale_attach {session_id: "<that id>", name: "构建会话"}
+
+- Round-finished hook — the bundle's `whale-notifier` row (in
+  `whale-girl-server/notifier/index.mjs`). It subscribes `session/event`
+  (turn/end, every TurnEndReason; goal/change suppresses goal auto-continuation
+  rounds), `agent/status` (idle fallback, deduped 2 s) and `session/disposed`
+  (detaches), posting fire-and-forget to `/notify`. Why a plugin and not an
+  external SDK watcher: each DSH session runs in its own process, and the SDK's
+  session.event push only covers the runtime an SDK client spawns — verified in
+  the harness protocol types 2026-10-24. The bundle is the user-facing
+  distribution: no YAML is edited by hand.
+- Verify automatically (boots its own server + driver; 20 checks):
+
+      cd whale-girl-server && node scripts/notify_probe.js
+
+- Env knobs: `WHALE_MCP_HOST` (default 127.0.0.1), `WHALE_MCP_PORT`
+  (default 3200), `WHALE_REGISTRY_FILE`, `WHALE_SESS_TTL` (seconds, default
+  86400), and the plugin's `config.hub`.
+- Host note: the hub is loopback-only on the machine that runs the whale
+  stack. DSH must run on THAT machine, or reach the hub through a tunnel:
+  patterns 2/3 put the stack on the Ubuntu box, so run DSH there too; if DSH
+  also runs on the Mac, add `-L 3200:127.0.0.1:3200` to the ssh forward and
+  install the bundle on the Mac profile as well (the default hub URL then goes
+  through the tunnel). The whale PAGE may live anywhere — a Mac browser/OBS
+  reaching the page through the existing 3000/3001 tunnel is simply a web
+  client of the box server, fetches /audio through the same tunnel, and plays
+  the announcements normally.
+
 ## Memory gate (M4.1 — OBS browser source)
 
 - Definition: steady-state EXTRA memory = the ps RSS sum of OBS's CEF helpers

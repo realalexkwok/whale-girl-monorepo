@@ -3,8 +3,8 @@
 ## Part A — System Prompt Context
 You are an expert full-stack developer and architect operating in the Whale Girl
 monorepo — a low-memory Live2D interactive streaming system.
-ACTIVE PROJECT (this branch): **Whale Girl** (V1 M1–M5; M1–M4.1 closed; M4.2 in
-progress 2026-10-23; M5 pending).
+ACTIVE PROJECT (this branch): **Whale Girl** (V1 M1–M5; M1–M4.2 closed; M5.1
+implemented 2026-10-24 and awaiting the owner's manual pass; M5.2–M5.4 pending).
 Before writing any code, read the project constitution files first:
 specs/mission.md, tech-stack.md, roadmap.md, dev-environment.md.
 Before every write to disk, an ask-user-question round covering requirements
@@ -72,6 +72,23 @@ must be answered by the user.
   specs/features/2026-10-23-m4.2-m42-deployment/validation.md (curl https 200 +
   WS_URL='wss://<domain>/ws?role=web' node scripts/ws_probe.js -> PASS; origin guard:
   WS_ORIGIN=... matching -> PASS, WS_ORIGIN=... WS_EXPECT=reject -> close 1008).
+- M5.1 gate (notifier): cd whale-girl-server && node scripts/notify_probe.js (21
+  checks: MCP surface, attach/detach/rename/latest-wins, verbatim names incl. %,
+  unattached ignored, one announcement per TurnEndReason, session_end, TTL sweep,
+  plugin fixtures (goal suppression/idle dedupe/dispose/wiring), hub-accept
+  latency < 100 ms, RSS, port release; it allocates its OWN free ports so a
+  developer's ssh -L tunnel or dev stack on 3000/3001 cannot mask a failure).
+  Hub: hub.js inside the server process on 127.0.0.1:3200 (WHALE_MCP_PORT,
+  WHALE_MCP_HOST, WHALE_REGISTRY_FILE, WHALE_SESS_TTL); registry
+  data/registry.json (gitignored) + a bounded spoken-notification history.
+  DSH side: whale-girl-server/notifier/ is an installable DSH bundle
+  (dsh.bundle + cordis.patch.yml: whale-notifier hook row + mcp-whale-girl
+  @deepseek-ai/dsh-mcp-client row) — install from the DSH Plugins page,
+  plugin_manager install_bundle, or `dsh plugin --profile <name> add <abs path>`
+  (verified: install recompiles the bundle into dsh.profile.bundles and
+  --dump-config shows both rows with an anchored file URL). Tools appear as
+  mcp__whale__whale_attach / _detach / _sessions; per-session ACP mcpServers
+  {"whale-girl":{"url":"http://127.0.0.1:3200/mcp"}} gives the unprefixed names.
 - Smoke: curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ → 200.
 - Ports: lsof -nP -iTCP:3000 -iTCP:3001 -sTCP:LISTEN (both must be free before start).
 - Memory: ps -axo pid,rss,command | grep -E 'node server.js|control_whale.py'.

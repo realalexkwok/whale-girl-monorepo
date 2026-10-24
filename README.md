@@ -114,6 +114,36 @@ against the model manifest, so a typo prints the available groups. ?debug=1
 shows the mode and the last motion/expression/mode command (the pose overlay is
 driver-side and not shown; during a say the line shows the current word).
 
+## AI-agent progress notifier (M5.1)
+
+Attach a DSH session to the whale girl and she announces when a round finishes:
+**主人，<会话名>有任务完成啦** (the name is spoken verbatim, never translated).
+
+The **hub** starts with the server (no extra command) and listens on loopback only:
+`http://127.0.0.1:3200` — `/mcp` (MCP streamable HTTP), `/notify` (lifecycle hooks),
+`/health`. It keeps the session registry in memory and in
+`whale-girl-server/data/registry.json` (gitignored, 24 h TTL).
+
+    # MCP tools (installed with the bundle; names carry its serverName "whale"):
+    mcp__whale__whale_attach    {session_id, name}   # session_id = $DSH_SESSION_ID
+    mcp__whale__whale_detach    {session_id}         # announcements stop
+    mcp__whale__whale_sessions                       # list attachments
+
+The DSH side ships as an **installable bundle** — no profile YAML is edited by
+hand. Install `whale-girl-server/notifier` once (DSH Web → Plugins → install the
+absolute path, or `plugin_manager install_bundle`, or `dsh plugin ... add`);
+its two rows are the in-process lifecycle hook and an MCP client for the hub.
+The hook posts fire-and-forget to `/notify` on turn/end, dedupes the agent-idle
+fallback, stays silent during goal auto-continuation rounds, and detaches on
+session disposal. The hub only announces ATTACHED sessions and drops everything
+it cannot speak; nothing blocks the agent. A per-session ACP mount
+(`{"whale-girl":{"url":"http://127.0.0.1:3200/mcp"}}`) still works and gives the
+unprefixed tool names.
+
+Verify the whole path automatically (boots its own server + driver):
+
+    cd whale-girl-server && node scripts/notify_probe.js
+
 ## Memory gate (M4.1)
 
 The OBS Browser source has a hard steady-state extra-memory gate: **< 180 MB**
@@ -303,4 +333,5 @@ guard — page and WS on the same hostname, nginx passing `proxy_set_header Host
 - [x] M1 骨架与静音渲染: repo skeleton, WS proxy, mock driver, Live2D frontend + placeholder — closed 2026-10-19
 - [x] M2 模型与口型同步: real model drop-in + TTS-driven lip sync (explicit words → speech → mouth animates to the words) — M2.1 closed 2026-10-20, M2.2 closed 2026-10-21
 - [x] M3 DSH 互动大脑: M3.1 command surface (motion/say/pose/mode/expression, mock behind a flag) — closed 2026-10-22; M3.2 LLM-driven expressions — closed 2026-10-22
-- [ ] M4 内存压榨与部署: <180MB steady-state OBS extra memory (gate amended 2026-10-22; originally <100MB) + deployment patterns (same-machine / cloud scripts / optional SSH tunnel)
+- [x] M4 内存压榨与部署: <180MB steady-state OBS extra memory (gate amended 2026-10-22; originally <100MB) + deployment patterns (same-machine / cloud scripts / optional SSH tunnel) — M4.1 closed 2026-10-23, M4.2 closed 2026-10-23
+- [ ] M5 AI agent progress notifier: M5.1 session integration (attach/detach + naming + round-finished announcement) — implementation in progress

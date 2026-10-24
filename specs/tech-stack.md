@@ -134,6 +134,10 @@
   frontend now restores every parameter the driver does not drive to its default
   (driver-owned parameters are untouched; one reset per motion end, no per-frame
   cost).
+- Say frame (M5.1, 2026-10-24): the driver's say frame gains an ADDITIVE
+  "text" field carrying the spoken words (the notifier probe and the future
+  M5.4 notification history verify what was said without decoding audio). The
+  M2.2 shape (audio/words/src) is unchanged and the frontend ignores the field.
 - Mouth priority: a live say owns the mouth. Verified 2026-10-22 (M4.1): the
   model declares ParamMouthOpenY as its LipSync group, so a motion that lists it
   (Hammer/Selfie/Ketchup) does not mask the speech mouth while a line plays —
@@ -151,6 +155,58 @@
 - Trust: any web client can send commands — acceptable for localhost/V1;
   WebSocket auth is V3 work.
 
+## Notifier hub (M5.1, 2026-10-24)
+- whale-girl-server/hub.js — required by server.js, runs in the SAME node
+  process (server budget unchanged): the session registry (in-memory Map +
+  data/registry.json, atomic writes, 24 h TTL with sweep-on-access + a 5-min
+  timer, WHALE_SESS_TTL seconds), REST POST /notify (fire-and-forget, 202/200,
+  <= 8 KB, only attached sessions announce, session_end detaches), and MCP
+  streamable HTTP at /mcp (JSON-RPC 2.0 hand-rolled: initialize, tools/list,
+  tools/call, ping, notifications accepted; GET /mcp -> 405, no SSE stream).
+- Loopback-only listener: WHALE_MCP_HOST (default 127.0.0.1) /
+  WHALE_MCP_PORT (default 3200); WHALE_REGISTRY_FILE overrides the registry
+  path. A busy port disables the hub for that boot without stopping the page
+  server. Origin guard: only absent or loopback origins are accepted.
+- MCP tools: whale_attach {session_id, name, agent?} (latest-wins rename;
+  session_id <= 256 chars, name 1-100 chars, invalid params -> -32602),
+  whale_detach {session_id}, whale_sessions {}. The registry is the single
+  source of truth; agents are never relied on for state.
+- Announcement: text "主人，" + name + "有任务完成啦" as the v1 say command frame
+  {"type":"say","text":...}, relayed through the EXISTING command path
+  (server.js relayCommandText — raw string, frame-size + stalled-brain guards,
+  the web flood window is not consumed); the hub caps announcements at
+  10/min and drops with a rate-limited log. With no python writer the request
+  is accepted but unspeakable (logged at <= 1 Hz).
+- DSH wiring: whale-girl-server/notifier/ — an installable DSH BUNDLE package
+  (package.json "dsh": {"bundle": {"patch": "./cordis.patch.yml"}}, private,
+  zero dependencies) with two rows: whale-notifier (index.mjs, the in-process
+  Cordis hook) and mcp-whale-girl (@deepseek-ai/dsh-mcp-client pointed at
+  http://127.0.0.1:3200/mcp, serverName "whale", failOnStartupError false,
+  reconnect up to 15 s). Users install it from the Plugins page, the
+  plugin_manager tool, or `dsh plugin --profile <name> add <path>` — NO
+  hand-edited profile YAML (owner feedback 2026-10-24: a source/config patch
+  would not be accepted by users). The two rows give every session the
+  mcp__whale__whale_* tools once the hub is up (the client keeps retrying).
+  Host rule: the hub is loopback-only where the whale stack runs, so DSH must
+  run there too (the Ubuntu box in the deployed patterns; DSH on the Mac may
+  reach it through an added -L 3200 ssh forward). The page/OBS may be remote —
+  it is a web client of that server and fetches /audio through the same tunnel.
+  The plugin subscribes session/event (turn/end every
+  TurnEndReason; goal/change suppresses goal auto-continuation rounds),
+  agent/status (idle fallback deduped 2 s) and session/disposed (POSTs
+  event:"session_end"), posting fire-and-forget with a 1 s AbortSignal; every
+  callback is contained. WHY not the SDK watcher (the plan's original default):
+  DSH runs interactive sessions in their own process and the SDK's session.event
+  push covers only the runtime an SDK client spawns — verified in the harness
+  protocol types 2026-10-24.
+- Notification history: every SPOKEN announcement is appended to a bounded
+  50-entry ring in the registry file ({ts, sessionId, name, text}); M5.4's
+  context menu reads it (cap/retention policy still owned by M5.4's planning).
+- Verification: node scripts/notify_probe.js — 21 checks (MCP surface,
+  attach/rename/detach, verbatim names incl. %, unattached ignored,
+  per-reason announcements, session_end, TTL sweep, plugin fixtures for
+  goal/dedupe/dispose/containment, hub-accept latency, RSS, port release).
+
 ## Dev environment
 - macOS: two terminals (npm start; .venv/bin/python control_whale.py) + browser
   http://localhost:3000 (?debug=1 shows the status line) + OBS Browser source.
@@ -164,7 +220,9 @@
 - See dev-environment.md for the full runbook and the deployment patterns (M4.2).
 
 ## Testing & verification (two-sided)
-- Automatic half (agent): node scripts/ws_probe.js (expect PASS, 20–40 fps, increasing
+- Automatic half (agent): node scripts/notify_probe.js (the M5.1 notifier gate:
+  announce/attach/detach/TTL/plugin fixtures, prints its count), node
+  scripts/ws_probe.js (expect PASS, 20–40 fps, increasing
   f), node scripts/ws_role_probe.js (expect close 1008), node scripts/cmd_probe.js
   (the M3.1 gate: v1 frames end to end, say byte-compat, malformed safety, multi-
   sample RSS — it prints its check count), node scripts/expr_probe.js (the M3.2
