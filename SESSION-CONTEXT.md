@@ -96,7 +96,9 @@
   measurement protocol, lever audit, leak-soak verification, reconnect hardening);
   /spec-deploy accelerates M4.2 planning (three deployment patterns, idempotent
   install-ubuntu.sh + systemd + nginx TLS, fresh-VM <=10-min gate, SSH tunnel
-  optional).
+  optional); /spec-sessions accelerates M5.1 planning (attach/detach + naming +
+  round-finished announcement, cross-agent hook matrix, hub registry, DSH
+  fixture verification).
 
 ## 3. Owner decisions (binding)
 1. M1 stops before the real model/audio/DSH work; the owner switches the session AI

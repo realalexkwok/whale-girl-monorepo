@@ -10,7 +10,7 @@
     ├── docs/
     │   └── folder-structure.md      # this file
     ├── .cursor/rules/        # editor agent rules (spec compliance, memory discipline)
-    ├── .agents/skills/       # agent skills: /spec-plan, /spec-close, /spec-lipsync (M2.2), /spec-commands (M3.1), /spec-expressions (M3.2), /spec-perf (M4.1), /spec-deploy (M4.2)
+    ├── .agents/skills/       # agent skills: /spec-plan, /spec-close, /spec-lipsync (M2.2), /spec-commands (M3.1), /spec-expressions (M3.2), /spec-perf (M4.1), /spec-deploy (M4.2), /spec-sessions (M5.1)
     ├── whale-girl-server/    # Node.js proxy + Python brain (splits to Ubuntu later)
     │   ├── server.js         # express :3000 static + ws :3001 raw-text proxy (+ /audio mount)
     │   ├── control_whale.py  # 30 FPS driver: mock synthesis + TTS speech + v1 commands + expressions
