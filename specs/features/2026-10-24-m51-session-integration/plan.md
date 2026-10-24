@@ -72,6 +72,12 @@ README.md} (new).
   tools mcp__whale__whale_*). Users install it via the Plugins page,
   plugin_manager install_bundle, or `dsh plugin --profile <name> add <path>`;
   no YAML is edited by hand. No harness imports, no dependencies.
+- AUTO-ATTACH (2026-10-24 usability revision): on session/created the plugin
+  registers the session itself by calling the hub's MCP whale_attach (JSON-RPC
+  over /mcp — no new hub endpoint, so only the plugin file changes), with
+  name = basename(header.cwd) fallback "会话"; it skips sessions whose header
+  carries parentSession / origin "subagent" / delegationDepth. config.autoAttach
+  (default true) disables it; whale_attach still renames and whale_detach mutes.
 - Per-session state: lastTurnEndAt (ms), goalActive (from goal/change events).
 - Trigger rules:
   - turn/end (reason completed | aborted | blocked | error | max-tokens |

@@ -133,9 +133,12 @@ The DSH side ships as an **installable bundle** — no profile YAML is edited by
 hand. Install `whale-girl-server/notifier` once (DSH Web → Plugins → install the
 absolute path, or `plugin_manager install_bundle`, or `dsh plugin ... add`);
 its two rows are the in-process lifecycle hook and an MCP client for the hub.
-The hook posts fire-and-forget to `/notify` on turn/end, dedupes the agent-idle
-fallback, stays silent during goal auto-continuation rounds, and detaches on
-session disposal. The hub only announces ATTACHED sessions and drops everything
+The hook **auto-attaches every top-level session** (name = its working-directory
+basename — no ids, no tool call), posts fire-and-forget to `/notify` on
+turn/end, dedupes the agent-idle fallback, stays silent during goal
+auto-continuation rounds, and detaches on session disposal. Rename with
+`mcp__whale__whale_attach`, mute with `mcp__whale__whale_detach`; config
+`autoAttach: false` restores explicit-only attach. The hub only announces ATTACHED sessions and drops everything
 it cannot speak; nothing blocks the agent. A per-session ACP mount
 (`{"whale-girl":{"url":"http://127.0.0.1:3200/mcp"}}`) still works and gives the
 unprefixed tool names.

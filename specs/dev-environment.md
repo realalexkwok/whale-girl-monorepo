@@ -182,11 +182,13 @@ name is spoken verbatim).
 
       {"whale-girl": {"url": "http://127.0.0.1:3200/mcp"}}
 
-- Attach from inside the session (its id is in the environment):
-
-      printenv DSH_SESSION_ID      # e.g. 4c54de86-176a-4605-a55e-780373ca7ca3
-      # then the model calls the MCP tool:
-      whale_attach {session_id: "<that id>", name: "构建会话"}
+- Attach — AUTOMATIC since the 2026-10-24 usability revision: the plugin
+  auto-attaches every top-level session on `session/created` (name = the
+  session's working-directory basename; subagent children skipped), so users
+  never need a session id. Rename explicitly if you like (latest-wins):
+  `whale_attach {session_id: "<$DSH_SESSION_ID>", name: "构建会话"}`; mute a
+  session with `whale_detach`. `config.autoAttach: false` on the notifier row
+  restores explicit-only attach.
 
 - Round-finished hook — the bundle's `whale-notifier` row (in
   `whale-girl-server/notifier/index.mjs`). It subscribes `session/event`

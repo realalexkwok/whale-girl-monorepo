@@ -355,14 +355,16 @@ async function main() {
     plugin.createNotifier({ hubUrl: 'http://127.0.0.1:1', post: () => { throw new Error('boom'); } })
       .handleSessionEvent('fx-5', turnEnd('completed'), 7000);
   } catch (err) { contained = false; }
-  // apply() must wire the three harness hooks and contain their callbacks.
+  // apply() must wire the four harness hooks and contain their callbacks.
   const handlers = {};
   let wired = true;
   try {
-    plugin.apply({ on: (hook, fn) => { handlers[hook] = fn; } }, { hub: 'http://127.0.0.1:1' });
-    wired = typeof handlers['session/event'] === 'function'
+    plugin.apply({ on: (hook, fn) => { handlers[hook] = fn; } }, { hub: 'http://127.0.0.1:1', autoAttach: false });
+    wired = typeof handlers['session/created'] === 'function'
+      && typeof handlers['session/event'] === 'function'
       && typeof handlers['agent/status'] === 'function'
       && typeof handlers['session/disposed'] === 'function';
+    handlers['session/created']({ id: 'fx-apply', header: { cwd: '/x' } });
     handlers['session/event']({ id: 'fx-apply' }, turnEnd('completed'));
     handlers['agent/status']({ agent: { session: { id: 'fx-apply' } }, status: 'idle' });
     handlers['session/disposed']({ id: 'fx-apply' });
@@ -373,6 +375,46 @@ async function main() {
     'plugin fixtures (reasons/goal/dedupe/dispose/wiring)', 'perReason=' + perReason + ' goalSuppressed=' + suppressed
       + ' afterGoal=' + announcedAfterGoal + ' idleDeduped=' + deduped + ' idleFallback=' + idleFallback
       + ' disposed=' + disposed + ' contained=' + contained + ' wired=' + wired);
+
+  // --- auto-attach: no ids for users -----------------------------------
+  const attachCalls = [];
+  const recorder = (payload) => { attachCalls.push(payload); return Promise.resolve(); };
+  const auto = plugin.createNotifier({
+    hubUrl: 'http://127.0.0.1:1', post: () => Promise.resolve(), attach: recorder,
+    query: () => Promise.resolve([]),
+  });
+  auto.handleSessionCreated({ id: 'probe-auto-a', header: { cwd: '/tmp/probe/my-proj' } });
+  auto.handleSessionCreated({ id: 'probe-auto-b', header: { cwd: '/tmp/probe', parentSession: 'p', origin: 'subagent' } });
+  auto.handleSessionCreated({ id: 'probe-auto-c', header: { cwd: '/tmp/probe', delegationDepth: 1 } });
+  const kept = plugin.createNotifier({
+    hubUrl: 'http://127.0.0.1:1', post: () => Promise.resolve(), attach: recorder,
+    query: () => Promise.resolve([{ sessionId: 'probe-auto-kept' }]),
+  });
+  kept.handleSessionCreated({ id: 'probe-auto-kept', header: { cwd: '/tmp/renamed-by-hand' } });
+  const autoOff = plugin.createNotifier({
+    hubUrl: 'http://127.0.0.1:1', post: () => Promise.resolve(), attach: recorder, autoAttach: false,
+  });
+  autoOff.handleSessionCreated({ id: 'probe-auto-d', header: { cwd: '/tmp/probe' } });
+  await sleep(80); // auto-attach resolves its hub lookup first
+  const autoFixtures = attachCalls.length === 1 && attachCalls[0].session_id === 'probe-auto-a'
+    && attachCalls[0].name === 'my-proj';
+  // Live: the plugin's own HTTP lookup + attach against the real hub, and a
+  // second session/created must NOT overwrite the registered name.
+  const liveAuto = plugin.createNotifier({ hubUrl: HUB });
+  liveAuto.handleSessionCreated({ id: 'probe-auto-live', header: { cwd: '/tmp/probe-live-workspace' } });
+  await sleep(400);
+  sessions = await toolCall('whale_sessions', {});
+  const autoLive = sessions.payload.sessions.some((s) => s.sessionId === 'probe-auto-live'
+    && s.name === 'probe-live-workspace');
+  liveAuto.handleSessionCreated({ id: 'probe-auto-live', header: { cwd: '/tmp/other-name' } });
+  await sleep(300);
+  sessions = await toolCall('whale_sessions', {});
+  const nameKept = sessions.payload.sessions.some((s) => s.sessionId === 'probe-auto-live'
+    && s.name === 'probe-live-workspace');
+  await toolCall('whale_detach', { session_id: 'probe-auto-live' });
+  assert(autoFixtures && autoLive && nameKept, 'plugin auto-attach (cwd name, subagent skip, off switch, keeps manual rename)',
+    'fixtures=' + autoFixtures + ' liveHub=' + autoLive + ' nameKept=' + nameKept
+      + ' calls=' + JSON.stringify(attachCalls));
 
   // --- stale TTL entries are swept -------------------------------------
   const staleSession = 'probe-stale';

@@ -26,17 +26,17 @@ with `npm start` / `stack.sh start` on loopback `http://127.0.0.1:3200`
 `mcp__whale__whale_attach`, `mcp__whale__whale_detach` and
 `mcp__whale__whale_sessions`.
 
-## Use
+## Use — nothing to do per session
 
 1. Start the whale stack (`cd whale-girl-server && bash scripts/stack.sh start`).
-2. In the agent session you want announced, call the attach tool with the
-   session id from the environment and a display name:
-
-       whale_attach(session_id = $DSH_SESSION_ID, name = "构建会话")
-
-3. When that session finishes a round, the whale speaks
-   `主人，构建会话有任务完成啦`. Rename by attaching again; silence with
-   `whale_detach`.
+2. Start or resume a DSH session. The plugin **auto-attaches it** (no ids, no
+   tool call) with the name of its working directory, e.g. `whale-girl-monorepo`.
+3. Every time that session finishes a round the whale says
+   `主人，whale-girl-monorepo有任务完成啦`.
+   Rename with `whale_attach(session_id = $DSH_SESSION_ID, name = "构建会话")`
+   (the plugin never overwrites it); mute that session with `whale_detach`.
+   Subagent child sessions are skipped; `config.autoAttach: false` restores the
+   explicit-attach-only mode.
 
 Goal auto-continuation rounds are suppressed (no spam), the agent-idle fallback
 is deduped, a disposed session detaches automatically, and an entry nobody has

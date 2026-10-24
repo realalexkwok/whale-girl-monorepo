@@ -9,7 +9,9 @@
 1. notify_probe (whale-girl-server/scripts/notify_probe.js) — ALL checks
    green (attach/detach/rename/latest-wins/TTL/per-reason/verbatim-name/
    goal-suppression/session-dispose/unattached-ignored + the plugin fixture
-   state machine), hub accept latency < 100 ms, end-to-end announce latency
+   state machine incl. AUTO-ATTACH on session/created with cwd naming, the
+   subagent skip and config.autoAttach=false), hub accept latency < 100 ms,
+   end-to-end announce latency
    reported (mean/max, includes TTS synthesis; the measured 842 ms is under
    the 1 s intent), node + driver RSS within 60/30 MB, ports released; prints
    its check count.

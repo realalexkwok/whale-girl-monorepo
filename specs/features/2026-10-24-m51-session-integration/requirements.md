@@ -45,6 +45,16 @@
 4. Context/instruction injection is owned by M5.2 — M5.1's whale_detach removes
    ONLY the registry entry; the marker-delimited snippet-removal machinery is
    designed and shipped with M5.2's injection.
+4a. ATTACH MECHANISM (revised 2026-10-24, owner usability feedback "unattached
+   is too hard for users"): the bundle AUTO-ATTACHES every top-level session as
+   it is created — requirement 1.1 says "the user adds the whale girl to the
+   current session via MCP or a plugin", and this is the plugin route: no ids,
+   no config, no tool call. Default name = the session's working-directory
+   basename (fallback "会话"); subagent child sessions are skipped (they would
+   announce every delegate round). whale_attach still RENAMES (latest-wins) and
+   whale_detach still mutes, so the explicit MCP path remains for other agents
+   and for users who want control; the plugin never renames a session after
+   creation, so a manual name is not overwritten.
 5. Registry = single source of truth in whale-girl-server: an in-memory Map +
    a small JSON file (whale-girl-server/data/registry.json, NEW + gitignored),
    the externalized-state pattern, minus the complexity of the prior-art

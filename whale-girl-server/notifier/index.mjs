@@ -13,6 +13,12 @@
  * TurnEndReason); agent idle is a fallback deduped by 2 s; goal auto-continuation
  * rounds are suppressed. Every callback is contained: a failure here must never
  * disturb the agent session.
+ *
+ * AUTO-ATTACH (2026-10-24): on session/created the plugin registers a top-level
+ * session with the hub itself (MCP whale_attach over /mcp), so users never deal
+ * with session ids or tool calls. Name = basename(header.cwd) else "会话";
+ * subagent children are skipped. config.autoAttach:false restores explicit-only
+ * attach; whale_attach renames and whale_detach mutes as before.
  */
 
 export const name = 'whale-notifier';
@@ -32,6 +38,54 @@ function defaultPost(payload, hubUrl) {
   }).catch(() => {});
 }
 
+// Auto-attach goes through the hub's MCP endpoint (tools/call whale_attach), so
+// the hub needs no extra endpoint and the registry stays the single source of
+// truth. Fire-and-forget: a down hub must never delay a session.
+function defaultAttach(payload, hubUrl) {
+  const request = {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: { name: 'whale_attach', arguments: payload },
+  };
+  return fetch(hubUrl + '/mcp', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(request),
+    signal: AbortSignal.timeout(POST_TIMEOUT_MS),
+  }).catch(() => {});
+}
+
+// Auto-attach must not overwrite a name the user set by hand. The plugin asks
+// the hub which sessions are known first (MCP whale_sessions) and attaches only
+// an unknown session; a failed lookup falls back to attaching.
+function defaultQuery(hubUrl) {
+  const request = {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: { name: 'whale_sessions', arguments: {} },
+  };
+  return fetch(hubUrl + '/mcp', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(request),
+    signal: AbortSignal.timeout(POST_TIMEOUT_MS),
+  }).then((res) => res.json()).then((body) => {
+    const text = body && body.result && body.result.content && body.result.content[0]
+      && body.result.content[0].text;
+    const parsed = text ? JSON.parse(text) : null;
+    return Array.isArray(parsed && parsed.sessions) ? parsed.sessions : null;
+  }).catch(() => null);
+}
+
+/** Default spoken name for an auto-attached session: its working-directory basename. */
+function defaultName(header) {
+  const cwd = header && typeof header.cwd === 'string' ? header.cwd : '';
+  const base = cwd ? cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : '';
+  return (base || '会话').slice(0, 100);
+}
+
 /**
  * Pure state machine behind the plugin, exported for the fixture probe.
  * @param {{hubUrl?: string, post?: Function, log?: Function, now?: Function}} options
@@ -39,6 +93,10 @@ function defaultPost(payload, hubUrl) {
 export function createNotifier(options = {}) {
   const hubUrl = options.hubUrl || DEFAULT_HUB_URL;
   const post = typeof options.post === 'function' ? options.post : defaultPost;
+  const attach = typeof options.attach === 'function' ? options.attach : defaultAttach;
+  const query = typeof options.query === 'function' ? options.query : defaultQuery;
+  const autoAttach = options.autoAttach !== false; // default ON: no ids for users
+  const nameFor = typeof options.nameFor === 'function' ? options.nameFor : defaultName;
   const log = typeof options.log === 'function' ? options.log : () => {};
   const sessions = new Map(); // sessionId -> {lastTurnEndAt, goalActive}
   let lastErrorLogAt = 0;
@@ -63,6 +121,38 @@ export function createNotifier(options = {}) {
     } catch (err) {
       // post() throwing synchronously must not reach the agent loop either.
     }
+  }
+
+  /**
+   * Register a freshly created top-level session. Called by apply() from
+   * session/created; returns true when an attach request was sent.
+   */
+  function handleSessionCreated(session) {
+    if (!autoAttach || !session || session.id === undefined) return false;
+    const header = session.header;
+    if (header && (header.parentSession !== undefined || header.origin === 'subagent'
+      || (typeof header.delegationDepth === 'number' && header.delegationDepth > 0))) {
+      return false; // subagent children announce every delegate round — skip them
+    }
+    const sessionId = String(session.id);
+    const payload = { agent: 'dsh', session_id: sessionId, name: nameFor(header) };
+    const attachNow = () => {
+      try {
+        attach(payload, hubUrl).catch(() => {});
+      } catch (err) {
+        // contained
+      }
+    };
+    try {
+      query(hubUrl).then((known) => {
+        // Keep a manual rename: an already-registered session is left alone.
+        if (Array.isArray(known) && known.some((entry) => entry && entry.sessionId === sessionId)) return;
+        attachNow();
+      }, attachNow).catch(attachNow);
+    } catch (err) {
+      attachNow();
+    }
+    return true;
   }
 
   function handleSessionEvent(sessionId, event, now = Date.now()) {
@@ -107,16 +197,20 @@ export function createNotifier(options = {}) {
     return true;
   }
 
-  return { handleSessionEvent, handleAgentStatus, handleSessionDisposed, sessions };
+  return { handleSessionCreated, handleSessionEvent, handleAgentStatus, handleSessionDisposed, sessions };
 }
 
 export function apply(ctx, config = {}) {
   const notifier = createNotifier({
     hubUrl: config && config.hub ? config.hub : DEFAULT_HUB_URL,
+    autoAttach: !(config && config.autoAttach === false),
   });
   const contained = (fn) => {
     try { fn(); } catch (err) { /* a notifier failure must never disturb the session */ }
   };
+  ctx.on('session/created', (session) => {
+    contained(() => notifier.handleSessionCreated(session));
+  });
   ctx.on('session/event', (session, event) => {
     contained(() => notifier.handleSessionEvent(String(session.id), event));
   });
