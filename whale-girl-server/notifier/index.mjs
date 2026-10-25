@@ -98,6 +98,9 @@ export function createNotifier(options = {}) {
   const query = typeof options.query === 'function' ? options.query : defaultQuery;
   const autoAttach = options.autoAttach !== false; // default ON: no ids for users
   const nameFor = typeof options.nameFor === 'function' ? options.nameFor : defaultName;
+  // Current DSH session title (a fold of the session log, so it also covers a
+  // rename made before this process started) — the user's name for the session.
+  const titleOf = typeof options.titleOf === 'function' ? options.titleOf : () => '';
   const log = typeof options.log === 'function' ? options.log : () => {};
   const sessions = new Map(); // sessionId -> {lastTurnEndAt, goalActive}
   let lastErrorLogAt = 0;
@@ -136,17 +139,33 @@ export function createNotifier(options = {}) {
       return false; // subagent children announce every delegate round — skip them
     }
     const sessionId = String(session.id);
-    const payload = { agent: 'dsh', session_id: sessionId, name: nameFor(header) };
+    let title = '';
+    try {
+      title = String(titleOf(session) || '').trim().slice(0, 100);
+    } catch (err) {
+      title = '';
+    }
+    const name = title || nameFor(header);
+    const state = stateFor(sessionId);
+    state.title = title;
+    const payload = { agent: 'dsh', session_id: sessionId, name };
     const attachNow = () => {
       try {
         attach(payload, hubUrl).catch(() => {});
+        log('auto-attach "' + name + '" (session ' + sessionId + ', ' + (title ? 'title' : 'folder') + ')');
       } catch (err) {
         // contained
       }
     };
+    if (title) {
+      // The session title is the user's name for it (history included), so it
+      // is authoritative: re-register even when the hub already knows the id.
+      attachNow();
+      return true;
+    }
     try {
       query(hubUrl).then((known) => {
-        // Keep a manual rename: an already-registered session is left alone.
+        // Keep a manual rename: an already-registered untitled session is left alone.
         if (Array.isArray(known) && known.some((entry) => entry && entry.sessionId === sessionId)) return;
         attachNow();
       }, attachNow).catch(attachNow);
@@ -174,6 +193,7 @@ export function createNotifier(options = {}) {
     state.title = name;
     try {
       attach({ agent: 'dsh', session_id: sessionId, name }, hubUrl).catch(() => {});
+      log('renamed "' + name + '" (session ' + sessionId + ', session title)');
     } catch (err) {
       // contained
     }
@@ -232,6 +252,24 @@ export function apply(ctx, config = {}) {
   const notifier = createNotifier({
     hubUrl: config && config.hub ? config.hub : DEFAULT_HUB_URL,
     autoAttach: !(config && config.autoAttach === false),
+    // The folded title covers titles written before this process started (the
+    // session/title event alone would miss them: seed events are not replayed).
+    titleOf: (session) => {
+      try {
+        const service = ctx.get('sessionTitle');
+        const snapshot = service && typeof service.get === 'function' ? service.get(session) : undefined;
+        return snapshot && typeof snapshot.title === 'string' ? snapshot.title : '';
+      } catch (err) {
+        return '';
+      }
+    },
+    log: (message) => {
+      try {
+        if (ctx.logger && typeof ctx.logger.info === 'function') ctx.logger.info('[whale-notifier] ' + message);
+      } catch (err) {
+        // contained
+      }
+    },
   });
   const contained = (fn) => {
     try { fn(); } catch (err) { /* a notifier failure must never disturb the session */ }

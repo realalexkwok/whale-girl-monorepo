@@ -48,7 +48,10 @@ with `npm start` / `stack.sh start` on loopback `http://127.0.0.1:3200`
    its working-directory name (e.g. `whale-girl-monorepo`).
 3. Every time that session finishes a round the whale says
    `主人，<会话名>有任务完成啦`. Renaming the session in DSH updates the name she
-   uses for the next announcement.
+   uses for the next announcement, and a title set before the plugin started is
+   read from the session log at attach time (the folded title, not only future
+   title events). The plugin logs each decision to the DSH process log:
+   `[whale-notifier] auto-attach "<name>" (session …, title|folder)`.
    Rename with `whale_attach(session_id = $DSH_SESSION_ID, name = "构建会话")`
    (the plugin never overwrites it); mute that session with `whale_detach`.
    Subagent child sessions are skipped; `config.autoAttach: false` restores the

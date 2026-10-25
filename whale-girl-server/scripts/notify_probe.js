@@ -404,6 +404,16 @@ async function main() {
   await sleep(30);
   const titleFixtures = attachCalls.length === 2 && attachCalls[1].session_id === 'probe-auto-a'
     && attachCalls[1].name === '构建会话';
+  // A title already in the log (a rename made earlier) is read at creation, so
+  // the very first attach already uses it.
+  const titled = plugin.createNotifier({
+    hubUrl: 'http://127.0.0.1:1', post: () => Promise.resolve(), attach: recorder,
+    query: () => Promise.resolve([]), titleOf: () => '历史标题',
+  });
+  titled.handleSessionCreated({ id: 'probe-auto-titled', header: { cwd: '/tmp/probe/folder-name' } });
+  await sleep(30);
+  const titleAtCreate = attachCalls.length === 3
+    && attachCalls[2].session_id === 'probe-auto-titled' && attachCalls[2].name === '历史标题';
   // Live: the plugin's own HTTP lookup + attach against the real hub, and a
   // second session/created must NOT overwrite the registered name.
   const liveAuto = plugin.createNotifier({ hubUrl: HUB });
@@ -423,9 +433,10 @@ async function main() {
   const titleWins = sessions.payload.sessions.some((s) => s.sessionId === 'probe-auto-live'
     && s.name === '点名会话');
   await toolCall('whale_detach', { session_id: 'probe-auto-live' });
-  assert(autoFixtures && titleFixtures && autoLive && nameKept && titleWins,
+  assert(autoFixtures && titleFixtures && titleAtCreate && autoLive && nameKept && titleWins,
     'plugin auto-attach (cwd name, subagent skip, off switch, DSH title wins)',
-    'fixtures=' + autoFixtures + ' titleFixtures=' + titleFixtures + ' liveHub=' + autoLive
+    'fixtures=' + autoFixtures + ' titleFixtures=' + titleFixtures
+      + ' titleAtCreate=' + titleAtCreate + ' liveHub=' + autoLive
       + ' nameKept=' + nameKept + ' titleWins=' + titleWins
       + ' calls=' + JSON.stringify(attachCalls));
 

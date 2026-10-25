@@ -194,8 +194,12 @@ name is spoken verbatim).
 - Attach — AUTOMATIC since the 2026-10-24 usability revision: the plugin
   auto-attaches every top-level session on `session/created` (name = the DSH
   session title when set — your own rename wins — else the working-directory
-  basename; a `session/title` event re-registers the session; subagent children
-  skipped), so users never need a session id. Rename explicitly if you like (latest-wins):
+  basename — the folded title is read from the session log at attach, so a
+  rename made before the process started still counts; a `session/title` event
+  re-registers the session; subagent children skipped), so users never need a
+  session id. The plugin logs `[whale-notifier] auto-attach "<name>" (…, title|folder)`
+  to the DSH process log; the hub side of the same decision is the
+  `[notifier] attach "<name>"` line in `journalctl -u whale-girl`. Rename explicitly if you like (latest-wins):
   `whale_attach {session_id: "<$DSH_SESSION_ID>", name: "构建会话"}`; mute a
   session with `whale_detach`. `config.autoAttach: false` on the notifier row
   restores explicit-only attach.
