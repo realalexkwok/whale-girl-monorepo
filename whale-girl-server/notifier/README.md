@@ -43,9 +43,12 @@ with `npm start` / `stack.sh start` on loopback `http://127.0.0.1:3200`
 
 1. Start the whale stack (`cd whale-girl-server && bash scripts/stack.sh start`).
 2. Start or resume a DSH session. The plugin **auto-attaches it** (no ids, no
-   tool call) with the name of its working directory, e.g. `whale-girl-monorepo`.
+   tool call). The spoken name is the session's DSH title when it has one — the
+   automatic title or the name you gave it by renaming the session — otherwise
+   its working-directory name (e.g. `whale-girl-monorepo`).
 3. Every time that session finishes a round the whale says
-   `主人，whale-girl-monorepo有任务完成啦`.
+   `主人，<会话名>有任务完成啦`. Renaming the session in DSH updates the name she
+   uses for the next announcement.
    Rename with `whale_attach(session_id = $DSH_SESSION_ID, name = "构建会话")`
    (the plugin never overwrites it); mute that session with `whale_detach`.
    Subagent child sessions are skipped; `config.autoAttach: false` restores the

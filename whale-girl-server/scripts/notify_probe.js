@@ -398,6 +398,12 @@ async function main() {
   await sleep(80); // auto-attach resolves its hub lookup first
   const autoFixtures = attachCalls.length === 1 && attachCalls[0].session_id === 'probe-auto-a'
     && attachCalls[0].name === 'my-proj';
+  auto.handleSessionTitle('probe-auto-a', '构建会话');       // user's DSH rename wins
+  auto.handleSessionTitle('probe-auto-a', '构建会话');       // identical title: no re-send
+  auto.handleSessionTitle('probe-auto-b', 'subagent-title', { parentSession: 'p' });
+  await sleep(30);
+  const titleFixtures = attachCalls.length === 2 && attachCalls[1].session_id === 'probe-auto-a'
+    && attachCalls[1].name === '构建会话';
   // Live: the plugin's own HTTP lookup + attach against the real hub, and a
   // second session/created must NOT overwrite the registered name.
   const liveAuto = plugin.createNotifier({ hubUrl: HUB });
@@ -411,9 +417,16 @@ async function main() {
   sessions = await toolCall('whale_sessions', {});
   const nameKept = sessions.payload.sessions.some((s) => s.sessionId === 'probe-auto-live'
     && s.name === 'probe-live-workspace');
+  liveAuto.handleSessionTitle('probe-auto-live', '点名会话');   // DSH title overrides the folder name
+  await sleep(300);
+  sessions = await toolCall('whale_sessions', {});
+  const titleWins = sessions.payload.sessions.some((s) => s.sessionId === 'probe-auto-live'
+    && s.name === '点名会话');
   await toolCall('whale_detach', { session_id: 'probe-auto-live' });
-  assert(autoFixtures && autoLive && nameKept, 'plugin auto-attach (cwd name, subagent skip, off switch, keeps manual rename)',
-    'fixtures=' + autoFixtures + ' liveHub=' + autoLive + ' nameKept=' + nameKept
+  assert(autoFixtures && titleFixtures && autoLive && nameKept && titleWins,
+    'plugin auto-attach (cwd name, subagent skip, off switch, DSH title wins)',
+    'fixtures=' + autoFixtures + ' titleFixtures=' + titleFixtures + ' liveHub=' + autoLive
+      + ' nameKept=' + nameKept + ' titleWins=' + titleWins
       + ' calls=' + JSON.stringify(attachCalls));
 
   // --- stale TTL entries are swept -------------------------------------

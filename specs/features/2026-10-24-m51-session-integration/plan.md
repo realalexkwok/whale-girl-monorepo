@@ -76,8 +76,11 @@ README.md} (new).
   registers the session itself by calling the hub's MCP whale_attach (JSON-RPC
   over /mcp — no new hub endpoint, so only the plugin file changes), with
   name = basename(header.cwd) fallback "会话"; it skips sessions whose header
-  carries parentSession / origin "subagent" / delegationDepth. config.autoAttach
-  (default true) disables it; whale_attach still renames and whale_detach mutes.
+  carries parentSession / origin "subagent" / delegationDepth. A
+  session/title event re-registers the session with the title, so a DSH rename
+  (or the automatic title) is the spoken name and wins over the folder name.
+  config.autoAttach (default true) disables it; whale_attach still renames and
+  whale_detach mutes.
 - Per-session state: lastTurnEndAt (ms), goalActive (from goal/change events).
 - Trigger rules:
   - turn/end (reason completed | aborted | blocked | error | max-tokens |

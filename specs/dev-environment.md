@@ -192,9 +192,10 @@ name is spoken verbatim).
       {"whale-girl": {"url": "http://127.0.0.1:3200/mcp"}}
 
 - Attach — AUTOMATIC since the 2026-10-24 usability revision: the plugin
-  auto-attaches every top-level session on `session/created` (name = the
-  session's working-directory basename; subagent children skipped), so users
-  never need a session id. Rename explicitly if you like (latest-wins):
+  auto-attaches every top-level session on `session/created` (name = the DSH
+  session title when set — your own rename wins — else the working-directory
+  basename; a `session/title` event re-registers the session; subagent children
+  skipped), so users never need a session id. Rename explicitly if you like (latest-wins):
   `whale_attach {session_id: "<$DSH_SESSION_ID>", name: "构建会话"}`; mute a
   session with `whale_detach`. `config.autoAttach: false` on the notifier row
   restores explicit-only attach.

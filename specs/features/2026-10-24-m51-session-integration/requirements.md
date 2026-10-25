@@ -49,12 +49,16 @@
    is too hard for users"): the bundle AUTO-ATTACHES every top-level session as
    it is created — requirement 1.1 says "the user adds the whale girl to the
    current session via MCP or a plugin", and this is the plugin route: no ids,
-   no config, no tool call. Default name = the session's working-directory
-   basename (fallback "会话"); subagent child sessions are skipped (they would
-   announce every delegate round). whale_attach still RENAMES (latest-wins) and
-   whale_detach still mutes, so the explicit MCP path remains for other agents
-   and for users who want control; the plugin never renames a session after
-   creation, so a manual name is not overwritten.
+   no config, no tool call. Name = the session's DSH title when one exists —
+   the automatic title or the user's own rename, which wins — else its
+   working-directory basename, else "会话"; a session/title event re-registers
+   the session so a rename in DSH takes effect on the next announcement.
+   Subagent child sessions are skipped (they would announce every delegate
+   round). whale_attach still RENAMES (latest-wins) and whale_detach still
+   mutes, so the explicit MCP path remains for other agents and for users who
+   want control; auto-attach itself never overwrites an already-registered
+   session, so a manual name survives restarts (a later DSH title, being the
+   user's visible name, is the exception).
 5. Registry = single source of truth in whale-girl-server: an in-memory Map +
    a small JSON file (whale-girl-server/data/registry.json, NEW + gitignored),
    the externalized-state pattern, minus the complexity of the prior-art

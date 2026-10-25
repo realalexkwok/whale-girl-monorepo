@@ -80,6 +80,7 @@ function defaultQuery(hubUrl) {
 }
 
 /** Default spoken name for an auto-attached session: its working-directory basename. */
+const DEFAULT_NAME = '会话';
 function defaultName(header) {
   const cwd = header && typeof header.cwd === 'string' ? header.cwd : '';
   const base = cwd ? cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : '';
@@ -105,7 +106,7 @@ export function createNotifier(options = {}) {
     let state = sessions.get(sessionId);
     if (state) return state;
     if (sessions.size >= MAX_SESSIONS) sessions.clear(); // bounded: a pathological runtime must not grow memory
-    state = { lastTurnEndAt: 0, goalActive: false };
+    state = { lastTurnEndAt: 0, goalActive: false, title: '' };
     sessions.set(sessionId, state);
     return state;
   }
@@ -155,6 +156,30 @@ export function createNotifier(options = {}) {
     return true;
   }
 
+  /**
+   * The DSH session title (an automatic title or the user's rename) wins over
+   * the folder name: the whale should speak the name the user sees and renamed.
+   * Latest-wins in the hub; identical titles are not re-sent.
+   */
+  function handleSessionTitle(sessionId, title, header) {
+    if (!autoAttach || typeof title !== 'string') return false;
+    if (header && (header.parentSession !== undefined || header.origin === 'subagent'
+      || (typeof header.delegationDepth === 'number' && header.delegationDepth > 0))) {
+      return false;
+    }
+    const name = title.trim().slice(0, 100);
+    if (!name) return false;
+    const state = stateFor(sessionId);
+    if (state.title === name) return false;
+    state.title = name;
+    try {
+      attach({ agent: 'dsh', session_id: sessionId, name }, hubUrl).catch(() => {});
+    } catch (err) {
+      // contained
+    }
+    return true;
+  }
+
   function handleSessionEvent(sessionId, event, now = Date.now()) {
     if (!event || typeof event !== 'object') return false;
     const state = stateFor(sessionId);
@@ -197,7 +222,10 @@ export function createNotifier(options = {}) {
     return true;
   }
 
-  return { handleSessionCreated, handleSessionEvent, handleAgentStatus, handleSessionDisposed, sessions };
+  return {
+    handleSessionCreated, handleSessionTitle, handleSessionEvent, handleAgentStatus,
+    handleSessionDisposed, sessions,
+  };
 }
 
 export function apply(ctx, config = {}) {
@@ -212,7 +240,14 @@ export function apply(ctx, config = {}) {
     contained(() => notifier.handleSessionCreated(session));
   });
   ctx.on('session/event', (session, event) => {
-    contained(() => notifier.handleSessionEvent(String(session.id), event));
+    contained(() => {
+      const sessionId = String(session.id);
+      if (event && event.type === 'session/title') {
+        notifier.handleSessionTitle(sessionId, event.data && event.data.title, session.header);
+        return;
+      }
+      notifier.handleSessionEvent(sessionId, event);
+    });
   });
   ctx.on('agent/status', (payload) => {
     contained(() => {

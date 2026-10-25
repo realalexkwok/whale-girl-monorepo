@@ -189,8 +189,10 @@
   mcp__whale__whale_* tools once the hub is up (the client keeps retrying).
   AUTO-ATTACH (2026-10-24 usability revision): the hook registers each
   top-level session itself on session/created via the hub's MCP whale_attach
-  (JSON-RPC over /mcp — no extra hub endpoint), name = basename(header.cwd)
-  fallback "会话", subagent children skipped; config.autoAttach:false opts out.
+  (JSON-RPC over /mcp — no extra hub endpoint), name = the DSH session title
+  when set (session/title event; the user's rename wins) else
+  basename(header.cwd) fallback "会话", subagent children skipped;
+  config.autoAttach:false opts out.
   Host rule: the hub is loopback-only where the whale stack runs, so DSH must
   run there too (the Ubuntu box in the deployed patterns; DSH on the Mac may
   reach it through an added -L 3200 ssh forward). The page/OBS may be remote —
