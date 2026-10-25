@@ -20,6 +20,19 @@ profile YAML is edited by hand.
 - **CLI** (pnpm add; enable the bundle afterwards in the Plugins page):
   `dsh plugin --profile <name> add <absolute path to this folder>`
 
+**Use `link:`, not `file:`, for a checkout you keep updating.** pnpm *copies* a
+`file:` dependency at install time, so `git pull` never reaches the profile and
+DSH keeps loading the old plugin code (this bit us on 2026-10-24). A `link:`
+dependency is a symlink into the repo, so later pulls apply on the next DSH
+start:
+
+    cd ~/.dsh/profiles/<name>
+    pnpm remove whale-girl-dsh-notifier
+    pnpm add "link:$HOME/Projects/whale-girl-monorepo/whale-girl-server/notifier"
+
+After the install, restart DSH so the profile composes the bundle (a module
+that is already loaded is not hot-swapped).
+
 The hub itself is the whale-girl server (`whale-girl-server/hub.js`): it starts
 with `npm start` / `stack.sh start` on loopback `http://127.0.0.1:3200`
 (env `WHALE_MCP_PORT`). The MCP tools appear in every session as

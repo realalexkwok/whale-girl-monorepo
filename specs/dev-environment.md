@@ -174,7 +174,16 @@ name is spoken verbatim).
   - from an agent session (danger-full-access / approval):
     `plugin_manager install_bundle { "target": "<absolute path to whale-girl-server/notifier>" }`;
   - CLI: `dsh plugin --profile <name> add <absolute path>`, then enable the
-    bundle in the Plugins page.
+    bundle in the Plugins page. For a checkout you keep updating, install with
+    `link:` rather than `file:` (pnpm COPIES a file: dependency, so a later
+    git pull never reaches the profile — the 2026-10-24 web/TUI "stuck" bug):
+
+        cd ~/.dsh/profiles/<name>
+        pnpm remove whale-girl-dsh-notifier
+        pnpm add "link:/abs/path/to/whale-girl-server/notifier"
+
+    Restart DSH afterwards; neither a restart nor a pull hot-swaps a module that
+    is already loaded in a running process.
   The bundle's MCP client registers the hub's tools in every session as
   `mcp__whale__whale_attach`, `mcp__whale__whale_detach`,
   `mcp__whale__whale_sessions`. Alternatively mount the hub per session via
