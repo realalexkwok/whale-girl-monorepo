@@ -10,8 +10,9 @@
    green (attach/detach/rename/latest-wins/TTL/per-reason/verbatim-name/
    goal-suppression/session-dispose/unattached-ignored + the plugin fixture
    state machine incl. AUTO-ATTACH on session/created with cwd naming, the
-   subagent skip, config.autoAttach=false and the session/title rename that
-   overrides the folder name), hub accept latency < 100 ms,
+   subagent skip, config.autoAttach=false, a title read at creation for a
+   resumed session replacing the stale folder name, a hand-set name never
+   overwritten, and the live session/title rename), hub accept latency < 100 ms,
    end-to-end announce latency
    reported (mean/max, includes TTS synthesis; the measured 842 ms is under
    the 1 s intent), node + driver RSS within 60/30 MB, ports released; prints

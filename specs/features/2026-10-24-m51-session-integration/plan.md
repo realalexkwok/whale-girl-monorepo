@@ -75,10 +75,13 @@ README.md} (new).
 - AUTO-ATTACH (2026-10-24 usability revision): on session/created the plugin
   registers the session itself by calling the hub's MCP whale_attach (JSON-RPC
   over /mcp — no new hub endpoint, so only the plugin file changes), with
-  name = basename(header.cwd) fallback "会话"; it skips sessions whose header
-  carries parentSession / origin "subagent" / delegationDepth. A
-  session/title event re-registers the session with the title, so a DSH rename
-  (or the automatic title) is the spoken name and wins over the folder name.
+  name = the session's folded title when one exists (ctx.sessionTitle.get,
+  session.snapshotEvents() fallback) else basename(header.cwd) fallback "会话";
+  it skips sessions whose header carries parentSession / origin "subagent" /
+  delegationDepth. The hub lookup gates the stale-name upgrade: an entry named
+  with the derived folder name is the plugin's own and is renamed to the title,
+  any other name (whale_attach) is kept. A session/title event re-registers the
+  session with the title, so a later DSH rename takes effect immediately.
   config.autoAttach (default true) disables it; whale_attach still renames and
   whale_detach mutes.
 - Per-session state: lastTurnEndAt (ms), goalActive (from goal/change events).

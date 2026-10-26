@@ -408,12 +408,33 @@ async function main() {
   // the very first attach already uses it.
   const titled = plugin.createNotifier({
     hubUrl: 'http://127.0.0.1:1', post: () => Promise.resolve(), attach: recorder,
-    query: () => Promise.resolve([]), titleOf: () => '历史标题',
+    query: () => Promise.resolve([]), titleFor: () => '历史标题',
   });
   titled.handleSessionCreated({ id: 'probe-auto-titled', header: { cwd: '/tmp/probe/folder-name' } });
   await sleep(30);
   const titleAtCreate = attachCalls.length === 3
     && attachCalls[2].session_id === 'probe-auto-titled' && attachCalls[2].name === '历史标题';
+  // Resume: the title predates this DSH process, so session/event never replays
+  // it; the plugin reads it from the session and replaces its stale folder name.
+  attachCalls.length = 0;
+  const resumed = plugin.createNotifier({
+    hubUrl: 'http://127.0.0.1:1', post: () => Promise.resolve(), attach: recorder,
+    query: () => Promise.resolve([{ sessionId: 'probe-auto-resumed', name: 'probe-live-workspace' }]),
+    titleFor: () => 'List installed MCPs',
+  });
+  resumed.handleSessionCreated({ id: 'probe-auto-resumed', header: { cwd: '/tmp/probe-live-workspace' } });
+  await sleep(30);
+  const resumedTitle = attachCalls.length === 1 && attachCalls[0].name === 'List installed MCPs';
+  // A name the user chose is never replaced by the title.
+  attachCalls.length = 0;
+  const renamedByHand = plugin.createNotifier({
+    hubUrl: 'http://127.0.0.1:1', post: () => Promise.resolve(), attach: recorder,
+    query: () => Promise.resolve([{ sessionId: 'probe-auto-hand', name: '我的会话' }]),
+    titleFor: () => 'List installed MCPs',
+  });
+  renamedByHand.handleSessionCreated({ id: 'probe-auto-hand', header: { cwd: '/tmp/probe-live-workspace' } });
+  await sleep(30);
+  const handNameKept = attachCalls.length === 0;
   // Live: the plugin's own HTTP lookup + attach against the real hub, and a
   // second session/created must NOT overwrite the registered name.
   const liveAuto = plugin.createNotifier({ hubUrl: HUB });
@@ -433,10 +454,12 @@ async function main() {
   const titleWins = sessions.payload.sessions.some((s) => s.sessionId === 'probe-auto-live'
     && s.name === '点名会话');
   await toolCall('whale_detach', { session_id: 'probe-auto-live' });
-  assert(autoFixtures && titleFixtures && titleAtCreate && autoLive && nameKept && titleWins,
-    'plugin auto-attach (cwd name, subagent skip, off switch, DSH title wins)',
+  assert(autoFixtures && titleFixtures && titleAtCreate && resumedTitle && handNameKept
+    && autoLive && nameKept && titleWins,
+    'plugin auto-attach (cwd name, subagent skip, off switch, resumed + live DSH title, hand rename kept)',
     'fixtures=' + autoFixtures + ' titleFixtures=' + titleFixtures
-      + ' titleAtCreate=' + titleAtCreate + ' liveHub=' + autoLive
+      + ' titleAtCreate=' + titleAtCreate + ' resumedTitle=' + resumedTitle
+      + ' handNameKept=' + handNameKept + ' liveHub=' + autoLive
       + ' nameKept=' + nameKept + ' titleWins=' + titleWins
       + ' calls=' + JSON.stringify(attachCalls));
 

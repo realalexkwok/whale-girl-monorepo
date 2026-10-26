@@ -16,9 +16,12 @@
  *
  * AUTO-ATTACH (2026-10-24): on session/created the plugin registers a top-level
  * session with the hub itself (MCP whale_attach over /mcp), so users never deal
- * with session ids or tool calls. Name = basename(header.cwd) else "会话";
- * subagent children are skipped. config.autoAttach:false restores explicit-only
- * attach; whale_attach renames and whale_detach mutes as before.
+ * with session ids or tool calls. Name = the persisted session title when one
+ * exists (a resumed session replays its log as seed events, which never publish
+ * on session/event, so the title must be read from the session), else
+ * basename(header.cwd) else "会话"; subagent children are skipped.
+ * config.autoAttach:false restores explicit-only attach; whale_attach renames
+ * and whale_detach mutes as before.
  */
 
 export const name = 'whale-notifier';
@@ -81,6 +84,12 @@ function defaultQuery(hubUrl) {
 
 /** Default spoken name for an auto-attached session: its working-directory basename. */
 const DEFAULT_NAME = '会话';
+
+/** Subagent children announce every delegate round; only top-level sessions attach. */
+function isSubagent(header) {
+  return Boolean(header && (header.parentSession !== undefined || header.origin === 'subagent'
+    || (typeof header.delegationDepth === 'number' && header.delegationDepth > 0)));
+}
 function defaultName(header) {
   const cwd = header && typeof header.cwd === 'string' ? header.cwd : '';
   const base = cwd ? cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : '';
@@ -100,7 +109,7 @@ export function createNotifier(options = {}) {
   const nameFor = typeof options.nameFor === 'function' ? options.nameFor : defaultName;
   // Current DSH session title (a fold of the session log, so it also covers a
   // rename made before this process started) — the user's name for the session.
-  const titleOf = typeof options.titleOf === 'function' ? options.titleOf : () => '';
+  const titleFor = typeof options.titleFor === 'function' ? options.titleFor : () => '';
   const log = typeof options.log === 'function' ? options.log : () => {};
   const sessions = new Map(); // sessionId -> {lastTurnEndAt, goalActive}
   let lastErrorLogAt = 0;
@@ -128,26 +137,26 @@ export function createNotifier(options = {}) {
   }
 
   /**
-   * Register a freshly created top-level session. Called by apply() from
-   * session/created; returns true when an attach request was sent.
+   * Register a freshly created or resumed top-level session. A persisted title
+   * beats the folder name: resuming a session replays its log as seed events,
+   * which never publish on `session/event`, so a title created before this DSH
+   * process started is invisible to {@link handleSessionTitle} and must be read
+   * from the session here. Called by apply() from session/created; returns true
+   * when an attach request was sent.
    */
   function handleSessionCreated(session) {
     if (!autoAttach || !session || session.id === undefined) return false;
-    const header = session.header;
-    if (header && (header.parentSession !== undefined || header.origin === 'subagent'
-      || (typeof header.delegationDepth === 'number' && header.delegationDepth > 0))) {
-      return false; // subagent children announce every delegate round — skip them
-    }
+    if (isSubagent(session.header)) return false;
     const sessionId = String(session.id);
+    const directoryName = nameFor(session.header);
     let title = '';
     try {
-      title = String(titleOf(session) || '').trim().slice(0, 100);
+      title = String(titleFor(session) || '').trim().slice(0, 100);
     } catch (err) {
       title = '';
     }
-    const name = title || nameFor(header);
-    const state = stateFor(sessionId);
-    state.title = title;
+    const name = title || directoryName;
+    if (title) stateFor(sessionId).title = title;
     const payload = { agent: 'dsh', session_id: sessionId, name };
     const attachNow = () => {
       try {
@@ -157,16 +166,14 @@ export function createNotifier(options = {}) {
         // contained
       }
     };
-    if (title) {
-      // The session title is the user's name for it (history included), so it
-      // is authoritative: re-register even when the hub already knows the id.
-      attachNow();
-      return true;
-    }
     try {
       query(hubUrl).then((known) => {
-        // Keep a manual rename: an already-registered untitled session is left alone.
-        if (Array.isArray(known) && known.some((entry) => entry && entry.sessionId === sessionId)) return;
+        const entry = Array.isArray(known)
+          ? known.find((item) => item && item.sessionId === sessionId)
+          : undefined;
+        // Never overwrite a name the user set. Correct only the stale folder
+        // name this plugin derived before the title existed (resumed session).
+        if (entry !== undefined && (!title || entry.name !== directoryName)) return;
         attachNow();
       }, attachNow).catch(attachNow);
     } catch (err) {
@@ -182,10 +189,7 @@ export function createNotifier(options = {}) {
    */
   function handleSessionTitle(sessionId, title, header) {
     if (!autoAttach || typeof title !== 'string') return false;
-    if (header && (header.parentSession !== undefined || header.origin === 'subagent'
-      || (typeof header.delegationDepth === 'number' && header.delegationDepth > 0))) {
-      return false;
-    }
+    if (isSubagent(header)) return false;
     const name = title.trim().slice(0, 100);
     if (!name) return false;
     const state = stateFor(sessionId);
@@ -249,20 +253,25 @@ export function createNotifier(options = {}) {
 }
 
 export function apply(ctx, config = {}) {
+  // The title lives in the session log, so it survives a DSH restart. Read it
+  // through the title service when mounted; custom profiles without it fall
+  // back to the log fold that service performs.
+  const titleFor = (session) => {
+    try {
+      const titles = ctx.get('sessionTitle');
+      const snapshot = titles && typeof titles.get === 'function' ? titles.get(session) : undefined;
+      if (snapshot && typeof snapshot.title === 'string') return snapshot.title;
+      const events = typeof session.snapshotEvents === 'function' ? session.snapshotEvents() : [];
+      const event = events.findLast((item) => item && item.type === 'session/title');
+      return event && event.data && typeof event.data.title === 'string' ? event.data.title : '';
+    } catch (err) {
+      return ''; // a missing title service must not disturb the session
+    }
+  };
   const notifier = createNotifier({
     hubUrl: config && config.hub ? config.hub : DEFAULT_HUB_URL,
     autoAttach: !(config && config.autoAttach === false),
-    // The folded title covers titles written before this process started (the
-    // session/title event alone would miss them: seed events are not replayed).
-    titleOf: (session) => {
-      try {
-        const service = ctx.get('sessionTitle');
-        const snapshot = service && typeof service.get === 'function' ? service.get(session) : undefined;
-        return snapshot && typeof snapshot.title === 'string' ? snapshot.title : '';
-      } catch (err) {
-        return '';
-      }
-    },
+    titleFor,
     log: (message) => {
       try {
         if (ctx.logger && typeof ctx.logger.info === 'function') ctx.logger.info('[whale-notifier] ' + message);

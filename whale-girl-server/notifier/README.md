@@ -50,7 +50,9 @@ with `npm start` / `stack.sh start` on loopback `http://127.0.0.1:3200`
    `主人，<会话名>有任务完成啦`. Renaming the session in DSH updates the name she
    uses for the next announcement, and a title set before the plugin started is
    read from the session log at attach time (the folded title, not only future
-   title events). The plugin logs each decision to the DSH process log:
+   title events). A stale folder name this plugin attached earlier is upgraded to
+   the title; a name you set with `whale_attach` is never overwritten. The
+   plugin logs each decision to the DSH process log:
    `[whale-notifier] auto-attach "<name>" (session …, title|folder)`.
    Rename with `whale_attach(session_id = $DSH_SESSION_ID, name = "构建会话")`
    (the plugin never overwrites it); mute that session with `whale_detach`.

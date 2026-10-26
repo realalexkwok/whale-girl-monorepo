@@ -191,8 +191,12 @@
   top-level session itself on session/created via the hub's MCP whale_attach
   (JSON-RPC over /mcp — no extra hub endpoint), name = the DSH session title
   when set (read via ctx.sessionTitle.get(session) at attach — history
-  included — and kept current by session/title events; the user's rename wins)
-  else basename(header.cwd) fallback "会话", subagent children skipped;
+  included — with a session.snapshotEvents() fold as the fallback for profiles
+  without the service, and kept current by session/title events) else
+  basename(header.cwd) fallback "会话"; a hub entry whose name equals the
+  derived folder name is the plugin's own stale name and is renamed to the
+  title, while any other name (a whale_attach rename) is never overwritten;
+  subagent children skipped;
   config.autoAttach:false opts out; the plugin logs its attach decision to the
   harness logger.
   Host rule: the hub is loopback-only where the whale stack runs, so DSH must

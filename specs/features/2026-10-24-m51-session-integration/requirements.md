@@ -50,9 +50,15 @@
    it is created — requirement 1.1 says "the user adds the whale girl to the
    current session via MCP or a plugin", and this is the plugin route: no ids,
    no config, no tool call. Name = the session's DSH title when one exists —
-   the automatic title or the user's own rename, which wins — else its
-   working-directory basename, else "会话"; a session/title event re-registers
-   the session so a rename in DSH takes effect on the next announcement.
+   the automatic title or the user's own rename — else its working-directory
+   basename, else "会话". The title is resolved at attach time from the folded
+   title (ctx.sessionTitle.get(session), session.snapshotEvents() fallback),
+   because a resumed session replays its log as seed events, which never
+   publish on session/event — so a title written before this DSH process
+   started is otherwise invisible. A hub entry whose name is the plugin's own
+   derived folder name is renamed to the title; a name set with whale_attach is
+   never overwritten. A live session/title event re-registers the session so a
+   rename in DSH takes effect on the next announcement.
    Subagent child sessions are skipped (they would announce every delegate
    round). whale_attach still RENAMES (latest-wins) and whale_detach still
    mutes, so the explicit MCP path remains for other agents and for users who

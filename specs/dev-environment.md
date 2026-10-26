@@ -196,8 +196,9 @@ name is spoken verbatim).
   session title when set — your own rename wins — else the working-directory
   basename — the folded title is read from the session log at attach, so a
   rename made before the process started still counts; a `session/title` event
-  re-registers the session; subagent children skipped), so users never need a
-  session id. The plugin logs `[whale-notifier] auto-attach "<name>" (…, title|folder)`
+  re-registers the session; a stale folder name the plugin itself attached is
+  upgraded to the title, while a name set with `whale_attach` is never
+  overwritten; subagent children skipped), so users never need a session id. The plugin logs `[whale-notifier] auto-attach "<name>" (…, title|folder)`
   to the DSH process log; the hub side of the same decision is the
   `[notifier] attach "<name>"` line in `journalctl -u whale-girl`. Rename explicitly if you like (latest-wins):
   `whale_attach {session_id: "<$DSH_SESSION_ID>", name: "构建会话"}`; mute a
