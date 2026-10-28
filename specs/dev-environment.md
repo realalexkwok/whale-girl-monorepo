@@ -218,6 +218,10 @@ name is spoken verbatim).
 
       cd whale-girl-server && node scripts/notify_probe.js
 
+- Question line: the plugin's `tools/pre-execute` listener posts
+  `{kind:"question"}` when the agent calls `ask_user_question` /
+  `request_user_input`, so she says 主人，<会话名>有问题需要你回答. /notify
+  defaults `kind` to `round_finished` for plain hooks.
 - Env knobs: `WHALE_MCP_HOST` (default 127.0.0.1), `WHALE_MCP_PORT`
   (default 3200), `WHALE_REGISTRY_FILE`, `WHALE_SESS_TTL` (seconds, default
   86400), and the plugin's `config.hub`.

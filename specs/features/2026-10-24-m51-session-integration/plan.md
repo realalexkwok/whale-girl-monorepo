@@ -101,6 +101,18 @@ README.md} (new).
 Checks: node --check + dynamic import; the fixture state machine is exercised
 by notify_probe (group C).
 
+### Group B2 — question notifications
+Files: whale-girl-server/hub.js (template selection), notifier/index.mjs (tool
+hook), scripts/notify_probe.js (checks).
+- /notify gains an optional `kind`: `question` speaks
+  主人，<name>有问题需要你回答; anything else (or absent) keeps
+  主人，<name>有任务完成啦. The response echoes `kind`, the notification log
+  records it, and the same 10/min cap applies.
+- The plugin listens to the `tools/pre-execute` waterfall and, when the tool
+  name is `ask_user_question` / `request_user_input` (optionally namespaced
+  with `__`), posts `{kind:"question"}` for that agent's session — then hands
+  the decision to `next()` unchanged. Fire-and-forget, contained.
+
 ### Group C — fixture probe
 File: whale-girl-server/scripts/notify_probe.js (new).
 - Boots its own server + python driver (the cmd_probe/say_probe pattern:

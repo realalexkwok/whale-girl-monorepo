@@ -171,7 +171,10 @@
   session_id <= 256 chars, name 1-100 chars, invalid params -> -32602),
   whale_detach {session_id}, whale_sessions {}. The registry is the single
   source of truth; agents are never relied on for state.
-- Announcement: text "主人，" + name + "有任务完成啦" as the v1 say command frame
+- Announcement: text "主人，" + name + "有任务完成啦" (round finished), or
+  "主人，" + name + "有问题需要你回答" when /notify carries kind:"question"
+  (M5.1 question hook: the plugin's tools/pre-execute listener sees
+  ask_user_question / request_user_input), as the v1 say command frame
   {"type":"say","text":...}, relayed through the EXISTING command path
   (server.js relayCommandText — raw string, frame-size + stalled-brain guards,
   the web flood window is not consumed); the hub caps announcements at
@@ -214,7 +217,7 @@
 - Notification history: every SPOKEN announcement is appended to a bounded
   50-entry ring in the registry file ({ts, sessionId, name, text}); M5.4's
   context menu reads it (cap/retention policy still owned by M5.4's planning).
-- Verification: node scripts/notify_probe.js — 21 checks (MCP surface,
+- Verification: node scripts/notify_probe.js — 24 checks (MCP surface,
   attach/rename/detach, verbatim names incl. %, unattached ignored,
   per-reason announcements, session_end, TTL sweep, plugin fixtures for
   goal/dedupe/dispose/containment, hub-accept latency, RSS, port release).

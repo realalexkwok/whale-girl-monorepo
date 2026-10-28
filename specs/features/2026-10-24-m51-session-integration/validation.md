@@ -7,7 +7,7 @@
 
 ## Success criteria
 1. notify_probe (whale-girl-server/scripts/notify_probe.js) — ALL checks
-   green (attach/detach/rename/latest-wins/TTL/per-reason/verbatim-name/
+   green (attach/detach/rename/latest-wins/TTL/per-reason/question/verbatim-name/
    goal-suppression/session-dispose/unattached-ignored + the plugin fixture
    state machine incl. AUTO-ATTACH on session/created with cwd naming, the
    subagent skip, config.autoAttach=false, a title read at creation for a
@@ -17,6 +17,9 @@
    reported (mean/max, includes TTS synthesis; the measured 842 ms is under
    the 1 s intent), node + driver RSS within 60/30 MB, ports released; prints
    its check count.
+1a. A pending question (ask_user_question) speaks
+   主人，<会话名>有问题需要你回答 instead of the round-finished line; the kind is
+   echoed by /notify and stored in the notification history.
 2. Existing gates stay green: ws_probe PASS 20–40 fps monotonic f,
    ws_role_probe close 1008, cmd_probe 63/63, say_probe 13/13, expr_probe
    22/22, curl :3000 -> 200, inline frontend node --check.
@@ -33,8 +36,8 @@
 
 | # | Check | Result |
 | --- | --- | --- |
-| 1 | notify_probe full suite (21 checks) | PASS 21/21 (2026-10-24) |
-| 2 | hub accept latency (gate < 100 ms) + end-to-end mean/max | PASS 3 ms; end-to-end n=8 mean 496 ms max 541 ms (TTS included; 1 s intent met) |
+| 1 | notify_probe full suite (24 checks) | PASS 24/24 (2026-10-28) |
+| 2 | hub accept latency (gate < 100 ms) + end-to-end mean/max | PASS 2 ms; end-to-end n=8 mean 572 ms max 768 ms (TTS included; 1 s intent met) |
 | 3 | server RSS w/ hub (budget 60 MB) | 53.7 MB probe / 51,536 KB stack (sync 2026-10-24) |
 | 4 | driver RSS (budget 30 MB) | 19.4 MB probe / 16,864 KB stack |
 | 5 | ws_probe | PASS 30.0 fps, 61 frames over 2.00 s |
@@ -45,6 +48,7 @@
 | 10 | curl :3000 -> 200 | PASS 200 |
 | 11 | node --check (server, hub, plugin import, probe, inline 40,947 B) | PASS |
 | 12 | ports released after probes | PASS 3000/3001/3200 (+ probe TTL port) |
+| 13 | question announcement + ask-question hook | PASS: POST /notify kind=question -> say "主人，Q会话有问题需要你回答"; fixture posts kind=question; apply wiring returns next() unchanged |
 
 ## Manual results (owner — fill at close)
 

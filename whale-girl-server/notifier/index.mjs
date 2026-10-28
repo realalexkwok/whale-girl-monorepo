@@ -85,6 +85,11 @@ function defaultQuery(hubUrl) {
 /** Default spoken name for an auto-attached session: its working-directory basename. */
 const DEFAULT_NAME = '会话';
 
+/** The agent's "ask the user a question" tools (Claude-Code compatible names). */
+function isAskTool(name) {
+  return /(^|__)(ask_user_question|request_user_input)$/.test(String(name || ''));
+}
+
 /** Subagent children announce every delegate round; only top-level sessions attach. */
 function isSubagent(header) {
   return Boolean(header && (header.parentSession !== undefined || header.origin === 'subagent'
@@ -204,6 +209,23 @@ export function createNotifier(options = {}) {
     return true;
   }
 
+  /**
+   * The agent asked the user a question (ask_user_question / request_user_input).
+   * Posted with kind "question" so the hub speaks
+   * `主人，<会话名>有问题需要你回答` instead of the round-finished line.
+   */
+  function handleAskQuestion(sessionId) {
+    if (!sessionId) return false;
+    const payload = { agent: 'dsh', session_id: sessionId, kind: 'question', reason: 'ask_user_question', ts: Date.now() };
+    try {
+      post(payload, hubUrl).catch(() => {});
+      log('question pending (session ' + sessionId + ')');
+    } catch (err) {
+      // contained
+    }
+    return true;
+  }
+
   function handleSessionEvent(sessionId, event, now = Date.now()) {
     if (!event || typeof event !== 'object') return false;
     const state = stateFor(sessionId);
@@ -247,8 +269,8 @@ export function createNotifier(options = {}) {
   }
 
   return {
-    handleSessionCreated, handleSessionTitle, handleSessionEvent, handleAgentStatus,
-    handleSessionDisposed, sessions,
+    handleSessionCreated, handleSessionTitle, handleAskQuestion, handleSessionEvent,
+    handleAgentStatus, handleSessionDisposed, sessions,
   };
 }
 
@@ -272,6 +294,8 @@ export function apply(ctx, config = {}) {
     hubUrl: config && config.hub ? config.hub : DEFAULT_HUB_URL,
     autoAttach: !(config && config.autoAttach === false),
     titleFor,
+    // Test seam: config.post injects a recorder in the fixture probe.
+    post: typeof config.post === 'function' ? config.post : undefined,
     log: (message) => {
       try {
         if (ctx.logger && typeof ctx.logger.info === 'function') ctx.logger.info('[whale-notifier] ' + message);
@@ -283,6 +307,20 @@ export function apply(ctx, config = {}) {
   const contained = (fn) => {
     try { fn(); } catch (err) { /* a notifier failure must never disturb the session */ }
   };
+  // Asking the user a question is a pending input, not a finished round: the
+  // whale says 主人，<会话名>有问题需要你回答. This is a waterfall listener, so
+  // it must always hand the decision to next().
+  ctx.on('tools/pre-execute', async (exec, next) => {
+    try {
+      const session = exec && exec.agent && exec.agent.session;
+      if (session && session.id !== undefined && isAskTool(exec.name)) {
+        notifier.handleAskQuestion(String(session.id));
+      }
+    } catch (err) {
+      // contained: the notifier never changes a tool decision
+    }
+    return next();
+  });
   ctx.on('session/created', (session) => {
     contained(() => notifier.handleSessionCreated(session));
   });

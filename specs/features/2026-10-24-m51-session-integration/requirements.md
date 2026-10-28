@@ -11,6 +11,11 @@
 - When a watched DSH session finishes a round, the whale says the fixed template
   主人，%会话名%有任务完成啦 through the EXISTING say pipeline (M2.2 speech +
   M3.1 command relay) — no new speech machinery.
+- When the agent asks the user a question (the ask_user_question /
+  request_user_input tool), she says 主人，%会话名%有问题需要你回答 instead: a
+  pending input is not a finished round. The hook posts
+  `{kind:"question"}` to /notify; the hub selects the template from `kind`
+  (default `round_finished`), and the M5.4 history records the kind.
 - Attach / detach / rename a session from within the DSH session itself via MCP
   tools; removal stops all announcements for that session.
 - Cross-agent seams (Claude Code / Codex / Cursor / Gemini / Copilot hooks) are

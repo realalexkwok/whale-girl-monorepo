@@ -118,6 +118,8 @@ driver-side and not shown; during a say the line shows the current word).
 
 Attach a DSH session to the whale girl and she announces when a round finishes:
 **主人，<会话名>有任务完成啦** (the name is spoken verbatim, never translated).
+When the agent asks you a question (`ask_user_question`), she says
+**主人，<会话名>有问题需要你回答** instead.
 
 The **hub** starts with the server (no extra command) and listens on loopback only:
 `http://127.0.0.1:3200` — `/mcp` (MCP streamable HTTP), `/notify` (lifecycle hooks),
@@ -138,9 +140,10 @@ speaks its **DSH session title** (the automatic title or the name you gave it
 by renaming the session; the working-directory name is the fallback). It posts
 fire-and-forget to `/notify` on turn/end, dedupes the agent-idle fallback,
 stays silent during goal auto-continuation rounds, and detaches on session
-disposal. Rename with
-`mcp__whale__whale_attach`, mute with `mcp__whale__whale_detach`; config
-`autoAttach: false` restores explicit-only attach. The hub only announces ATTACHED sessions and drops everything
+disposal. A pending question speaks its own line (`kind:"question"` on
+`/notify`). Rename with `mcp__whale__whale_attach`, mute with
+`mcp__whale__whale_detach`; config `autoAttach: false` restores explicit-only
+attach. The hub only announces ATTACHED sessions and drops everything
 it cannot speak; nothing blocks the agent. A per-session ACP mount
 (`{"whale-girl":{"url":"http://127.0.0.1:3200/mcp"}}`) still works and gives the
 unprefixed tool names.

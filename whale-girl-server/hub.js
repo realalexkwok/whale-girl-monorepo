@@ -124,7 +124,16 @@ function removeEntry(sessionId) {
   return existed;
 }
 
-function announce(entry, now) {
+// Two notification kinds share one pipeline: a finished round and a pending
+// question. The kind selects the spoken template; the plugin supplies it
+// through /notify (kind defaults to round_finished for plain hooks).
+function announceText(kind, name) {
+  return kind === 'question'
+    ? '主人，' + name + '有问题需要你回答'
+    : '主人，' + name + '有任务完成啦';
+}
+
+function announce(entry, now, kind) {
   if (now - announceWindowStart >= ANNOUNCE_WINDOW_MS) {
     announceWindowStart = now;
     announceCount = 0;
@@ -135,7 +144,7 @@ function announce(entry, now) {
   }
   announceCount++;
   announceSeq++;
-  const text = '主人，' + entry.name + '有任务完成啦';
+  const text = announceText(kind, entry.name);
   const frame = JSON.stringify({ type: 'say', text });
   const speakable = typeof relay === 'function' && relay(frame);
   entry.lastFinishedAt = now;
@@ -143,7 +152,7 @@ function announce(entry, now) {
   if (speakable) {
     // The history is what she has SPOKEN (M5.4); an unspeakable line is not a
     // notification the user ever heard.
-    notifications.push({ ts: now, sessionId: entry.sessionId, name: entry.name, text });
+    notifications.push({ ts: now, sessionId: entry.sessionId, name: entry.name, kind, text });
     if (notifications.length > NOTIFY_LOG_CAP) notifications.splice(0, notifications.length - NOTIFY_LOG_CAP);
   }
   saveRegistry();
@@ -151,7 +160,8 @@ function announce(entry, now) {
     warn('announcement accepted but no brain connected (say dropped): "' + entry.name + '"');
     return { announced: false, unspeakable: true };
   }
-  console.log('[notifier] #' + announceSeq + ' announce "' + entry.name + '" (session ' + entry.sessionId + ')');
+  console.log('[notifier] #' + announceSeq + ' announce "' + entry.name + '" ('
+    + kind + ', session ' + entry.sessionId + ')');
   return { announced: true };
 }
 
@@ -370,8 +380,9 @@ async function handleNotify(req, res) {
     sendJson(res, 202, { ok: true, removed: true });
     return;
   }
-  const outcome = announce(entry, now);
-  sendJson(res, 202, Object.assign({ ok: true, name: entry.name }, outcome));
+  const kind = body.kind === 'question' ? 'question' : 'round_finished';
+  const outcome = announce(entry, now, kind);
+  sendJson(res, 202, Object.assign({ ok: true, name: entry.name, kind }, outcome));
 }
 
 const server = http.createServer((req, res) => {

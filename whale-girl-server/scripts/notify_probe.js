@@ -306,6 +306,18 @@ async function main() {
     'registry notifications last entry matches ' + JSON.stringify(TEMPLATE('Reason')));
   await toolCall('whale_detach', { session_id: 'probe-reasons' });
 
+  // --- a pending question speaks its own line --------------------------
+  await toolCall('whale_attach', { session_id: 'probe-question', name: 'Q会话' });
+  cursor = sayFrames.length;
+  const question = await notify({ session_id: 'probe-question', kind: 'question' });
+  const sayQuestion = await awaitSay(cursor, 15000);
+  assert(question.status === 202 && question.json && question.json.announced === true
+    && question.json.kind === 'question' && sayQuestion
+    && sayQuestion.frame.text === '主人，Q会话有问题需要你回答',
+    'question announcement (its own template)',
+    sayQuestion ? 'text=' + JSON.stringify(sayQuestion.frame.text) : 'no say frame');
+  await toolCall('whale_detach', { session_id: 'probe-question' });
+
   // --- session_end hook removes the entry ------------------------------
   await toolCall('whale_attach', { session_id: 'probe-end', name: 'End' });
   cursor = sayFrames.length;
@@ -462,6 +474,32 @@ async function main() {
       + ' handNameKept=' + handNameKept + ' liveHub=' + autoLive
       + ' nameKept=' + nameKept + ' titleWins=' + titleWins
       + ' calls=' + JSON.stringify(attachCalls));
+
+  // --- ask-question hook (fixture + apply wiring) ----------------------
+  const qPosts = [];
+  const qNotifier = plugin.createNotifier({
+    hubUrl: 'http://127.0.0.1:1',
+    post: (payload) => { qPosts.push(payload); return Promise.resolve(); },
+  });
+  qNotifier.handleAskQuestion('fx-q');
+  const qFixture = qPosts.length === 1 && qPosts[0].kind === 'question' && qPosts[0].session_id === 'fx-q';
+  const applyPosts = [];
+  const hooks = {};
+  plugin.apply({ on: (name, fn) => { hooks[name] = fn; }, get: () => undefined }, {
+    hub: 'http://127.0.0.1:1',
+    post: (payload) => { applyPosts.push(payload); return Promise.resolve(); },
+    autoAttach: false,
+  });
+  const decision = { kind: 'allow' };
+  const returned = await hooks['tools/pre-execute'](
+    { name: 'ask_user_question', agent: { session: { id: 'fx-q2' } } },
+    () => Promise.resolve(decision),
+  );
+  await sleep(30);
+  const applyWired = returned === decision
+    && applyPosts.some((p) => p.kind === 'question' && p.session_id === 'fx-q2');
+  assert(qFixture && applyWired, 'plugin ask-question hook (fixture + apply wiring)',
+    'fixture=' + qFixture + ' applyWired=' + applyWired + ' posts=' + JSON.stringify(applyPosts));
 
   // --- stale TTL entries are swept -------------------------------------
   const staleSession = 'probe-stale';
